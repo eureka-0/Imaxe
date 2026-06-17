@@ -1,0 +1,257 @@
+//
+//  ImageView.swift
+//  Imagxe
+//
+//  Created by lxlong on 2026/6/17.
+//
+
+import AppKit
+import SwiftUI
+
+struct ImageView: View {
+  let image: NSImage
+  let fitToWindowRequest: Int
+  let scale: CGFloat
+  let onScaleChange: (CGFloat) -> Void
+
+  var body: some View {
+    ImageScrollView(
+      image: image,
+      fitToWindowRequest: fitToWindowRequest,
+      scale: scale,
+      onScaleChange: onScaleChange,
+    )
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .background(.gray.opacity(0.2))
+  }
+}
+
+struct ImageScrollView: NSViewRepresentable {
+  let image: NSImage
+  let fitToWindowRequest: Int
+  let scale: CGFloat
+  let onScaleChange: (CGFloat) -> Void
+
+  private let minScale: CGFloat = 0.05
+  private let maxScale: CGFloat = 16.0
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(onScaleChange: onScaleChange)
+  }
+
+  func makeNSView(context: Context) -> NSScrollView {
+    let scrollView = ImageScrollView()
+    let centeringClipView = CenteringClipView()
+    centeringClipView.documentView = PixelImageView(image: image)
+    scrollView.contentView = centeringClipView
+
+    scrollView.drawsBackground = true
+    scrollView.backgroundColor = NSColor.gray.withAlphaComponent(0.2)
+    scrollView.hasHorizontalScroller = false
+    scrollView.hasVerticalScroller = false
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = minScale
+    scrollView.maxMagnification = maxScale
+    scrollView.usesPredominantAxisScrolling = false
+    scrollView.magnification = scale.clamped(to: minScale ... maxScale)
+    context.coordinator.prepareForImage(image, fitToWindowRequest: fitToWindowRequest)
+    scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
+      guard let scrollView else {
+        return
+      }
+      coordinator?.fitToWindowIfNeeded(scrollView, minScale: minScale, maxScale: maxScale)
+    }
+    context.coordinator.observe(scrollView)
+    return scrollView
+  }
+
+  func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    context.coordinator.onScaleChange = onScaleChange
+    context.coordinator.observe(scrollView)
+
+    if let imageView = scrollView.documentView as? PixelImageView {
+      imageView.image = image
+      scrollView.reflectScrolledClipView(scrollView.contentView)
+    } else {
+      scrollView.documentView = PixelImageView(image: image)
+    }
+    scrollView.layoutSubtreeIfNeeded()
+
+    context.coordinator.prepareForImage(image, fitToWindowRequest: fitToWindowRequest)
+
+    let clampedScale = scale.clamped(to: minScale ... maxScale)
+    if !context.coordinator.needsFitToWindow, scrollView.magnification != clampedScale {
+      scrollView.magnification = clampedScale
+    }
+
+    context.coordinator.fitToWindowIfNeeded(scrollView, minScale: minScale, maxScale: maxScale)
+  }
+
+  final class Coordinator {
+    var onScaleChange: (CGFloat) -> Void
+    private(set) var needsFitToWindow = false
+    private var imageIdentifier: ObjectIdentifier?
+    private var pendingFitToWindowRequest: Int?
+    private var completedFitToWindowRequest = 0
+    private var observedScrollView: NSScrollView?
+    private var magnificationObservation: NSKeyValueObservation?
+
+    init(onScaleChange: @escaping (CGFloat) -> Void) {
+      self.onScaleChange = onScaleChange
+    }
+
+    func prepareForImage(_ image: NSImage, fitToWindowRequest: Int) {
+      let newIdentifier = ObjectIdentifier(image)
+      if imageIdentifier != newIdentifier {
+        imageIdentifier = newIdentifier
+        queueFitToWindow(fitToWindowRequest)
+      } else if fitToWindowRequest != completedFitToWindowRequest {
+        queueFitToWindow(fitToWindowRequest)
+      }
+    }
+
+    func fitToWindowIfNeeded(_ scrollView: NSScrollView, minScale: CGFloat, maxScale: CGFloat) {
+      guard needsFitToWindow,
+            let request = pendingFitToWindowRequest,
+            let documentView = scrollView.documentView
+      else {
+        return
+      }
+
+      scrollView.layoutSubtreeIfNeeded()
+      let viewportSize = scrollView.contentSize
+      let imageSize = documentView.frame.size
+
+      // Use contentSize instead of contentView.bounds: bounds are expressed in
+      // document coordinates and can still carry the previous magnification.
+      // Keep the request pending until both viewport and document frame are real.
+      guard viewportSize.width > 0,
+            viewportSize.height > 0,
+            imageSize.width > 0,
+            imageSize.height > 0
+      else {
+        scrollView.needsLayout = true
+        return
+      }
+
+      let fitScale = min(
+        viewportSize.width / imageSize.width,
+        viewportSize.height / imageSize.height,
+      )
+      .clamped(to: minScale ... maxScale)
+      let center = NSPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0)
+      scrollView.setMagnification(fitScale, centeredAt: center)
+      needsFitToWindow = false
+      pendingFitToWindowRequest = nil
+      completedFitToWindowRequest = request
+      onScaleChange(scrollView.magnification)
+    }
+
+    private func queueFitToWindow(_ request: Int) {
+      pendingFitToWindowRequest = request
+      needsFitToWindow = true
+    }
+
+    func observe(_ scrollView: NSScrollView) {
+      guard observedScrollView !== scrollView else { return }
+
+      observedScrollView = scrollView
+      magnificationObservation = scrollView
+        .observe(\.magnification, options: [.new]) { [weak self] scrollView, _ in
+          self?.onScaleChange(scrollView.magnification)
+        }
+    }
+  }
+
+  final class ImageScrollView: NSScrollView {
+    var onLayout: (() -> Void)?
+
+    override func layout() {
+      super.layout()
+      onLayout?()
+    }
+  }
+
+  final class CenteringClipView: NSClipView {
+    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
+      var constrainedBounds = super.constrainBoundsRect(proposedBounds)
+
+      guard let documentView else { return constrainedBounds }
+
+      let documentFrame = documentView.frame
+
+      // Center horizontally
+      if documentFrame.width < proposedBounds.width {
+        constrainedBounds.origin.x = floor((proposedBounds.width - documentFrame.width) / -2.0)
+      }
+
+      // Center vertically
+      if documentFrame.height < proposedBounds.height {
+        constrainedBounds.origin.y = floor((proposedBounds.height - documentFrame.height) / -2.0)
+      }
+
+      return constrainedBounds
+    }
+  }
+}
+
+final class PixelImageView: NSView {
+  var image: NSImage {
+    didSet {
+      frame.size = image.pixelSize
+      needsDisplay = true
+    }
+  }
+
+  override var isFlipped: Bool {
+    true
+  }
+
+  init(image: NSImage) {
+    self.image = image
+    super.init(frame: NSRect(origin: .zero, size: image.pixelSize))
+  }
+
+  @available(*, unavailable)
+  required init?(coder _: NSCoder) {
+    nil
+  }
+
+  override func draw(_ dirtyRect: NSRect) {
+    NSColor.clear.setFill()
+    dirtyRect.fill()
+
+    NSGraphicsContext.current?.imageInterpolation = .high
+    image.draw(
+      in: bounds,
+      from: NSRect(origin: .zero, size: image.size),
+      operation: .copy,
+      fraction: 1.0,
+      respectFlipped: true,
+      hints: nil,
+    )
+  }
+}
+
+private extension NSImage {
+  var pixelSize: NSSize {
+    var representationSize = NSSize.zero
+
+    for representation in representations {
+      representationSize.width = max(representationSize.width, CGFloat(representation.pixelsWide))
+      representationSize.height = max(representationSize.height, CGFloat(representation.pixelsHigh))
+    }
+
+    if representationSize.width > 0, representationSize.height > 0 {
+      return representationSize
+    }
+
+    return size
+  }
+}
+
+private extension Comparable {
+  func clamped(to range: ClosedRange<Self>) -> Self {
+    Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+  }
+}
