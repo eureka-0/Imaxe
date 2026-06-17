@@ -5,7 +5,6 @@
 //  Created by lxlong on 2026/6/14.
 //
 
-import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -15,24 +14,12 @@ struct ContentView: View {
   var body: some View {
     Group {
       if let image = viewModel.importedImage {
-        ImageView(
-          image: image,
-          fitToWindowRequest: viewModel.fitToWindowRequest,
-          scale: viewModel.imageScale,
-          onScaleChange: { newScale in
-            viewModel.imageScale = newScale
-          },
-        )
+        ImageView(image: image)
       } else {
-        Text("No image imported")
-          .foregroundStyle(.secondary)
-          .padding()
+        HomeView()
       }
     }
     .focusedSceneValue(viewModel)
-    .toolbar {
-      ToolbarItems(contentViewModel: viewModel)
-    }
     .fileImporter(
       isPresented: $viewModel.isImporterPresented,
       allowedContentTypes: [.image],
@@ -44,8 +31,6 @@ struct ContentView: View {
 @Observable
 final class ContentViewModel {
   var isImporterPresented = false
-  var imageScale: CGFloat = 1.0
-  private(set) var fitToWindowRequest = 0
   private(set) var importedImage: NSImage?
 
   func openImage() {
@@ -60,17 +45,7 @@ final class ContentViewModel {
 
       // Initialize NSImage from the selected file URL
       if let image = NSImage(contentsOf: url) {
-        // Reset state first so the next view update starts from a known scale.
-        imageScale = 1.0
         importedImage = image
-        // Queue a fit after the new image is attached to the scroll view.
-        fitToWindow()
-
-        #if DEBUG
-          debugPrint("New image imported successfully: \(url.lastPathComponent)")
-          debugPrint("Image size: \(image.size.width) x \(image.size.height)")
-          debugPrint("Image scale: \(imageScale)")
-        #endif
       }
 
       // Stop accessing once finished
@@ -81,10 +56,6 @@ final class ContentViewModel {
     case let .failure(error):
       print("Failed to open file: \(error.localizedDescription)")
     }
-  }
-
-  func fitToWindow() {
-    fitToWindowRequest += 1
   }
 }
 
