@@ -9,31 +9,58 @@ import AppKit
 import SwiftUI
 
 struct ImageView: View {
+  @State private var viewModel = ImageViewModel()
+
   let image: NSImage
-  let fitToWindowRequest: Int
-  let scale: CGFloat
-  let onScaleChange: (CGFloat) -> Void
 
   var body: some View {
     ImageScrollView(
       image: image,
-      fitToWindowRequest: fitToWindowRequest,
-      scale: scale,
-      onScaleChange: onScaleChange,
+      fitToWindowRequest: viewModel.fitToWindowRequest,
+      scale: $viewModel.imageScale,
     )
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(.gray.opacity(0.2))
+    // .toolbar { toolbarItems }
+    .onAppear {
+      DispatchQueue.main.async {
+        viewModel.currentImage = image
+        viewModel.fitToWindow()
+      }
+    }
+  }
+
+  @ToolbarContentBuilder
+  var toolbarItems: some ToolbarContent {
+    ToolbarItem {
+      Button("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
+        viewModel.fitToWindow()
+      }
+      .keyboardShortcut("f", modifiers: .command)
+      .disabled(viewModel.currentImage == nil)
+    }
+
+    ToolbarSpacer(.fixed)
+
+    ToolbarItem {
+      Text(Double(viewModel.imageScale), format: .percent.precision(.fractionLength(0)))
+        .frame(width: 60)
+        .disabled(viewModel.currentImage == nil)
+    }
   }
 }
 
 struct ImageScrollView: NSViewRepresentable {
   let image: NSImage
   let fitToWindowRequest: Int
-  let scale: CGFloat
-  let onScaleChange: (CGFloat) -> Void
+  @Binding var scale: CGFloat
 
   private let minScale: CGFloat = 0.05
   private let maxScale: CGFloat = 16.0
+
+  func onScaleChange(_ scale: CGFloat) {
+    self.scale = scale
+  }
 
   func makeCoordinator() -> Coordinator {
     Coordinator(onScaleChange: onScaleChange)
@@ -45,10 +72,16 @@ struct ImageScrollView: NSViewRepresentable {
     centeringClipView.documentView = PixelImageView(image: image, scale: scale)
     scrollView.contentView = centeringClipView
 
-    scrollView.drawsBackground = true
-    scrollView.backgroundColor = NSColor.gray.withAlphaComponent(0.2)
+    // Disable automatic content insets adjustment to ensure the image can be properly centered and
+    // scaled without unexpected padding.
+    scrollView.automaticallyAdjustsContentInsets = false
+    scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
+
+    scrollView.drawsBackground = false
     scrollView.hasHorizontalScroller = false
     scrollView.hasVerticalScroller = false
+    scrollView.verticalScrollElasticity = .none
+    scrollView.horizontalScrollElasticity = .none
     scrollView.allowsMagnification = true
     scrollView.minMagnification = minScale
     scrollView.maxMagnification = maxScale
@@ -123,9 +156,6 @@ struct ImageScrollView: NSViewRepresentable {
       let viewportSize = scrollView.contentSize
       let imageSize = documentView.frame.size
 
-      // Use contentSize instead of contentView.bounds: bounds are expressed in
-      // document coordinates and can still carry the previous magnification.
-      // Keep the request pending until both viewport and document frame are real.
       guard viewportSize.width > 0,
             viewportSize.height > 0,
             imageSize.width > 0,
