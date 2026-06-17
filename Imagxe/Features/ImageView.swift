@@ -42,7 +42,7 @@ struct ImageScrollView: NSViewRepresentable {
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = ImageScrollView()
     let centeringClipView = CenteringClipView()
-    centeringClipView.documentView = PixelImageView(image: image)
+    centeringClipView.documentView = PixelImageView(image: image, scale: scale)
     scrollView.contentView = centeringClipView
 
     scrollView.drawsBackground = true
@@ -71,9 +71,10 @@ struct ImageScrollView: NSViewRepresentable {
 
     if let imageView = scrollView.documentView as? PixelImageView {
       imageView.image = image
+      imageView.scale = scale
       scrollView.reflectScrolledClipView(scrollView.contentView)
     } else {
-      scrollView.documentView = PixelImageView(image: image)
+      scrollView.documentView = PixelImageView(image: image, scale: scale)
     }
     scrollView.layoutSubtreeIfNeeded()
 
@@ -203,12 +204,15 @@ final class PixelImageView: NSView {
     }
   }
 
+  var scale: CGFloat
+
   override var isFlipped: Bool {
     true
   }
 
-  init(image: NSImage) {
+  init(image: NSImage, scale: CGFloat) {
     self.image = image
+    self.scale = scale
     super.init(frame: NSRect(origin: .zero, size: image.pixelSize))
   }
 
@@ -221,7 +225,13 @@ final class PixelImageView: NSView {
     NSColor.clear.setFill()
     dirtyRect.fill()
 
-    NSGraphicsContext.current?.imageInterpolation = .high
+    if let currentContext = NSGraphicsContext.current {
+      currentContext.imageInterpolation = scale > 1.0 ? .none : .high
+
+      let cgContext = currentContext.cgContext
+      cgContext.setShouldAntialias(false)
+      cgContext.interpolationQuality = scale > 1.0 ? .none : .high
+    }
     image.draw(
       in: bounds,
       from: NSRect(origin: .zero, size: image.size),

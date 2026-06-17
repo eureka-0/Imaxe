@@ -13,22 +13,11 @@ struct ImagxeApp: App {
     WindowGroup {
       ContentView()
     }
+    .windowToolbarStyle(.automatic)
+    .windowResizability(.contentSize)
+    .defaultSize(width: 900, height: 600)
     .commands {
       FileOperationCommands()
-    }
-  }
-}
-
-struct FileOperationCommands: Commands {
-  @FocusedValue(ContentViewModel.self) private var contentViewModel
-
-  var body: some Commands {
-    CommandGroup(after: .newItem) {
-      Button("Open Image...") {
-        contentViewModel?.openImage()
-      }
-      .keyboardShortcut("o", modifiers: .command)
-      .disabled(contentViewModel == nil)
     }
   }
 }

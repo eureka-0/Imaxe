@@ -19,7 +19,9 @@ struct ContentView: View {
           image: image,
           fitToWindowRequest: viewModel.fitToWindowRequest,
           scale: viewModel.imageScale,
-          onScaleChange: viewModel.setImageScale,
+          onScaleChange: { newScale in
+            viewModel.imageScale = newScale
+          },
         )
       } else {
         Text("No image imported")
@@ -28,6 +30,9 @@ struct ContentView: View {
       }
     }
     .focusedSceneValue(viewModel)
+    .toolbar {
+      ToolbarItems(contentViewModel: viewModel)
+    }
     .fileImporter(
       isPresented: $viewModel.isImporterPresented,
       allowedContentTypes: [.image],
@@ -39,8 +44,8 @@ struct ContentView: View {
 @Observable
 final class ContentViewModel {
   var isImporterPresented = false
+  var imageScale: CGFloat = 1.0
   private(set) var fitToWindowRequest = 0
-  private(set) var imageScale: CGFloat = 1.0
   private(set) var importedImage: NSImage?
 
   func openImage() {
@@ -76,10 +81,6 @@ final class ContentViewModel {
     case let .failure(error):
       print("Failed to open file: \(error.localizedDescription)")
     }
-  }
-
-  func setImageScale(_ scale: CGFloat) {
-    imageScale = scale
   }
 
   func fitToWindow() {
