@@ -14,14 +14,17 @@ struct ImageView: View {
   let image: NSImage
 
   var body: some View {
-    ImageScrollView(
-      image: image,
-      fitToWindowRequest: viewModel.fitToWindowRequest,
-      scale: $viewModel.imageScale,
-    )
+    ZStack(alignment: .top) {
+      ImageScrollView(
+        image: image,
+        fitToWindowRequest: viewModel.fitToWindowRequest,
+        scale: $viewModel.imageScale,
+      )
+
+      topBar
+    }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .background(.gray.opacity(0.2))
-    // .toolbar { toolbarItems }
+    // .background(.gray.opacity(0.2))
     .onAppear {
       DispatchQueue.main.async {
         viewModel.currentImage = image
@@ -30,23 +33,57 @@ struct ImageView: View {
     }
   }
 
-  @ToolbarContentBuilder
-  var toolbarItems: some ToolbarContent {
-    ToolbarItem {
-      Button("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
-        viewModel.fitToWindow()
-      }
-      .keyboardShortcut("f", modifiers: .command)
+  var topBar: some View {
+    HStack {
+      Spacer()
+
+      fitToWindowButton
+
+      scaleText
+        .padding(.vertical, 3)
+        .background(.gray.opacity(0.3))
+        .clipShape(.rect(cornerRadius: 8))
+
+      fitWindowToImageButton
+
+      pinWindowButton
+    }
+    .frame(height: 30)
+    .padding(.horizontal, 10)
+    .background(.thinMaterial)
+    .labelStyle(.iconOnly)
+    .buttonStyle(.plain)
+  }
+
+  var fitToWindowButton: some View {
+    Button("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
+      viewModel.fitToWindow()
+    }
+    .keyboardShortcut("f", modifiers: .command)
+    .disabled(viewModel.currentImage == nil)
+    .help(Text("Fit the image to the window"))
+  }
+
+  var scaleText: some View {
+    Text(Double(viewModel.imageScale), format: .percent.precision(.fractionLength(0)))
+      .frame(width: 56)
       .disabled(viewModel.currentImage == nil)
-    }
+  }
 
-    ToolbarSpacer(.fixed)
-
-    ToolbarItem {
-      Text(Double(viewModel.imageScale), format: .percent.precision(.fractionLength(0)))
-        .frame(width: 60)
-        .disabled(viewModel.currentImage == nil)
+  var fitWindowToImageButton: some View {
+    Button("Fit Window to Image", systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left") {
+      viewModel.fitWindowToImage()
     }
+    .disabled(viewModel.currentImage == nil)
+    .help(Text("Resize the window to fit the image"))
+  }
+
+  var pinWindowButton: some View {
+    Button("Pin Window", systemImage: viewModel.isWindowPinned ? "pin.slash" : "pin") {
+      viewModel.toggleWindowPinning()
+    }
+    .keyboardShortcut("p", modifiers: .command)
+    .help(Text("Toggle window pinning"))
   }
 }
 
@@ -145,8 +182,7 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     func fitToWindowIfNeeded(_ scrollView: NSScrollView, minScale: CGFloat, maxScale: CGFloat) {
-      guard needsFitToWindow,
-            let request = pendingFitToWindowRequest,
+      guard needsFitToWindow, let request = pendingFitToWindowRequest,
             let documentView = scrollView.documentView
       else {
         return
@@ -212,12 +248,12 @@ struct ImageScrollView: NSViewRepresentable {
       let documentFrame = documentView.frame
 
       // Center horizontally
-      if documentFrame.width < proposedBounds.width {
+      if documentFrame.width <= proposedBounds.width {
         constrainedBounds.origin.x = floor((proposedBounds.width - documentFrame.width) / -2.0)
       }
 
       // Center vertically
-      if documentFrame.height < proposedBounds.height {
+      if documentFrame.height <= proposedBounds.height {
         constrainedBounds.origin.y = floor((proposedBounds.height - documentFrame.height) / -2.0)
       }
 
@@ -273,7 +309,7 @@ final class PixelImageView: NSView {
   }
 }
 
-private extension NSImage {
+extension NSImage {
   var pixelSize: NSSize {
     var representationSize = NSSize.zero
 
