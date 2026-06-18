@@ -9,18 +9,19 @@ import SwiftUI
 
 extension ImageView {
   var topBar: some View {
-    HStack {
+    HStack(spacing: 12) {
       Spacer()
       fitToWindowButton
       scaleText
       fitWindowToImageButton
       pinWindowButton
     }
-    .frame(height: 30)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.horizontal, 10)
-    .background(.thinMaterial)
+    .background(.black.opacity(0.7))
+    .frame(height: 32)
     .labelStyle(.iconOnly)
-    .buttonStyle(.plain)
+    .buttonStyle(TopBarButtonStyle())
   }
 
   private var fitToWindowButton: some View {
@@ -55,5 +56,19 @@ extension ImageView {
     }
     .keyboardShortcut("p", modifiers: .command)
     .help(Text("Toggle window pinning"))
+  }
+}
+
+private struct TopBarButtonStyle: ButtonStyle {
+  @State private var isHovering = false
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .padding(5)
+      .background(isHovering ? Color.gray.opacity(0.5) : Color.clear)
+      .clipShape(.rect(cornerRadius: 8))
+      .onHover { isHovering in
+        self.isHovering = isHovering
+      }
   }
 }

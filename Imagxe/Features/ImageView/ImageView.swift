@@ -13,6 +13,8 @@ struct ImageView: View {
 
   let image: NSImage
 
+  private let topBarHoverStripHeight: CGFloat = 50
+
   var body: some View {
     ZStack(alignment: .top) {
       ImageScrollView(
@@ -26,14 +28,13 @@ struct ImageView: View {
       topBar
         .opacity(viewModel.showTopBar ? 1 : 0)
         .animation(.easeInOut(duration: 0.2), value: viewModel.showTopBar)
+        .allowsHitTesting(viewModel.showTopBar)
 
-      Rectangle()
-        .fill(.clear)
-        .frame(width: .infinity, height: 50)
-        .allowsHitTesting(false)
-        .onHover { isHovering in
-          viewModel.setTopBarVisibility(to: isHovering)
-        }
+      HoverTrackingStrip { isHovering in
+        viewModel.setTopBarVisibility(to: isHovering)
+      }
+      .frame(maxWidth: .infinity)
+      .frame(height: topBarHoverStripHeight)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
@@ -47,6 +48,80 @@ struct ImageView: View {
   }
 }
 
+private struct HoverTrackingStrip: NSViewRepresentable {
+  let onHoverChange: (Bool) -> Void
+
+  func makeNSView(context _: Context) -> HoverTrackingNSView {
+    let view = HoverTrackingNSView()
+    view.onHoverChange = onHoverChange
+    return view
+  }
+
+  func updateNSView(_ nsView: HoverTrackingNSView, context _: Context) {
+    nsView.onHoverChange = onHoverChange
+  }
+
+  final class HoverTrackingNSView: NSView {
+    var onHoverChange: ((Bool) -> Void)?
+
+    private var isHovering = false
+    private var trackingArea: NSTrackingArea?
+
+    override init(frame frameRect: NSRect) {
+      super.init(frame: frameRect)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+      nil
+    }
+
+    override func hitTest(_: NSPoint) -> NSView? {
+      nil
+    }
+
+    override func updateTrackingAreas() {
+      if let trackingArea {
+        removeTrackingArea(trackingArea)
+      }
+
+      let trackingArea = NSTrackingArea(
+        rect: .zero,
+        options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+        owner: self,
+        userInfo: nil,
+      )
+      addTrackingArea(trackingArea)
+      self.trackingArea = trackingArea
+
+      super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with _: NSEvent) {
+      setHovering(true)
+    }
+
+    override func mouseExited(with _: NSEvent) {
+      setHovering(false)
+    }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+
+      if window == nil {
+        setHovering(false)
+      }
+    }
+
+    private func setHovering(_ isHovering: Bool) {
+      guard self.isHovering != isHovering else { return }
+
+      self.isHovering = isHovering
+      onHoverChange?(isHovering)
+    }
+  }
+}
+
 struct ImageScrollView: NSViewRepresentable {
   let image: NSImage
   let fitToWindowRequest: Int
@@ -56,13 +131,22 @@ struct ImageScrollView: NSViewRepresentable {
 
   private let minScale: CGFloat = 0.05
   private let maxScale: CGFloat = 16.0
+  private let scaleUpdateTolerance: CGFloat = 0.000_1
 
-  func onScaleChange(_ scale: CGFloat) {
-    self.scale = scale
+  func onScaleChange(_ newScale: CGFloat) {
+    guard newScale.isFinite else { return }
+
+    DispatchQueue.main.async {
+      guard abs(scale - newScale) > scaleUpdateTolerance else { return }
+      scale = newScale
+    }
   }
 
-  func onAlwaysFitToWindowChange(_ alwaysFitToWindow: Bool) {
-    self.alwaysFitToWindow = alwaysFitToWindow
+  func onAlwaysFitToWindowChange(_ newAlwaysFitToWindow: Bool) {
+    DispatchQueue.main.async {
+      guard alwaysFitToWindow != newAlwaysFitToWindow else { return }
+      alwaysFitToWindow = newAlwaysFitToWindow
+    }
   }
 
   func makeCoordinator() -> Coordinator {
