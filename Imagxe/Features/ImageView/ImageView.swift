@@ -24,9 +24,21 @@ struct ImageView: View {
       )
 
       topBar
+        .opacity(viewModel.showTopBar ? 1 : 0)
+        .animation(.easeInOut(duration: 0.2), value: viewModel.showTopBar)
+
+      Rectangle()
+        .fill(.clear)
+        .frame(width: .infinity, height: 50)
+        .allowsHitTesting(false)
+        .onHover { isHovering in
+          viewModel.setTopBarVisibility(to: isHovering)
+        }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
+      viewModel.setTopBarVisibility(to: false)
+
       DispatchQueue.main.async {
         viewModel.currentImage = image
         viewModel.fitToWindow()
