@@ -13,8 +13,6 @@ struct ImageView: View {
 
   let image: NSImage
 
-  private let topBarHoverStripHeight: CGFloat = 50
-
   var body: some View {
     ZStack(alignment: .top) {
       ImageScrollView(
@@ -34,7 +32,7 @@ struct ImageView: View {
         viewModel.setTopBarVisibility(to: isHovering)
       }
       .frame(maxWidth: .infinity)
-      .frame(height: topBarHoverStripHeight)
+      .frame(height: Constants.topBarHoverStripHeight)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
