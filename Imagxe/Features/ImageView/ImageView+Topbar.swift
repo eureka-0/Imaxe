@@ -24,8 +24,8 @@ extension ImageView {
   }
 
   private var fitToWindowButton: some View {
-    Button("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass") {
-      viewModel.fitToWindow()
+    Button(action: viewModel.fitToWindow) {
+      Label("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
     }
     .keyboardShortcut("f", modifiers: .command)
     .disabled(viewModel.currentImage == nil)
@@ -42,16 +42,16 @@ extension ImageView {
   }
 
   private var fitWindowToImageButton: some View {
-    Button("Fit Window to Image", systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left") {
-      viewModel.fitWindowToImage()
+    Button(action: viewModel.fitWindowToImage) {
+      Label("Fit Window to Image", systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left")
     }
     .disabled(viewModel.currentImage == nil)
     .help(Text("Resize the window to fit the image"))
   }
 
   private var pinWindowButton: some View {
-    Button("Pin Window", systemImage: viewModel.isWindowPinned ? "pin.slash" : "pin") {
-      viewModel.toggleWindowPinning()
+    Button(action: viewModel.toggleWindowPinning) {
+      Label("Pin Window", systemImage: viewModel.isWindowPinned ? "pin.slash" : "pin")
     }
     .keyboardShortcut("p", modifiers: .command)
     .help(Text("Toggle window pinning"))

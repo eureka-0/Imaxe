@@ -14,6 +14,7 @@ final class ImageViewModel {
   private(set) var fitToWindowRequest = 0
   private(set) var fitWindowToImageRequest = 0
   private(set) var isWindowPinned = false
+  var alwaysFitToWindow = true
 
   func toggleWindowPinning() {
     isWindowPinned.toggle()
@@ -24,10 +25,15 @@ final class ImageViewModel {
   }
 
   func fitToWindow() {
-    fitToWindowRequest += 1
+    DispatchQueue.main.async {
+      self.alwaysFitToWindow = true
+      self.fitToWindowRequest += 1
+    }
   }
 
   func fitWindowToImage() {
-    fitWindowToImageRequest += 1
+    DispatchQueue.main.async {
+      self.fitWindowToImageRequest += 1
+    }
   }
 }
