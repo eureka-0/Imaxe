@@ -1,14 +1,14 @@
 //
-//  ImagxeTests.swift
-//  ImagxeTests
+//  ImaxeTests.swift
+//  ImaxeTests
 //
 //  Created by lxlong on 2026/6/14.
 //
 
 import Testing
-@testable import Imagxe
+@testable import Imaxe
 
-struct ImagxeTests {
+struct ImaxeTests {
 
     @Test func example() async throws {
         // Write your test here and use APIs like `#expect(...)` to check expected conditions.

@@ -1,13 +1,13 @@
 //
-//  ImagxeUITests.swift
-//  ImagxeUITests
+//  ImaxeUITests.swift
+//  ImaxeUITests
 //
 //  Created by lxlong on 2026/6/14.
 //
 
 import XCTest
 
-final class ImagxeUITests: XCTestCase {
+final class ImaxeUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

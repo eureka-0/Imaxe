@@ -1,6 +1,6 @@
 //
-//  ImagxeApp.swift
-//  Imagxe
+//  ImaxeApp.swift
+//  Imaxe
 //
 //  Created by lxlong on 2026/6/14.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct ImagxeApp: App {
+struct ImaxeApp: App {
   var body: some Scene {
     WindowGroup {
       ContentView()

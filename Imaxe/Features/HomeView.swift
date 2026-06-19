@@ -1,6 +1,6 @@
 //
 //  HomeView.swift
-//  Imagxe
+//  Imaxe
 //
 //  Created by lxlong on 2026/6/17.
 //
@@ -12,7 +12,7 @@ struct HomeView: View {
 
   var body: some View {
     VStack {
-      Text("Welcome to Imagxe")
+      Text("Welcome to Imaxe")
         .font(.largeTitle)
         .padding()
 

@@ -1,6 +1,6 @@
 //
 //  Extensions.swift
-//  Imagxe
+//  Imaxe
 //
 //  Created by lxlong on 2026/6/18.
 //

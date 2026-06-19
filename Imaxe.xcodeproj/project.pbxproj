@@ -12,37 +12,37 @@
 			containerPortal = 1E7D56852FDEEBFE0035C627 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 1E7D568C2FDEEBFE0035C627;
-			remoteInfo = Imagxe;
+			remoteInfo = Imaxe;
 		};
 		1E7D56A52FDEEC000035C627 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1E7D56852FDEEBFE0035C627 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 1E7D568C2FDEEBFE0035C627;
-			remoteInfo = Imagxe;
+			remoteInfo = Imaxe;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		1E7D568D2FDEEBFE0035C627 /* Imagxe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Imagxe.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		1E7D569A2FDEEC000035C627 /* ImagxeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImagxeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		1E7D56A42FDEEC000035C627 /* ImagxeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImagxeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E7D568D2FDEEBFE0035C627 /* Imaxe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Imaxe.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1E7D56A42FDEEC000035C627 /* ImaxeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		1E7D568F2FDEEBFE0035C627 /* Imagxe */ = {
+		1E7D568F2FDEEBFE0035C627 /* Imaxe */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Imagxe;
+			path = Imaxe;
 			sourceTree = "<group>";
 		};
-		1E7D569D2FDEEC000035C627 /* ImagxeTests */ = {
+		1E7D569D2FDEEC000035C627 /* ImaxeTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ImagxeTests;
+			path = ImaxeTests;
 			sourceTree = "<group>";
 		};
-		1E7D56A72FDEEC000035C627 /* ImagxeUITests */ = {
+		1E7D56A72FDEEC000035C627 /* ImaxeUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ImagxeUITests;
+			path = ImaxeUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -75,9 +75,9 @@
 		1E7D56842FDEEBFE0035C627 = {
 			isa = PBXGroup;
 			children = (
-				1E7D568F2FDEEBFE0035C627 /* Imagxe */,
-				1E7D569D2FDEEC000035C627 /* ImagxeTests */,
-				1E7D56A72FDEEC000035C627 /* ImagxeUITests */,
+				1E7D568F2FDEEBFE0035C627 /* Imaxe */,
+				1E7D569D2FDEEC000035C627 /* ImaxeTests */,
+				1E7D56A72FDEEC000035C627 /* ImaxeUITests */,
 				1E7D568E2FDEEBFE0035C627 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -85,9 +85,9 @@
 		1E7D568E2FDEEBFE0035C627 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				1E7D568D2FDEEBFE0035C627 /* Imagxe.app */,
-				1E7D569A2FDEEC000035C627 /* ImagxeTests.xctest */,
-				1E7D56A42FDEEC000035C627 /* ImagxeUITests.xctest */,
+				1E7D568D2FDEEBFE0035C627 /* Imaxe.app */,
+				1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */,
+				1E7D56A42FDEEC000035C627 /* ImaxeUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,9 +95,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		1E7D568C2FDEEBFE0035C627 /* Imagxe */ = {
+		1E7D568C2FDEEBFE0035C627 /* Imaxe */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1E7D56AE2FDEEC000035C627 /* Build configuration list for PBXNativeTarget "Imagxe" */;
+			buildConfigurationList = 1E7D56AE2FDEEC000035C627 /* Build configuration list for PBXNativeTarget "Imaxe" */;
 			buildPhases = (
 				1E7D56892FDEEBFE0035C627 /* Sources */,
 				1E7D568A2FDEEBFE0035C627 /* Frameworks */,
@@ -108,18 +108,18 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				1E7D568F2FDEEBFE0035C627 /* Imagxe */,
+				1E7D568F2FDEEBFE0035C627 /* Imaxe */,
 			);
-			name = Imagxe;
+			name = Imaxe;
 			packageProductDependencies = (
 			);
-			productName = Imagxe;
-			productReference = 1E7D568D2FDEEBFE0035C627 /* Imagxe.app */;
+			productName = Imaxe;
+			productReference = 1E7D568D2FDEEBFE0035C627 /* Imaxe.app */;
 			productType = "com.apple.product-type.application";
 		};
-		1E7D56992FDEEC000035C627 /* ImagxeTests */ = {
+		1E7D56992FDEEC000035C627 /* ImaxeTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1E7D56B12FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImagxeTests" */;
+			buildConfigurationList = 1E7D56B12FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImaxeTests" */;
 			buildPhases = (
 				1E7D56962FDEEC000035C627 /* Sources */,
 				1E7D56972FDEEC000035C627 /* Frameworks */,
@@ -131,18 +131,18 @@
 				1E7D569C2FDEEC000035C627 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				1E7D569D2FDEEC000035C627 /* ImagxeTests */,
+				1E7D569D2FDEEC000035C627 /* ImaxeTests */,
 			);
-			name = ImagxeTests;
+			name = ImaxeTests;
 			packageProductDependencies = (
 			);
-			productName = ImagxeTests;
-			productReference = 1E7D569A2FDEEC000035C627 /* ImagxeTests.xctest */;
+			productName = ImaxeTests;
+			productReference = 1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		1E7D56A32FDEEC000035C627 /* ImagxeUITests */ = {
+		1E7D56A32FDEEC000035C627 /* ImaxeUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 1E7D56B42FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImagxeUITests" */;
+			buildConfigurationList = 1E7D56B42FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImaxeUITests" */;
 			buildPhases = (
 				1E7D56A02FDEEC000035C627 /* Sources */,
 				1E7D56A12FDEEC000035C627 /* Frameworks */,
@@ -154,13 +154,13 @@
 				1E7D56A62FDEEC000035C627 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				1E7D56A72FDEEC000035C627 /* ImagxeUITests */,
+				1E7D56A72FDEEC000035C627 /* ImaxeUITests */,
 			);
-			name = ImagxeUITests;
+			name = ImaxeUITests;
 			packageProductDependencies = (
 			);
-			productName = ImagxeUITests;
-			productReference = 1E7D56A42FDEEC000035C627 /* ImagxeUITests.xctest */;
+			productName = ImaxeUITests;
+			productReference = 1E7D56A42FDEEC000035C627 /* ImaxeUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -186,7 +186,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 1E7D56882FDEEBFE0035C627 /* Build configuration list for PBXProject "Imagxe" */;
+			buildConfigurationList = 1E7D56882FDEEBFE0035C627 /* Build configuration list for PBXProject "Imaxe" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -200,9 +200,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				1E7D568C2FDEEBFE0035C627 /* Imagxe */,
-				1E7D56992FDEEC000035C627 /* ImagxeTests */,
-				1E7D56A32FDEEC000035C627 /* ImagxeUITests */,
+				1E7D568C2FDEEBFE0035C627 /* Imaxe */,
+				1E7D56992FDEEC000035C627 /* ImaxeTests */,
+				1E7D56A32FDEEC000035C627 /* ImaxeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -258,12 +258,12 @@
 /* Begin PBXTargetDependency section */
 		1E7D569C2FDEEC000035C627 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 1E7D568C2FDEEBFE0035C627 /* Imagxe */;
+			target = 1E7D568C2FDEEBFE0035C627 /* Imaxe */;
 			targetProxy = 1E7D569B2FDEEC000035C627 /* PBXContainerItemProxy */;
 		};
 		1E7D56A62FDEEC000035C627 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 1E7D568C2FDEEBFE0035C627 /* Imagxe */;
+			target = 1E7D568C2FDEEBFE0035C627 /* Imaxe */;
 			targetProxy = 1E7D56A52FDEEC000035C627 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -392,7 +392,7 @@
 		1E7D56AF2FDEEC000035C627 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = ImagxeAppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
@@ -421,7 +421,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.imagxe.Imagxe;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.Imaxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -436,7 +436,7 @@
 		1E7D56B02FDEEC000035C627 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = ImagxeAppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
 				CODE_SIGN_STYLE = Automatic;
@@ -465,7 +465,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.imagxe.Imagxe;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.Imaxe;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -487,14 +487,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.imagxe.ImagxeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.ImaxeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Imagxe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Imagxe";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Imaxe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Imaxe";
 			};
 			name = Debug;
 		};
@@ -508,14 +508,14 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				MACOSX_DEPLOYMENT_TARGET = 26.5;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.imagxe.ImagxeTests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.ImaxeTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Imagxe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Imagxe";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Imaxe.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Imaxe";
 			};
 			name = Release;
 		};
@@ -527,14 +527,14 @@
 				DEVELOPMENT_TEAM = 2Y2HAD54DN;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.imagxe.ImagxeUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.ImaxeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Imagxe;
+				TEST_TARGET_NAME = Imaxe;
 			};
 			name = Debug;
 		};
@@ -546,21 +546,21 @@
 				DEVELOPMENT_TEAM = 2Y2HAD54DN;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.imagxe.ImagxeUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.ImaxeUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = Imagxe;
+				TEST_TARGET_NAME = Imaxe;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		1E7D56882FDEEBFE0035C627 /* Build configuration list for PBXProject "Imagxe" */ = {
+		1E7D56882FDEEBFE0035C627 /* Build configuration list for PBXProject "Imaxe" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1E7D56AC2FDEEC000035C627 /* Debug */,
@@ -569,7 +569,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1E7D56AE2FDEEC000035C627 /* Build configuration list for PBXNativeTarget "Imagxe" */ = {
+		1E7D56AE2FDEEC000035C627 /* Build configuration list for PBXNativeTarget "Imaxe" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1E7D56AF2FDEEC000035C627 /* Debug */,
@@ -578,7 +578,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1E7D56B12FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImagxeTests" */ = {
+		1E7D56B12FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImaxeTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1E7D56B22FDEEC000035C627 /* Debug */,
@@ -587,7 +587,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		1E7D56B42FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImagxeUITests" */ = {
+		1E7D56B42FDEEC000035C627 /* Build configuration list for PBXNativeTarget "ImaxeUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				1E7D56B52FDEEC000035C627 /* Debug */,

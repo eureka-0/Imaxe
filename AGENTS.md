@@ -2,7 +2,7 @@
 
 ## Project Context
 
-Imagxe is a native macOS image viewer focused on fast everyday browsing and light editing targeting macOS 14 and later. Prioritize:
+Imaxe is a native macOS image viewer focused on fast everyday browsing and light editing targeting macOS 14 and later. Prioritize:
 
 - Fast image opening and switching
 - Smooth zooming and panning
@@ -16,14 +16,14 @@ Do not expand scope into RAW editing, professional color grading, layer-based ed
 
 Current structure:
 
-- `ImagxeApp.swift` defines the macOS `WindowGroup`, hidden title bar window style, default size, window configurator, and app commands.
+- `ImaxeApp.swift` defines the macOS `WindowGroup`, hidden title bar window style, default size, window configurator, and app commands.
 - `ContentView.swift` owns `ContentViewModel`, presents the image file importer, and switches between `HomeView` and `ImageView`.
 - `Features/HomeView.swift` is the empty-state SwiftUI screen.
 - `Features/Commands.swift` defines menu commands through focused scene values.
 - `Features/ImageView.swift` is the core image viewing surface. It contains the SwiftUI host view, the `NSViewRepresentable` bridge, the custom `NSScrollView`/`NSClipView`, fitting requests, zoom observation, and the pixel-backed image view.
 - `Features/ImageView+Topbar.swift` contains the in-window SwiftUI top bar overlay and its image/window actions.
 - `Features/ImageViewModel.swift` stores view state and emits request counters for AppKit-side actions.
-- `SampleImages/` contains local manual verification images. `ImagxeTests/` and `ImagxeUITests/` contain the project test targets.
+- `SampleImages/` contains local manual verification images. `ImaxeTests/` and `ImaxeUITests/` contain the project test targets.
 
 Architecture rules:
 

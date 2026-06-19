@@ -1,13 +1,13 @@
 //
-//  ImagxeUITestsLaunchTests.swift
-//  ImagxeUITests
+//  ImaxeUITestsLaunchTests.swift
+//  ImaxeUITests
 //
 //  Created by lxlong on 2026/6/14.
 //
 
 import XCTest
 
-final class ImagxeUITestsLaunchTests: XCTestCase {
+final class ImaxeUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
