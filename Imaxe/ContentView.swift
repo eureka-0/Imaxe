@@ -40,15 +40,7 @@ final class ContentViewModel {
   func onOpenImage(result: Result<URL, Error>) {
     switch result {
     case let .success(url):
-      // Start accessing the security-scoped resource if your app is Sandboxed
-      let gotAccess = url.startAccessingSecurityScopedResource()
-
-      importedImage = try? ImageLoader.shared.loadImage(from: url)
-
-      // Stop accessing once finished
-      if gotAccess {
-        url.stopAccessingSecurityScopedResource()
-      }
+      importedImage = try? ImageLoader.shared.load(from: url)
 
     case let .failure(error):
       print("Failed to open file: \(error.localizedDescription)")

@@ -11,25 +11,19 @@ import OrderedCollections
 struct LoadedImage {
   let image: NSImage
   let kind: ImageKind
-  let fileName: String
-  let sourceURL: URL
-  let fileSize: Int
-  let pixelWidth: Int
-  let pixelHeight: Int
-
-  var fileSizeDescription: String {
-    ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
-  }
+  let info: ImageInfo
 
   fileprivate init(image: NSImage, sourceURL: URL) {
     self.image = image
     kind = ImageKind(sourceURL: sourceURL, image: image)
     image.cacheMode = kind.cacheMode
-    fileName = sourceURL.lastPathComponent
-    self.sourceURL = sourceURL
-    fileSize = (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-    pixelWidth = Int(image.pixelSize.width)
-    pixelHeight = Int(image.pixelSize.height)
+    info = ImageInfo(
+      fileName: sourceURL.lastPathComponent,
+      sourceURL: sourceURL,
+      fileSize: (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0,
+      pixelWidth: Int(image.pixelSize.width),
+      pixelHeight: Int(image.pixelSize.height),
+    )
   }
 }
 
@@ -65,6 +59,18 @@ enum ImageKind: Equatable {
   }
 }
 
+struct ImageInfo {
+  let fileName: String
+  let sourceURL: URL
+  let fileSize: Int
+  let pixelWidth: Int
+  let pixelHeight: Int
+
+  var fileSizeDescription: String {
+    ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
+  }
+}
+
 final class ImageLoader {
   static let shared = ImageLoader()
 
@@ -72,7 +78,10 @@ final class ImageLoader {
 
   private init() {}
 
-  func loadImage(from url: URL) throws -> LoadedImage {
+  func load(from url: URL) throws -> LoadedImage {
+    // Start accessing the security-scoped resource if your app is Sandboxed
+    let gotAccess = url.startAccessingSecurityScopedResource()
+
     if let cachedImage = cache[url] {
       // Move accessed image to the front to mark it as most recently used
       cache.move(keys: [url], to: 0)
@@ -91,6 +100,11 @@ final class ImageLoader {
     cache[url] = loadedImage
     if cache.count > 10 {
       cache.removeFirst()
+    }
+
+    // Stop accessing once finished
+    if gotAccess {
+      url.stopAccessingSecurityScopedResource()
     }
     return loadedImage
   }
