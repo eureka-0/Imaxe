@@ -4,6 +4,7 @@
   },
   "groups" : [
     {
+      "hidden" : false,
       "layers" : [
         {
           "image-name" : "iDot.svg",
@@ -39,6 +40,7 @@
       }
     },
     {
+      "hidden" : false,
       "layers" : [
         {
           "image-name" : "DBody.svg",

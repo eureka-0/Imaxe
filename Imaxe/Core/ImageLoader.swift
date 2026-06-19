@@ -79,9 +79,6 @@ final class ImageLoader {
   private init() {}
 
   func load(from url: URL) throws -> LoadedImage {
-    // Start accessing the security-scoped resource if your app is Sandboxed
-    let gotAccess = url.startAccessingSecurityScopedResource()
-
     if let cachedImage = cache[url] {
       // Move accessed image to the front to mark it as most recently used
       cache.move(keys: [url], to: 0)
@@ -102,10 +99,6 @@ final class ImageLoader {
       cache.removeFirst()
     }
 
-    // Stop accessing once finished
-    if gotAccess {
-      url.stopAccessingSecurityScopedResource()
-    }
     return loadedImage
   }
 }
