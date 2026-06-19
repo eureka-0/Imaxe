@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		1E3435372FE592EB00011D1D /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = 1E3435362FE592EB00011D1D /* Collections */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		1E7D569B2FDEEC000035C627 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1E3435372FE592EB00011D1D /* Collections in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = Imaxe;
 			packageProductDependencies = (
+				1E3435362FE592EB00011D1D /* Collections */,
 			);
 			productName = Imaxe;
 			productReference = 1E7D568D2FDEEBFE0035C627 /* Imaxe.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 1E7D56842FDEEBFE0035C627;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				1E3435352FE592EB00011D1D /* XCRemoteSwiftPackageReference "swift-collections" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1E7D568E2FDEEBFE0035C627 /* Products */;
 			projectDirPath = "";
@@ -597,6 +606,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		1E3435352FE592EB00011D1D /* XCRemoteSwiftPackageReference "swift-collections" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/apple/swift-collections";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		1E3435362FE592EB00011D1D /* Collections */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 1E3435352FE592EB00011D1D /* XCRemoteSwiftPackageReference "swift-collections" */;
+			productName = Collections;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 1E7D56852FDEEBFE0035C627 /* Project object */;
 }
