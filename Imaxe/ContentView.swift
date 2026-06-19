@@ -13,8 +13,8 @@ struct ContentView: View {
 
   var body: some View {
     Group {
-      if let image = viewModel.importedImage {
-        ImageView(image: image)
+      if let loadedImage = viewModel.importedImage {
+        ImageView(loadedImage: loadedImage)
       } else {
         HomeView()
       }
@@ -31,7 +31,7 @@ struct ContentView: View {
 @Observable
 final class ContentViewModel {
   var isImporterPresented = false
-  private(set) var importedImage: NSImage?
+  private(set) var importedImage: LoadedImage?
 
   func openImage() {
     isImporterPresented = true
@@ -43,10 +43,7 @@ final class ContentViewModel {
       // Start accessing the security-scoped resource if your app is Sandboxed
       let gotAccess = url.startAccessingSecurityScopedResource()
 
-      // Initialize NSImage from the selected file URL
-      if let image = NSImage(contentsOf: url) {
-        importedImage = image
-      }
+      importedImage = try? ImageLoader.shared.loadImage(from: url)
 
       // Stop accessing once finished
       if gotAccess {

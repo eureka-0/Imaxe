@@ -11,12 +11,12 @@ import SwiftUI
 struct ImageView: View {
   @State private(set) var viewModel = ImageViewModel()
 
-  let image: NSImage
+  let loadedImage: LoadedImage
 
   var body: some View {
     ZStack(alignment: .top) {
       ImageScrollView(
-        image: image,
+        loadedImage: loadedImage,
         fitToWindowRequest: viewModel.fitToWindowRequest,
         fitWindowToImageRequest: viewModel.fitWindowToImageRequest,
         scale: $viewModel.imageScale,
@@ -39,89 +39,15 @@ struct ImageView: View {
       viewModel.setTopBarVisibility(to: false)
 
       DispatchQueue.main.async {
-        viewModel.currentImage = image
+        viewModel.currentImage = loadedImage.image
         viewModel.fitToWindow()
       }
     }
   }
 }
 
-private struct HoverTrackingStrip: NSViewRepresentable {
-  let onHoverChange: (Bool) -> Void
-
-  func makeNSView(context _: Context) -> HoverTrackingNSView {
-    let view = HoverTrackingNSView()
-    view.onHoverChange = onHoverChange
-    return view
-  }
-
-  func updateNSView(_ nsView: HoverTrackingNSView, context _: Context) {
-    nsView.onHoverChange = onHoverChange
-  }
-
-  final class HoverTrackingNSView: NSView {
-    var onHoverChange: ((Bool) -> Void)?
-
-    private var isHovering = false
-    private var trackingArea: NSTrackingArea?
-
-    override init(frame frameRect: NSRect) {
-      super.init(frame: frameRect)
-    }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-      nil
-    }
-
-    override func hitTest(_: NSPoint) -> NSView? {
-      nil
-    }
-
-    override func updateTrackingAreas() {
-      if let trackingArea {
-        removeTrackingArea(trackingArea)
-      }
-
-      let trackingArea = NSTrackingArea(
-        rect: .zero,
-        options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-        owner: self,
-        userInfo: nil,
-      )
-      addTrackingArea(trackingArea)
-      self.trackingArea = trackingArea
-
-      super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with _: NSEvent) {
-      setHovering(true)
-    }
-
-    override func mouseExited(with _: NSEvent) {
-      setHovering(false)
-    }
-
-    override func viewDidMoveToWindow() {
-      super.viewDidMoveToWindow()
-
-      if window == nil {
-        setHovering(false)
-      }
-    }
-
-    private func setHovering(_ isHovering: Bool) {
-      guard self.isHovering != isHovering else { return }
-
-      self.isHovering = isHovering
-      onHoverChange?(isHovering)
-    }
-  }
-}
-
 struct ImageScrollView: NSViewRepresentable {
-  let image: NSImage
+  let loadedImage: LoadedImage
   let fitToWindowRequest: Int
   let fitWindowToImageRequest: Int
   @Binding var scale: CGFloat
@@ -157,7 +83,11 @@ struct ImageScrollView: NSViewRepresentable {
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = ImageNSScrollView()
     let centeringClipView = CenteringClipView()
-    centeringClipView.documentView = PixelImageView(image: image, scale: scale)
+    centeringClipView.documentView = PixelImageView(
+      image: loadedImage.image,
+      imageKind: loadedImage.kind,
+      scale: scale,
+    )
     scrollView.contentView = centeringClipView
 
     // Disable automatic content insets adjustment to ensure the image can be properly centered and
@@ -176,7 +106,7 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.usesPredominantAxisScrolling = false
     scrollView.magnification = scale.clamped(to: minScale ... maxScale)
     context.coordinator.prepareForImage(
-      image,
+      loadedImage.image,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
     )
@@ -199,15 +129,20 @@ struct ImageScrollView: NSViewRepresentable {
     context.coordinator.observe(scrollView)
 
     if let imageView = scrollView.documentView as? PixelImageView {
-      imageView.image = image
+      imageView.image = loadedImage.image
+      imageView.imageKind = loadedImage.kind
       imageView.scale = scale
       scrollView.reflectScrolledClipView(scrollView.contentView)
     } else {
-      scrollView.documentView = PixelImageView(image: image, scale: scale)
+      scrollView.documentView = PixelImageView(
+        image: loadedImage.image,
+        imageKind: loadedImage.kind,
+        scale: scale,
+      )
     }
 
     context.coordinator.prepareForImage(
-      image,
+      loadedImage.image,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
     )
@@ -276,7 +211,15 @@ struct ImageScrollView: NSViewRepresentable {
 private final class PixelImageView: NSView {
   var image: NSImage {
     didSet {
+      image.cacheMode = imageKind.cacheMode
       frame.size = image.pixelSize
+      needsDisplay = true
+    }
+  }
+
+  var imageKind: ImageKind {
+    didSet {
+      image.cacheMode = imageKind.cacheMode
       needsDisplay = true
     }
   }
@@ -287,9 +230,11 @@ private final class PixelImageView: NSView {
     true
   }
 
-  init(image: NSImage, scale: CGFloat) {
+  init(image: NSImage, imageKind: ImageKind, scale: CGFloat) {
     self.image = image
+    self.imageKind = imageKind
     self.scale = scale
+    image.cacheMode = imageKind.cacheMode
     super.init(frame: NSRect(origin: .zero, size: image.pixelSize))
   }
 
@@ -302,20 +247,56 @@ private final class PixelImageView: NSView {
     NSColor.clear.setFill()
     dirtyRect.fill()
 
-    if let currentContext = NSGraphicsContext.current {
-      currentContext.imageInterpolation = scale > 1.0 ? .none : .high
-
-      let cgContext = currentContext.cgContext
-      cgContext.setShouldAntialias(false)
-      cgContext.interpolationQuality = scale > 1.0 ? .none : .high
+    guard let currentContext = NSGraphicsContext.current else {
+      drawImage(hints: nil)
+      return
     }
+
+    let previousInterpolation = currentContext.imageInterpolation
+    let interpolation = imageInterpolation
+    let hints: [NSImageRep.HintKey: Any] = [
+      .interpolation: NSNumber(value: interpolation.rawValue),
+    ]
+
+    NSGraphicsContext.saveGraphicsState()
+    currentContext.imageInterpolation = interpolation
+    currentContext.cgContext.setShouldAntialias(shouldAntialias)
+    currentContext.cgContext.interpolationQuality = cgInterpolationQuality
+    drawImage(hints: hints)
+    NSGraphicsContext.restoreGraphicsState()
+    currentContext.imageInterpolation = previousInterpolation
+  }
+
+  private var imageInterpolation: NSImageInterpolation {
+    switch imageKind {
+    case .bitmap:
+      scale > 1.0 ? .none : .high
+    case .vector:
+      .high
+    }
+  }
+
+  private var cgInterpolationQuality: CGInterpolationQuality {
+    switch imageKind {
+    case .bitmap:
+      scale > 1.0 ? .none : .high
+    case .vector:
+      .high
+    }
+  }
+
+  private var shouldAntialias: Bool {
+    imageKind == .vector
+  }
+
+  private func drawImage(hints: [NSImageRep.HintKey: Any]?) {
     image.draw(
       in: bounds,
       from: NSRect(origin: .zero, size: image.size),
       operation: .copy,
       fraction: 1.0,
       respectFlipped: true,
-      hints: nil,
+      hints: hints,
     )
   }
 }
