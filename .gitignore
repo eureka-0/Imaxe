@@ -1,0 +1,13 @@
+## Xcode Build Artifacts & DerivedData
+DerivedData/
+build/
+*.FileSegment
+*.moved-aside
+
+## User-specific files (Never commit these, causes merge conflicts)
+**/xcuserdata/
+*.xcuserdatad
+*.xcuserstate
+
+## Affinity lock files
+*.af~lock~
