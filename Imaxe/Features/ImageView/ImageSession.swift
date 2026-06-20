@@ -19,6 +19,7 @@ final class ImageSession {
   private(set) var folderNavigator: FolderNavigator
 
   var alert: ImageAlert?
+  @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
 
   init(loadedImage: LoadedImage) {
     currentImage = loadedImage
@@ -26,6 +27,22 @@ final class ImageSession {
   }
 
   func setTopBarVisibility(to isVisible: Bool) {
+    topBarHideTask?.cancel()
+
+    if !isVisible {
+      topBarHideTask = Task { @MainActor [weak self] in
+        try? await Task.sleep(for: .seconds(Constants.topBarHideDelay))
+        guard !Task.isCancelled else { return }
+
+        self?.applyTopBarVisibility(false)
+      }
+      return
+    }
+
+    applyTopBarVisibility(true)
+  }
+
+  private func applyTopBarVisibility(_ isVisible: Bool) {
     showTopBar = isVisible
 
     let mouseLocation = NSEvent.mouseLocation
@@ -63,6 +80,21 @@ final class ImageSession {
     DispatchQueue.main.async {
       self.fitWindowToImageRequest += 1
     }
+  }
+
+  func setScale(_ newScale: CGFloat) {
+    guard newScale.isFinite else { return }
+
+    alwaysFitToWindow = false
+    imageScale = newScale.clamped(to: Constants.imageScaleRange)
+  }
+
+  func zoomIn() {
+    setScale(imageScale * Constants.imageZoomStep)
+  }
+
+  func zoomOut() {
+    setScale(imageScale / Constants.imageZoomStep)
   }
 
   func reloadCurrentImage() {

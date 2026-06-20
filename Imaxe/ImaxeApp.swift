@@ -12,8 +12,16 @@ struct ImaxeApp: App {
   var body: some Scene {
     WindowGroup {
       ContentView()
+        .frame(
+          minWidth: Constants.minimumWindowContentWidth,
+          minHeight: Constants.minimumWindowContentHeight,
+        )
         .configureWindow { window in
           window.isMovableByWindowBackground = true
+          window.contentMinSize = NSSize(
+            width: Constants.minimumWindowContentWidth,
+            height: Constants.minimumWindowContentHeight,
+          )
         }
         .ignoresSafeArea()
     }

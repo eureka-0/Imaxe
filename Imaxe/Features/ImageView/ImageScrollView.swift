@@ -16,8 +16,6 @@ struct ImageScrollView: NSViewRepresentable {
   @Binding var scale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
-  private let minScale: CGFloat = 0.05
-  private let maxScale: CGFloat = 16.0
   private let scaleUpdateTolerance: CGFloat = 0.000_1
 
   func onScaleChange(_ newScale: CGFloat) {
@@ -60,10 +58,10 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.verticalScrollElasticity = .none
     scrollView.horizontalScrollElasticity = .none
     scrollView.allowsMagnification = true
-    scrollView.minMagnification = minScale
-    scrollView.maxMagnification = maxScale
+    scrollView.minMagnification = Constants.imageScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageScaleRange.upperBound
     scrollView.usesPredominantAxisScrolling = false
-    scrollView.magnification = scale.clamped(to: minScale ... maxScale)
+    scrollView.magnification = scale.clamped(to: Constants.imageScaleRange)
     context.coordinator.prepareForImage(
       loadedImage,
       fitToWindowRequest: fitToWindowRequest,
@@ -72,7 +70,7 @@ struct ImageScrollView: NSViewRepresentable {
     context.coordinator.alwaysFitToWindow = alwaysFitToWindow
     scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
       guard let scrollView else { return }
-      coordinator?.scrollViewDidLayout(scrollView, minScale: minScale, maxScale: maxScale)
+      coordinator?.scrollViewDidLayout(scrollView)
     }
     scrollView.onUserMagnification = { [weak coordinator = context.coordinator] in
       coordinator?.disableAlwaysFitToWindowForUserMagnification()
@@ -102,14 +100,14 @@ struct ImageScrollView: NSViewRepresentable {
     )
     scrollView.layoutSubtreeIfNeeded()
 
-    let clampedScale = scale.clamped(to: minScale ... maxScale)
+    let clampedScale = scale.clamped(to: Constants.imageScaleRange)
     if !alwaysFitToWindow, !context.coordinator.hasPendingRequests,
        scrollView.magnification != clampedScale
     {
       scrollView.magnification = clampedScale
     }
 
-    context.coordinator.performPendingRequests(scrollView, minScale: minScale, maxScale: maxScale)
+    context.coordinator.performPendingRequests(scrollView)
   }
 
   final class ImageNSScrollView: NSScrollView {
@@ -204,18 +202,16 @@ struct ImageScrollView: NSViewRepresentable {
       }
     }
 
-    func scrollViewDidLayout(_ scrollView: NSScrollView, minScale: CGFloat, maxScale: CGFloat) {
+    func scrollViewDidLayout(_ scrollView: NSScrollView) {
       performPendingRequests(
         scrollView,
-        minScale: minScale,
-        maxScale: maxScale,
         shouldUpdateLayout: false,
       )
 
       guard alwaysFitToWindow, !hasPendingRequests else { return }
       guard shouldApplyAlwaysFitToWindow(scrollView) else { return }
 
-      fitToWindow(scrollView, minScale: minScale, maxScale: maxScale)
+      fitToWindow(scrollView)
     }
 
     func disableAlwaysFitToWindowForUserMagnification() {
@@ -225,28 +221,21 @@ struct ImageScrollView: NSViewRepresentable {
       onAlwaysFitToWindowChange(false)
     }
 
-    func performPendingRequests(
-      _ scrollView: NSScrollView,
-      minScale: CGFloat,
-      maxScale: CGFloat,
-      shouldUpdateLayout: Bool = true,
-    ) {
+    func performPendingRequests(_ scrollView: NSScrollView, shouldUpdateLayout: Bool = true) {
       guard hasPendingRequests else { return }
 
       if shouldUpdateLayout {
         scrollView.layoutSubtreeIfNeeded()
       }
 
-      if fitWindowToImageIfNeeded(scrollView, minScale: minScale, maxScale: maxScale) { return }
+      if fitWindowToImageIfNeeded(scrollView) { return }
 
-      fitToWindowIfNeeded(scrollView, minScale: minScale, maxScale: maxScale)
+      fitToWindowIfNeeded(scrollView)
     }
 
-    private func fitToWindowIfNeeded(
-      _ scrollView: NSScrollView, minScale: CGFloat, maxScale: CGFloat,
-    ) {
+    private func fitToWindowIfNeeded(_ scrollView: NSScrollView) {
       guard let request = pendingFitToWindowRequest,
-            fitToWindow(scrollView, minScale: minScale, maxScale: maxScale)
+            fitToWindow(scrollView)
       else { return }
 
       pendingFitToWindowRequest = nil
@@ -254,9 +243,7 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     @discardableResult
-    private func fitToWindow(
-      _ scrollView: NSScrollView, minScale: CGFloat, maxScale: CGFloat,
-    ) -> Bool {
+    private func fitToWindow(_ scrollView: NSScrollView) -> Bool {
       guard let documentView = scrollView.documentView else { return false }
 
       let viewportSize = scrollView.contentSize
@@ -272,7 +259,7 @@ struct ImageScrollView: NSViewRepresentable {
         viewportSize.width / imageSize.width,
         viewportSize.height / imageSize.height,
       )
-      .clamped(to: minScale ... maxScale)
+      .clamped(to: Constants.imageScaleRange)
       let center = NSPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0)
 
       let shouldUpdateMagnification = abs(scrollView.magnification - fitScale) > 0.000_1
@@ -287,9 +274,7 @@ struct ImageScrollView: NSViewRepresentable {
       return true
     }
 
-    private func fitWindowToImageIfNeeded(
-      _ scrollView: NSScrollView, minScale: CGFloat, maxScale: CGFloat,
-    ) -> Bool {
+    private func fitWindowToImageIfNeeded(_ scrollView: NSScrollView) -> Bool {
       guard let request = pendingFitWindowToImageRequest,
             let documentView = scrollView.documentView,
             let window = scrollView.window
@@ -313,7 +298,7 @@ struct ImageScrollView: NSViewRepresentable {
         width: max(1, visibleFrame.width - frameViewportDelta.width),
         height: max(1, visibleFrame.height - frameViewportDelta.height),
       )
-      let currentScale = scrollView.magnification.clamped(to: minScale ... maxScale)
+      let currentScale = scrollView.magnification.clamped(to: Constants.imageScaleRange)
       let targetImageDisplaySize = NSSize(
         width: imageSize.width * currentScale,
         height: imageSize.height * currentScale,
