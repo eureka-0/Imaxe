@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import PocketSVG
 import SwiftUI
 
 struct ImageView: View {
@@ -83,11 +84,7 @@ struct ImageScrollView: NSViewRepresentable {
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = ImageNSScrollView()
     let centeringClipView = CenteringClipView()
-    centeringClipView.documentView = PixelImageView(
-      image: loadedImage.image,
-      imageKind: loadedImage.kind,
-      scale: scale,
-    )
+    centeringClipView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: scale)
     scrollView.contentView = centeringClipView
 
     // Disable automatic content insets adjustment to ensure the image can be properly centered and
@@ -106,7 +103,7 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.usesPredominantAxisScrolling = false
     scrollView.magnification = scale.clamped(to: minScale ... maxScale)
     context.coordinator.prepareForImage(
-      loadedImage.image,
+      loadedImage,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
     )
@@ -128,21 +125,16 @@ struct ImageScrollView: NSViewRepresentable {
     context.coordinator.alwaysFitToWindow = alwaysFitToWindow
     context.coordinator.observe(scrollView)
 
-    if let imageView = scrollView.documentView as? PixelImageView {
-      imageView.image = loadedImage.image
-      imageView.imageKind = loadedImage.kind
+    if let imageView = scrollView.documentView as? ImageCanvasView {
+      imageView.loadedImage = loadedImage
       imageView.scale = scale
       scrollView.reflectScrolledClipView(scrollView.contentView)
     } else {
-      scrollView.documentView = PixelImageView(
-        image: loadedImage.image,
-        imageKind: loadedImage.kind,
-        scale: scale,
-      )
+      scrollView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: scale)
     }
 
     context.coordinator.prepareForImage(
-      loadedImage.image,
+      loadedImage,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
     )
@@ -208,18 +200,10 @@ struct ImageScrollView: NSViewRepresentable {
   }
 }
 
-private final class PixelImageView: NSView {
-  var image: NSImage {
+private final class ImageCanvasView: NSView {
+  var loadedImage: LoadedImage {
     didSet {
-      image.cacheMode = imageKind.cacheMode
-      frame.size = image.pixelSize
-      needsDisplay = true
-    }
-  }
-
-  var imageKind: ImageKind {
-    didSet {
-      image.cacheMode = imageKind.cacheMode
+      frame.size = loadedImage.displaySize
       needsDisplay = true
     }
   }
@@ -230,12 +214,10 @@ private final class PixelImageView: NSView {
     true
   }
 
-  init(image: NSImage, imageKind: ImageKind, scale: CGFloat) {
-    self.image = image
-    self.imageKind = imageKind
+  init(loadedImage: LoadedImage, scale: CGFloat) {
+    self.loadedImage = loadedImage
     self.scale = scale
-    image.cacheMode = imageKind.cacheMode
-    super.init(frame: NSRect(origin: .zero, size: image.pixelSize))
+    super.init(frame: NSRect(origin: .zero, size: loadedImage.displaySize))
   }
 
   @available(*, unavailable)
@@ -248,7 +230,12 @@ private final class PixelImageView: NSView {
     dirtyRect.fill()
 
     guard let currentContext = NSGraphicsContext.current else {
-      drawImage(hints: nil)
+      drawNSImage(hints: nil)
+      return
+    }
+
+    if let vectorContent = loadedImage.vectorContent {
+      drawSVG(vectorContent, in: currentContext.cgContext)
       return
     }
 
@@ -260,15 +247,15 @@ private final class PixelImageView: NSView {
 
     NSGraphicsContext.saveGraphicsState()
     currentContext.imageInterpolation = interpolation
-    currentContext.cgContext.setShouldAntialias(shouldAntialias)
+    currentContext.cgContext.setShouldAntialias(false)
     currentContext.cgContext.interpolationQuality = cgInterpolationQuality
-    drawImage(hints: hints)
+    drawNSImage(hints: hints)
     NSGraphicsContext.restoreGraphicsState()
     currentContext.imageInterpolation = previousInterpolation
   }
 
   private var imageInterpolation: NSImageInterpolation {
-    switch imageKind {
+    switch loadedImage.kind {
     case .bitmap:
       scale > 1.0 ? .none : .high
     case .vector:
@@ -277,7 +264,7 @@ private final class PixelImageView: NSView {
   }
 
   private var cgInterpolationQuality: CGInterpolationQuality {
-    switch imageKind {
+    switch loadedImage.kind {
     case .bitmap:
       scale > 1.0 ? .none : .high
     case .vector:
@@ -285,14 +272,52 @@ private final class PixelImageView: NSView {
     }
   }
 
-  private var shouldAntialias: Bool {
-    imageKind == .vector
+  private func drawSVG(_ vectorContent: SVGVectorContent, in context: CGContext) {
+    NSGraphicsContext.saveGraphicsState()
+    context.setShouldAntialias(false)
+    context.clip(to: bounds)
+
+    let viewBox = vectorContent.viewBox
+    context.scaleBy(
+      x: bounds.width / viewBox.width,
+      y: bounds.height / viewBox.height,
+    )
+    context.translateBy(x: -viewBox.minX, y: -viewBox.minY)
+
+    for path in vectorContent.paths {
+      drawSVGPath(path)
+    }
+
+    NSGraphicsContext.restoreGraphicsState()
   }
 
-  private func drawImage(hints: [NSImageRep.HintKey: Any]?) {
-    image.draw(
+  private func drawSVGPath(_ path: SVGBezierPath) {
+    let fillColor = cgColor(from: path.svgAttributes["fill"]) ?? NSColor.black.cgColor
+    if fillColor.alpha > 0 {
+      NSColor(cgColor: fillColor)?.setFill()
+      path.fill()
+    }
+
+    if let strokeColor = cgColor(from: path.svgAttributes["stroke"]),
+       strokeColor.alpha > 0
+    {
+      NSColor(cgColor: strokeColor)?.setStroke()
+      path.stroke()
+    }
+  }
+
+  private func cgColor(from value: Any?) -> CGColor? {
+    guard let value else { return nil }
+
+    let object = value as AnyObject
+    guard CFGetTypeID(object) == CGColor.typeID else { return nil }
+    return (object as! CGColor)
+  }
+
+  private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
+    loadedImage.image.draw(
       in: bounds,
-      from: NSRect(origin: .zero, size: image.size),
+      from: NSRect(origin: .zero, size: loadedImage.image.size),
       operation: .copy,
       fraction: 1.0,
       respectFlipped: true,

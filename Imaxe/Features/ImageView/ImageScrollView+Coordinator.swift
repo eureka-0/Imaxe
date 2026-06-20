@@ -36,9 +36,9 @@ extension ImageScrollView {
     }
 
     func prepareForImage(
-      _ image: NSImage, fitToWindowRequest: Int, fitWindowToImageRequest: Int,
+      _ loadedImage: LoadedImage, fitToWindowRequest: Int, fitWindowToImageRequest: Int,
     ) {
-      let newIdentifier = ObjectIdentifier(image)
+      let newIdentifier = ObjectIdentifier(loadedImage.image)
       if imageIdentifier != newIdentifier {
         imageIdentifier = newIdentifier
         queueFitToWindow(fitToWindowRequest)
