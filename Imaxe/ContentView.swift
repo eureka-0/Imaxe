@@ -25,6 +25,9 @@ struct ContentView: View {
       allowedContentTypes: [.image],
       onCompletion: viewModel.onOpenImage,
     )
+    .alert(isPresented: $viewModel.showErrorAlert) {
+      Alert(title: Text(viewModel.alertTitle), message: Text(viewModel.errorMessage))
+    }
   }
 }
 
@@ -32,6 +35,9 @@ struct ContentView: View {
 final class ContentViewModel {
   var isImporterPresented = false
   private(set) var importedImage: LoadedImage?
+  var showErrorAlert: Bool = false
+  var alertTitle: String = "Error"
+  var errorMessage: String = ""
 
   func openImage() {
     isImporterPresented = true
@@ -40,7 +46,13 @@ final class ContentViewModel {
   func onOpenImage(result: Result<URL, Error>) {
     switch result {
     case let .success(url):
-      importedImage = try? ImageLoader.shared.load(from: url)
+      do {
+        importedImage = try ImageLoader.shared.load(from: url)
+      } catch {
+        showErrorAlert = true
+        alertTitle = "Failed to Open Image"
+        errorMessage = error.localizedDescription
+      }
 
     case let .failure(error):
       print("Failed to open file: \(error.localizedDescription)")
