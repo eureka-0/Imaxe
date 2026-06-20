@@ -11,12 +11,19 @@ import PocketSVG
 final class ImageCanvasView: NSView {
   var loadedImage: LoadedImage {
     didSet {
+      if oldValue.image !== loadedImage.image {
+        stopGIFAnimation()
+        currentGIFFrame = 0
+      }
       frame.size = loadedImage.displaySize
       needsDisplay = true
     }
   }
 
   var scale: CGFloat
+  private var gifTimer: Timer?
+  private var gifBitmapRep: NSBitmapImageRep?
+  private var currentGIFFrame = 0
 
   override var isFlipped: Bool {
     true
@@ -33,16 +40,30 @@ final class ImageCanvasView: NSView {
     nil
   }
 
+  deinit {
+    stopGIFAnimation()
+  }
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+
+    if window == nil {
+      stopGIFAnimation()
+    }
+  }
+
   override func draw(_ dirtyRect: NSRect) {
     NSColor.clear.setFill()
     dirtyRect.fill()
 
     guard let currentContext = NSGraphicsContext.current else {
+      startGIFAnimationIfNeeded()
       drawNSImage(hints: nil)
       return
     }
 
     if let vectorContent = loadedImage.vectorContent {
+      stopGIFAnimation()
       drawSVG(vectorContent, in: currentContext.cgContext)
       return
     }
@@ -57,6 +78,7 @@ final class ImageCanvasView: NSView {
     currentContext.imageInterpolation = interpolation
     currentContext.cgContext.setShouldAntialias(false)
     currentContext.cgContext.interpolationQuality = cgInterpolationQuality
+    startGIFAnimationIfNeeded()
     drawNSImage(hints: hints)
     NSGraphicsContext.restoreGraphicsState()
     currentContext.imageInterpolation = previousInterpolation
@@ -131,5 +153,63 @@ final class ImageCanvasView: NSView {
       respectFlipped: true,
       hints: hints,
     )
+  }
+
+  private func startGIFAnimationIfNeeded() {
+    guard window != nil, gifTimer == nil else { return }
+
+    guard let bitmapRep = animatedGIFRepresentation else {
+      stopGIFAnimation()
+      return
+    }
+
+    gifBitmapRep = bitmapRep
+    currentGIFFrame = (bitmapRep.value(forProperty: .currentFrame) as? NSNumber)?.intValue ?? 0
+    scheduleNextGIFFrame(for: bitmapRep)
+  }
+
+  private func stopGIFAnimation() {
+    gifTimer?.invalidate()
+    gifTimer = nil
+    gifBitmapRep = nil
+  }
+
+  private var animatedGIFRepresentation: NSBitmapImageRep? {
+    loadedImage.image.representations
+      .compactMap { $0 as? NSBitmapImageRep }
+      .first { bitmapRep in
+        let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue ?? 0
+        return frameCount > 1
+      }
+  }
+
+  private func scheduleNextGIFFrame(for bitmapRep: NSBitmapImageRep) {
+    guard let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue,
+          frameCount > 1
+    else {
+      stopGIFAnimation()
+      return
+    }
+
+    let duration = (bitmapRep.value(forProperty: .currentFrameDuration) as? NSNumber)?.doubleValue
+    let frameDuration = if let duration, duration > 0 {
+      duration
+    } else {
+      0.1
+    }
+
+    gifTimer?.invalidate()
+    let timer = Timer(timeInterval: frameDuration, repeats: false) { [weak self, weak bitmapRep] _ in
+      guard let self, let bitmapRep, self.gifBitmapRep === bitmapRep else { return }
+
+      currentGIFFrame = (currentGIFFrame + 1) % frameCount
+      bitmapRep.setProperty(.currentFrame, withValue: currentGIFFrame)
+      needsDisplay = true
+
+      scheduleNextGIFFrame(for: bitmapRep)
+    }
+
+    gifTimer = timer
+    RunLoop.main.add(timer, forMode: .common)
   }
 }

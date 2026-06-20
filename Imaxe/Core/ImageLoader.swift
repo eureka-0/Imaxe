@@ -13,8 +13,14 @@ import UniformTypeIdentifiers
 enum ImageFile {
   nonisolated static let supportedImageTypes: [UTType] = [
     // Bitmap formats
-    .png,
+    .bmp,
+    .gif,
+    .heic,
+    .heif,
+    .ico,
     .jpeg,
+    .png,
+    .tiff,
     .webP,
     // Vector formats
     .svg,
@@ -175,10 +181,7 @@ struct LoadedImage {
       return vectorContent.displaySize
     }
 
-    if let preferredSize,
-       preferredSize.width > 0,
-       preferredSize.height > 0
-    {
+    if let preferredSize, preferredSize.width > 0, preferredSize.height > 0 {
       return preferredSize
     }
 
