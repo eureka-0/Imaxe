@@ -10,14 +10,30 @@ import PocketSVG
 import SwiftUI
 
 struct ImageView: View {
-  @State private(set) var viewModel = ImageViewModel()
+  @State private(set) var viewModel: ImageViewModel
 
-  let loadedImage: LoadedImage
+  @Binding var loadedImage: LoadedImage
+  @Binding var showErrorAlert: Bool
+  @Binding var alertTitle: String
+  @Binding var errorMessage: String
+
+  init(
+    loadedImage: Binding<LoadedImage>,
+    showErrorAlert: Binding<Bool>,
+    alertTitle: Binding<String>,
+    errorMessage: Binding<String>,
+  ) {
+    _loadedImage = loadedImage
+    _showErrorAlert = showErrorAlert
+    _alertTitle = alertTitle
+    _errorMessage = errorMessage
+    _viewModel = State(wrappedValue: ImageViewModel(loadedImage: loadedImage.wrappedValue))
+  }
 
   var body: some View {
     ZStack(alignment: .top) {
       ImageScrollView(
-        loadedImage: loadedImage,
+        loadedImage: viewModel.currentImage,
         fitToWindowRequest: viewModel.fitToWindowRequest,
         fitWindowToImageRequest: viewModel.fitWindowToImageRequest,
         scale: $viewModel.imageScale,
@@ -40,9 +56,24 @@ struct ImageView: View {
       viewModel.setTopBarVisibility(to: false)
 
       DispatchQueue.main.async {
-        viewModel.currentImage = loadedImage.image
         viewModel.fitToWindow()
       }
+    }
+    .onChange(of: viewModel.showErrorAlert) {
+      showErrorAlert = viewModel.showErrorAlert
+      alertTitle = viewModel.alertTitle
+      errorMessage = viewModel.errorMessage
+    }
+    .onChange(of: showErrorAlert) {
+      viewModel.showErrorAlert = showErrorAlert
+      viewModel.alertTitle = alertTitle
+      viewModel.errorMessage = errorMessage
+    }
+    .onChange(of: loadedImage.id) {
+      viewModel.setCurrentImage(loadedImage)
+    }
+    .onChange(of: viewModel.currentImage.id) {
+      loadedImage = viewModel.currentImage
     }
   }
 }

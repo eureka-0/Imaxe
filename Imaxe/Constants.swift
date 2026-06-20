@@ -8,5 +8,6 @@
 import Foundation
 
 enum Constants {
+  static let topBarHeight: CGFloat = 32
   static let topBarHoverStripHeight: CGFloat = 50
 }

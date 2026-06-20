@@ -11,6 +11,7 @@ extension ImageView {
   var topBar: some View {
     HStack(spacing: 12) {
       Spacer()
+      navigationButtons
       fitToWindowButton
       scaleText
       fitWindowToImageButton
@@ -18,10 +19,32 @@ extension ImageView {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.horizontal, 10)
-    .background(.black.opacity(0.7))
-    .frame(height: 32)
+    .background(.regularMaterial.opacity(0.8))
+    .frame(height: Constants.topBarHeight)
     .labelStyle(.iconOnly)
     .buttonStyle(TopBarButtonStyle())
+  }
+
+  @ViewBuilder
+  private var navigationButtons: some View {
+    Button(action: viewModel.navigateToPreviousImage) {
+      Image(systemName: "chevron.left")
+    }
+    .disabled(!viewModel.folderNavigator.canNavigateToPrevious)
+
+    HStack {
+      Spacer(minLength: 0)
+      Text(viewModel.folderNavigator.positionDescription)
+      Spacer(minLength: 0)
+    }
+    .frame(width: 60)
+    .padding(.vertical, 3)
+    .background(.gray)
+
+    Button(action: viewModel.navigateToNextImage) {
+      Image(systemName: "chevron.right")
+    }
+    .disabled(!viewModel.folderNavigator.canNavigateToNext)
   }
 
   private var fitToWindowButton: some View {
@@ -29,7 +52,6 @@ extension ImageView {
       Label("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
     }
     .keyboardShortcut("f", modifiers: .command)
-    .disabled(viewModel.currentImage == nil)
     .help(Text("Fit the image to the window"))
   }
 
@@ -39,14 +61,12 @@ extension ImageView {
       .padding(.vertical, 3)
       .background(.gray.opacity(0.3))
       .clipShape(.rect(cornerRadius: 8))
-      .disabled(viewModel.currentImage == nil)
   }
 
   private var fitWindowToImageButton: some View {
     Button(action: viewModel.fitWindowToImage) {
       Label("Fit Window to Image", systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left")
     }
-    .disabled(viewModel.currentImage == nil)
     .help(Text("Resize the window to fit the image"))
   }
 

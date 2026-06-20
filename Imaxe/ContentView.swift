@@ -14,7 +14,12 @@ struct ContentView: View {
   var body: some View {
     Group {
       if let loadedImage = viewModel.importedImage {
-        ImageView(loadedImage: loadedImage)
+        ImageView(
+          loadedImage: Binding(get: { loadedImage }, set: { viewModel.importedImage = $0 }),
+          showErrorAlert: $viewModel.showErrorAlert,
+          alertTitle: $viewModel.alertTitle,
+          errorMessage: $viewModel.errorMessage,
+        )
       } else {
         HomeView()
       }
@@ -34,7 +39,7 @@ struct ContentView: View {
 @Observable
 final class ContentViewModel {
   var isImporterPresented = false
-  private(set) var importedImage: LoadedImage?
+  fileprivate(set) var importedImage: LoadedImage?
   var showErrorAlert: Bool = false
   var alertTitle: String = "Error"
   var errorMessage: String = ""
