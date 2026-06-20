@@ -13,13 +13,8 @@ struct ContentView: View {
 
   var body: some View {
     Group {
-      if let loadedImage = viewModel.importedImage {
-        ImageView(
-          loadedImage: Binding(get: { loadedImage }, set: { viewModel.importedImage = $0 }),
-          showErrorAlert: $viewModel.showErrorAlert,
-          alertTitle: $viewModel.alertTitle,
-          errorMessage: $viewModel.errorMessage,
-        )
+      if let imageSession = viewModel.imageSession {
+        ImageView(imageSession: imageSession)
       } else {
         HomeView()
       }
@@ -30,8 +25,8 @@ struct ContentView: View {
       allowedContentTypes: [.image],
       onCompletion: viewModel.onOpenImage,
     )
-    .alert(isPresented: $viewModel.showErrorAlert) {
-      Alert(title: Text(viewModel.alertTitle), message: Text(viewModel.errorMessage))
+    .alert(item: $viewModel.alert) { alert in
+      Alert(title: Text(alert.title), message: Text(alert.message))
     }
   }
 }
@@ -39,10 +34,8 @@ struct ContentView: View {
 @Observable
 final class ContentViewModel {
   var isImporterPresented = false
-  fileprivate(set) var importedImage: LoadedImage?
-  var showErrorAlert: Bool = false
-  var alertTitle: String = "Error"
-  var errorMessage: String = ""
+  private(set) var imageSession: ImageSession?
+  var alert: ImageAlert?
 
   func openImage() {
     isImporterPresented = true
@@ -52,11 +45,10 @@ final class ContentViewModel {
     switch result {
     case let .success(url):
       do {
-        importedImage = try ImageLoader.shared.load(from: url)
+        let loadedImage = try ImageLoader.shared.load(from: url)
+        imageSession = ImageSession(loadedImage: loadedImage)
       } catch {
-        showErrorAlert = true
-        alertTitle = "Failed to Open Image"
-        errorMessage = error.localizedDescription
+        alert = ImageAlert(title: "Failed to Open Image", message: error.localizedDescription)
       }
 
     case let .failure(error):

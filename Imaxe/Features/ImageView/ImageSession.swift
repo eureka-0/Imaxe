@@ -1,5 +1,5 @@
 //
-//  ImageViewModel.swift
+//  ImageSession.swift
 //  Imaxe
 //
 //  Created by lxlong on 2026/6/17.
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @Observable
-final class ImageViewModel {
+final class ImageSession {
   private(set) var currentImage: LoadedImage
   var imageScale: CGFloat = 1.0
   private(set) var fitToWindowRequest = 0
@@ -18,21 +18,11 @@ final class ImageViewModel {
   private(set) var showTopBar = false
   private(set) var folderNavigator: FolderNavigator
 
-  var showErrorAlert: Bool
-  var alertTitle: String
-  var errorMessage: String
+  var alert: ImageAlert?
 
   init(loadedImage: LoadedImage) {
     currentImage = loadedImage
     folderNavigator = FolderNavigator(for: loadedImage.info.sourceURL)
-    showErrorAlert = false
-    alertTitle = ""
-    errorMessage = ""
-  }
-
-  func setCurrentImage(_ newImage: LoadedImage) {
-    currentImage = newImage
-    folderNavigator.currentImageURL = newImage.info.sourceURL
   }
 
   func setTopBarVisibility(to isVisible: Bool) {
@@ -75,17 +65,11 @@ final class ImageViewModel {
     }
   }
 
-  func setFolderNavigator(for url: URL) {
-    folderNavigator = FolderNavigator(for: url)
-  }
-
   func reloadCurrentImage() {
     do {
       currentImage = try ImageLoader.shared.load(from: folderNavigator.currentImageURL)
     } catch {
-      showErrorAlert = true
-      alertTitle = "Failed to Load Image"
-      errorMessage = error.localizedDescription
+      alert = ImageAlert(title: "Failed to Load Image", message: error.localizedDescription)
     }
   }
 

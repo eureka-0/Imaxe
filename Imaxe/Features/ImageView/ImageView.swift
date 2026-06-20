@@ -5,354 +5,126 @@
 //  Created by lxlong on 2026/6/17.
 //
 
-import AppKit
-import PocketSVG
 import SwiftUI
 
 struct ImageView: View {
-  @State private(set) var viewModel: ImageViewModel
-
-  @Binding var loadedImage: LoadedImage
-  @Binding var showErrorAlert: Bool
-  @Binding var alertTitle: String
-  @Binding var errorMessage: String
-
-  init(
-    loadedImage: Binding<LoadedImage>,
-    showErrorAlert: Binding<Bool>,
-    alertTitle: Binding<String>,
-    errorMessage: Binding<String>,
-  ) {
-    _loadedImage = loadedImage
-    _showErrorAlert = showErrorAlert
-    _alertTitle = alertTitle
-    _errorMessage = errorMessage
-    _viewModel = State(wrappedValue: ImageViewModel(loadedImage: loadedImage.wrappedValue))
-  }
+  @Bindable var imageSession: ImageSession
 
   var body: some View {
     ZStack(alignment: .top) {
       ImageScrollView(
-        loadedImage: viewModel.currentImage,
-        fitToWindowRequest: viewModel.fitToWindowRequest,
-        fitWindowToImageRequest: viewModel.fitWindowToImageRequest,
-        scale: $viewModel.imageScale,
-        alwaysFitToWindow: $viewModel.alwaysFitToWindow,
+        loadedImage: imageSession.currentImage,
+        fitToWindowRequest: imageSession.fitToWindowRequest,
+        fitWindowToImageRequest: imageSession.fitWindowToImageRequest,
+        scale: $imageSession.imageScale,
+        alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
 
       topBar
-        .opacity(viewModel.showTopBar ? 1 : 0)
-        .animation(.easeInOut(duration: 0.2), value: viewModel.showTopBar)
-        .allowsHitTesting(viewModel.showTopBar)
+        .opacity(imageSession.showTopBar ? 1 : 0)
+        .animation(.easeInOut(duration: 0.2), value: imageSession.showTopBar)
+        .allowsHitTesting(imageSession.showTopBar)
 
       HoverTrackingStrip { isHovering in
-        viewModel.setTopBarVisibility(to: isHovering)
+        imageSession.setTopBarVisibility(to: isHovering)
       }
       .frame(maxWidth: .infinity)
       .frame(height: Constants.topBarHoverStripHeight)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
-      viewModel.setTopBarVisibility(to: false)
+      imageSession.setTopBarVisibility(to: false)
 
       DispatchQueue.main.async {
-        viewModel.fitToWindow()
+        imageSession.fitToWindow()
       }
     }
-    .onChange(of: viewModel.showErrorAlert) {
-      showErrorAlert = viewModel.showErrorAlert
-      alertTitle = viewModel.alertTitle
-      errorMessage = viewModel.errorMessage
+    .alert(item: $imageSession.alert) { alert in
+      Alert(title: Text(alert.title), message: Text(alert.message))
     }
-    .onChange(of: showErrorAlert) {
-      viewModel.showErrorAlert = showErrorAlert
-      viewModel.alertTitle = alertTitle
-      viewModel.errorMessage = errorMessage
+  }
+
+  var topBar: some View {
+    HStack(spacing: 12) {
+      Spacer()
+      navigationButtons
+      fitToWindowButton
+      scaleText
+      fitWindowToImageButton
+      pinWindowButton
     }
-    .onChange(of: loadedImage.id) {
-      viewModel.setCurrentImage(loadedImage)
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    .padding(.horizontal, 10)
+    .background(.regularMaterial.opacity(0.8))
+    .frame(height: Constants.topBarHeight)
+    .labelStyle(.iconOnly)
+    .buttonStyle(TopBarButtonStyle())
+  }
+
+  @ViewBuilder
+  private var navigationButtons: some View {
+    Button(action: imageSession.navigateToPreviousImage) {
+      Image(systemName: "chevron.left")
     }
-    .onChange(of: viewModel.currentImage.id) {
-      loadedImage = viewModel.currentImage
+    .disabled(!imageSession.folderNavigator.canNavigateToPrevious)
+
+    HStack {
+      Spacer(minLength: 0)
+      Text(imageSession.folderNavigator.positionDescription)
+      Spacer(minLength: 0)
     }
+    .frame(width: 60)
+    .padding(.vertical, 3)
+    .background(.gray)
+
+    Button(action: imageSession.navigateToNextImage) {
+      Image(systemName: "chevron.right")
+    }
+    .disabled(!imageSession.folderNavigator.canNavigateToNext)
+  }
+
+  private var fitToWindowButton: some View {
+    Button(action: imageSession.fitToWindow) {
+      Label("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
+    }
+    .keyboardShortcut("f", modifiers: .command)
+    .help(Text("Fit the image to the window"))
+  }
+
+  private var scaleText: some View {
+    Text(Double(imageSession.imageScale), format: .percent.precision(.fractionLength(0)))
+      .frame(width: 56)
+      .padding(.vertical, 3)
+      .background(.gray.opacity(0.3))
+      .clipShape(.rect(cornerRadius: 8))
+  }
+
+  private var fitWindowToImageButton: some View {
+    Button(action: imageSession.fitWindowToImage) {
+      Label("Fit Window to Image", systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left")
+    }
+    .help(Text("Resize the window to fit the image"))
+  }
+
+  private var pinWindowButton: some View {
+    Button(action: imageSession.toggleWindowPinning) {
+      Label("Pin Window", systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin")
+    }
+    .keyboardShortcut("p", modifiers: .command)
+    .help(Text("Toggle window pinning"))
   }
 }
 
-struct ImageScrollView: NSViewRepresentable {
-  let loadedImage: LoadedImage
-  let fitToWindowRequest: Int
-  let fitWindowToImageRequest: Int
-  @Binding var scale: CGFloat
-  @Binding var alwaysFitToWindow: Bool
+private struct TopBarButtonStyle: ButtonStyle {
+  @State private var isHovering = false
 
-  private let minScale: CGFloat = 0.05
-  private let maxScale: CGFloat = 16.0
-  private let scaleUpdateTolerance: CGFloat = 0.000_1
-
-  func onScaleChange(_ newScale: CGFloat) {
-    guard newScale.isFinite else { return }
-
-    DispatchQueue.main.async {
-      guard abs(scale - newScale) > scaleUpdateTolerance else { return }
-      scale = newScale
-    }
-  }
-
-  func onAlwaysFitToWindowChange(_ newAlwaysFitToWindow: Bool) {
-    DispatchQueue.main.async {
-      guard alwaysFitToWindow != newAlwaysFitToWindow else { return }
-      alwaysFitToWindow = newAlwaysFitToWindow
-    }
-  }
-
-  func makeCoordinator() -> Coordinator {
-    Coordinator(
-      onScaleChange: onScaleChange,
-      onAlwaysFitToWindowChange: onAlwaysFitToWindowChange,
-    )
-  }
-
-  func makeNSView(context: Context) -> NSScrollView {
-    let scrollView = ImageNSScrollView()
-    let centeringClipView = CenteringClipView()
-    centeringClipView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: scale)
-    scrollView.contentView = centeringClipView
-
-    // Disable automatic content insets adjustment to ensure the image can be properly centered and
-    // scaled without unexpected padding.
-    scrollView.automaticallyAdjustsContentInsets = false
-    scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
-
-    scrollView.drawsBackground = false
-    scrollView.hasHorizontalScroller = false
-    scrollView.hasVerticalScroller = false
-    scrollView.verticalScrollElasticity = .none
-    scrollView.horizontalScrollElasticity = .none
-    scrollView.allowsMagnification = true
-    scrollView.minMagnification = minScale
-    scrollView.maxMagnification = maxScale
-    scrollView.usesPredominantAxisScrolling = false
-    scrollView.magnification = scale.clamped(to: minScale ... maxScale)
-    context.coordinator.prepareForImage(
-      loadedImage,
-      fitToWindowRequest: fitToWindowRequest,
-      fitWindowToImageRequest: fitWindowToImageRequest,
-    )
-    context.coordinator.alwaysFitToWindow = alwaysFitToWindow
-    scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
-      guard let scrollView else { return }
-      coordinator?.scrollViewDidLayout(scrollView, minScale: minScale, maxScale: maxScale)
-    }
-    scrollView.onUserMagnification = { [weak coordinator = context.coordinator] in
-      coordinator?.disableAlwaysFitToWindowForUserMagnification()
-    }
-    context.coordinator.observe(scrollView)
-    return scrollView
-  }
-
-  func updateNSView(_ scrollView: NSScrollView, context: Context) {
-    context.coordinator.onScaleChange = onScaleChange
-    context.coordinator.onAlwaysFitToWindowChange = onAlwaysFitToWindowChange
-    context.coordinator.alwaysFitToWindow = alwaysFitToWindow
-    context.coordinator.observe(scrollView)
-
-    if let imageView = scrollView.documentView as? ImageCanvasView {
-      imageView.loadedImage = loadedImage
-      imageView.scale = scale
-      scrollView.reflectScrolledClipView(scrollView.contentView)
-    } else {
-      scrollView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: scale)
-    }
-
-    context.coordinator.prepareForImage(
-      loadedImage,
-      fitToWindowRequest: fitToWindowRequest,
-      fitWindowToImageRequest: fitWindowToImageRequest,
-    )
-    scrollView.layoutSubtreeIfNeeded()
-
-    let clampedScale = scale.clamped(to: minScale ... maxScale)
-    if !alwaysFitToWindow, !context.coordinator.hasPendingRequests,
-       scrollView.magnification != clampedScale
-    {
-      scrollView.magnification = clampedScale
-    }
-
-    context.coordinator.performPendingRequests(scrollView, minScale: minScale, maxScale: maxScale)
-  }
-
-  final class ImageNSScrollView: NSScrollView {
-    var onLayout: (() -> Void)?
-    var onUserMagnification: (() -> Void)?
-
-    override func layout() {
-      super.layout()
-      onLayout?()
-    }
-
-    override func magnify(with event: NSEvent) {
-      onUserMagnification?()
-      super.magnify(with: event)
-    }
-
-    override func smartMagnify(with event: NSEvent) {
-      onUserMagnification?()
-      super.smartMagnify(with: event)
-    }
-  }
-
-  final class CenteringClipView: NSClipView {
-    override func constrainBoundsRect(_ proposedBounds: NSRect) -> NSRect {
-      var constrainedBounds = super.constrainBoundsRect(proposedBounds)
-
-      guard let documentView else { return constrainedBounds }
-
-      let documentFrame = documentView.frame
-      let visibleSize = constrainedBounds.size
-
-      if documentFrame.width <= visibleSize.width {
-        constrainedBounds.origin.x = (visibleSize.width - documentFrame.width) / -2.0
-      } else {
-        constrainedBounds.origin.x = constrainedBounds.origin.x.clamped(
-          to: 0 ... documentFrame.width - visibleSize.width,
-        )
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .padding(5)
+      .background(isHovering ? Color.gray.opacity(0.5) : Color.clear)
+      .clipShape(.rect(cornerRadius: 8))
+      .onHover { isHovering in
+        self.isHovering = isHovering
       }
-
-      if documentFrame.height <= visibleSize.height {
-        constrainedBounds.origin.y = (visibleSize.height - documentFrame.height) / -2.0
-      } else {
-        constrainedBounds.origin.y = constrainedBounds.origin.y.clamped(
-          to: 0 ... documentFrame.height - visibleSize.height,
-        )
-      }
-
-      return constrainedBounds
-    }
-  }
-}
-
-private final class ImageCanvasView: NSView {
-  var loadedImage: LoadedImage {
-    didSet {
-      frame.size = loadedImage.displaySize
-      needsDisplay = true
-    }
-  }
-
-  var scale: CGFloat
-
-  override var isFlipped: Bool {
-    true
-  }
-
-  init(loadedImage: LoadedImage, scale: CGFloat) {
-    self.loadedImage = loadedImage
-    self.scale = scale
-    super.init(frame: NSRect(origin: .zero, size: loadedImage.displaySize))
-  }
-
-  @available(*, unavailable)
-  required init?(coder _: NSCoder) {
-    nil
-  }
-
-  override func draw(_ dirtyRect: NSRect) {
-    NSColor.clear.setFill()
-    dirtyRect.fill()
-
-    guard let currentContext = NSGraphicsContext.current else {
-      drawNSImage(hints: nil)
-      return
-    }
-
-    if let vectorContent = loadedImage.vectorContent {
-      drawSVG(vectorContent, in: currentContext.cgContext)
-      return
-    }
-
-    let previousInterpolation = currentContext.imageInterpolation
-    let interpolation = imageInterpolation
-    let hints: [NSImageRep.HintKey: Any] = [
-      .interpolation: NSNumber(value: interpolation.rawValue),
-    ]
-
-    NSGraphicsContext.saveGraphicsState()
-    currentContext.imageInterpolation = interpolation
-    currentContext.cgContext.setShouldAntialias(false)
-    currentContext.cgContext.interpolationQuality = cgInterpolationQuality
-    drawNSImage(hints: hints)
-    NSGraphicsContext.restoreGraphicsState()
-    currentContext.imageInterpolation = previousInterpolation
-  }
-
-  private var imageInterpolation: NSImageInterpolation {
-    switch loadedImage.kind {
-    case .bitmap:
-      scale > 1.0 ? .none : .high
-    case .vector:
-      .high
-    }
-  }
-
-  private var cgInterpolationQuality: CGInterpolationQuality {
-    switch loadedImage.kind {
-    case .bitmap:
-      scale > 1.0 ? .none : .high
-    case .vector:
-      .high
-    }
-  }
-
-  private func drawSVG(_ vectorContent: SVGVectorContent, in context: CGContext) {
-    NSGraphicsContext.saveGraphicsState()
-    context.setShouldAntialias(false)
-    context.clip(to: bounds)
-
-    let viewBox = vectorContent.viewBox
-    context.scaleBy(
-      x: bounds.width / viewBox.width,
-      y: bounds.height / viewBox.height,
-    )
-    context.translateBy(x: -viewBox.minX, y: -viewBox.minY)
-
-    for path in vectorContent.paths {
-      drawSVGPath(path)
-    }
-
-    NSGraphicsContext.restoreGraphicsState()
-  }
-
-  private func drawSVGPath(_ path: SVGBezierPath) {
-    let fillColor = cgColor(from: path.svgAttributes["fill"]) ?? NSColor.black.cgColor
-    if fillColor.alpha > 0 {
-      NSColor(cgColor: fillColor)?.setFill()
-      path.fill()
-    }
-
-    if let strokeColor = cgColor(from: path.svgAttributes["stroke"]),
-       strokeColor.alpha > 0
-    {
-      NSColor(cgColor: strokeColor)?.setStroke()
-      path.stroke()
-    }
-  }
-
-  private func cgColor(from value: Any?) -> CGColor? {
-    guard let value else { return nil }
-
-    let object = value as AnyObject
-    guard CFGetTypeID(object) == CGColor.typeID else { return nil }
-    return (object as! CGColor)
-  }
-
-  private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
-    loadedImage.image.draw(
-      in: bounds,
-      from: NSRect(origin: .zero, size: loadedImage.image.size),
-      operation: .copy,
-      fraction: 1.0,
-      respectFlipped: true,
-      hints: hints,
-    )
   }
 }

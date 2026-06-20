@@ -60,3 +60,9 @@ extension NSRect {
     return rect
   }
 }
+
+extension NSSize {
+  func isApproximatelyEqual(to other: NSSize) -> Bool {
+    abs(width - other.width) < 1.0 && abs(height - other.height) < 1.0
+  }
+}

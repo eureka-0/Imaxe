@@ -109,7 +109,6 @@ struct LoadedImage {
   let vectorContent: SVGVectorContent?
   let displaySize: NSSize
   let info: ImageInfo
-  let id = UUID()
 
   var svgPaths: [SVGBezierPath]? {
     vectorContent?.paths
