@@ -57,6 +57,15 @@ enum ImageKind: Equatable {
       )
     }
   }
+
+  nonisolated static func == (lhs: ImageKind, rhs: ImageKind) -> Bool {
+    switch (lhs, rhs) {
+    case (.bitmap, .bitmap), (.vector, .vector):
+      true
+    default:
+      false
+    }
+  }
 }
 
 struct ImageInfo {
