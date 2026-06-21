@@ -44,20 +44,11 @@ final class ImageSession {
 
   private func applyTopBarVisibility(_ isVisible: Bool) {
     showTopBar = isVisible
-
-    let mouseLocation = NSEvent.mouseLocation
-    var standardWindowButtonVisibilityHandled = false
-    for window in NSApplication.shared.orderedWindows {
-      if !standardWindowButtonVisibilityHandled, window.frame.contains(mouseLocation) {
-        standardWindowButtonVisibilityHandled = true
-        window.standardWindowButton(.closeButton)?.isHidden = !showTopBar
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = !showTopBar
-        window.standardWindowButton(.zoomButton)?.isHidden = !showTopBar
-      } else {
-        window.standardWindowButton(.closeButton)?.isHidden = true
-        window.standardWindowButton(.miniaturizeButton)?.isHidden = true
-        window.standardWindowButton(.zoomButton)?.isHidden = true
-      }
+    for window in NSApplication.shared.windows {
+      window.setStandardButtonsVisibility(to: false)
+    }
+    if let window = getTopHoveredWindow() {
+      window.setStandardButtonsVisibility(to: isVisible)
     }
   }
 

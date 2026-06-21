@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ImageView: View {
   @Bindable var imageSession: ImageSession
@@ -14,7 +15,6 @@ struct ImageView: View {
   @State private var isScalePickerPresented = false
   @State private var customScaleText = ""
 
-  private let commonScales: [CGFloat] = [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0]
   private var isPopoverPresented: Bool {
     isImageInfoPresented || isScalePickerPresented
   }
@@ -43,7 +43,9 @@ struct ImageView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
-      imageSession.setTopBarVisibility(to: false)
+      if let window = NSApplication.shared.mainWindow {
+        window.setStandardButtonsVisibility(to: false)
+      }
 
       DispatchQueue.main.async {
         imageSession.fitToWindow()
@@ -72,15 +74,26 @@ struct ImageView: View {
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.leading, 6)
     .padding(.trailing, 12)
-    .background(.regularMaterial.opacity(0.86))
+    .background(.regularMaterial.opacity(0.9))
     .overlay(alignment: .bottom) {
       Rectangle()
-        .fill(Color(nsColor: .separatorColor).opacity(0.28))
+        .fill(.separator.opacity(0.28))
         .frame(height: 1)
     }
     .frame(height: Constants.topBarHeight)
     .buttonStyle(TopBarButtonStyle())
     .controlSize(.small)
+  }
+
+  private var fileNameLabel: some View {
+    Text(imageSession.currentImage.info.fileName)
+      .font(.system(size: 13, weight: .medium))
+      .foregroundStyle(.primary)
+      .lineLimit(1)
+      .truncationMode(.tail)
+      .frame(minWidth: 72, maxWidth: 320, alignment: .leading)
+      .help(Text(imageSession.currentImage.info.fileName))
+      .accessibilityLabel(Text("File name \(imageSession.currentImage.info.fileName)"))
   }
 
   private var topBarControls: some View {
@@ -110,7 +123,9 @@ struct ImageView: View {
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .frame(width: Constants.topBarPositionWidth, height: Constants.topBarButtonHeight)
-        .accessibilityLabel(Text("Image position \(imageSession.folderNavigator.positionDescription)"))
+        .accessibilityLabel(
+          Text("Image position \(imageSession.folderNavigator.positionDescription)"),
+        )
 
       Button(action: imageSession.navigateToNextImage) {
         topBarIconLabel("Next Image", systemImage: "chevron.right")
@@ -123,7 +138,7 @@ struct ImageView: View {
 
   private var fitToWindowButton: some View {
     Button(action: imageSession.fitToWindow) {
-      topBarIconLabel("Fit to Window", systemImage: "arrow.up.left.and.down.right.magnifyingglass")
+      topBarIconLabel("Fit to Window", systemImage: "arrow.up.left.and.arrow.down.right.rectangle")
     }
     .keyboardShortcut("f", modifiers: .command)
     .help(Text("Fit the image to the window"))
@@ -161,10 +176,8 @@ struct ImageView: View {
     }
     .popover(isPresented: $isScalePickerPresented, arrowEdge: .top) {
       ScalePickerPopover(
-        scales: commonScales,
         currentScale: imageSession.imageScale,
         customScaleText: $customScaleText,
-        isCustomScaleValid: scaleValue(from: customScaleText) != nil,
         onSelectScale: { scale in
           imageSession.setScale(scale)
           customScaleText = scaleInputText(for: scale)
@@ -178,7 +191,10 @@ struct ImageView: View {
 
   private var fitWindowToImageButton: some View {
     Button(action: imageSession.fitWindowToImage) {
-      topBarIconLabel("Fit Window to Image", systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left")
+      topBarIconLabel(
+        "Fit Window to Image",
+        systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
+      )
     }
     .help(Text("Resize the window to fit the image"))
   }
@@ -201,17 +217,6 @@ struct ImageView: View {
     }
     .keyboardShortcut("p", modifiers: .command)
     .help(Text("Toggle window pinning"))
-  }
-
-  private var fileNameLabel: some View {
-    Text(imageSession.currentImage.info.fileName)
-      .font(.system(size: 12, weight: .medium))
-      .foregroundStyle(.primary)
-      .lineLimit(1)
-      .truncationMode(.tail)
-      .frame(minWidth: 72, maxWidth: 320, alignment: .leading)
-      .help(Text(imageSession.currentImage.info.fileName))
-      .accessibilityLabel(Text("File name \(imageSession.currentImage.info.fileName)"))
   }
 
   private func topBarIconLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
@@ -271,12 +276,14 @@ private struct TopBarButtonStyle: ButtonStyle {
 }
 
 private struct ScalePickerPopover: View {
-  let scales: [CGFloat]
   let currentScale: CGFloat
   @Binding var customScaleText: String
-  let isCustomScaleValid: Bool
   let onSelectScale: (CGFloat) -> Void
   let onApplyCustomScale: () -> Void
+
+  var isCustomScaleValid: Bool {
+    scaleValue(from: customScaleText) != nil
+  }
 
   private let columns = [
     GridItem(.adaptive(minimum: 58), spacing: 6),
@@ -288,19 +295,19 @@ private struct ScalePickerPopover: View {
         .font(.headline)
 
       LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-        ForEach(scales, id: \.self) { scale in
+        ForEach(Constants.commonScales, id: \.self) { scale in
           scalePresetButton(for: scale)
         }
       }
 
       Divider()
 
-      HStack(spacing: 8) {
+      HStack(spacing: 5) {
         TextField("100", text: $customScaleText)
           .font(.system(size: 12, weight: .medium, design: .rounded))
           .monospacedDigit()
           .textFieldStyle(.roundedBorder)
-          .frame(width: 72)
+          .frame(width: 48)
           .onSubmit(onApplyCustomScale)
 
         Text("%")
@@ -314,7 +321,7 @@ private struct ScalePickerPopover: View {
       }
     }
     .padding(14)
-    .frame(width: 242)
+    .frame(width: 162)
   }
 
   private func scalePresetButton(for scale: CGFloat) -> some View {
@@ -331,12 +338,12 @@ private struct ScalePickerPopover: View {
         .padding(.vertical, 5)
         .background {
           RoundedRectangle(cornerRadius: 7, style: .continuous)
-            .fill(isSelected ? Color.accentColor.opacity(0.14) : Color(nsColor: .controlBackgroundColor))
+            .fill(isSelected ? Color.accentColor.opacity(0.14) : .controlBackground)
         }
         .overlay {
           RoundedRectangle(cornerRadius: 7, style: .continuous)
             .stroke(
-              isSelected ? Color.accentColor.opacity(0.38) : Color(nsColor: .separatorColor).opacity(0.3),
+              isSelected ? Color.accentColor.opacity(0.38) : .separator.opacity(0.3),
               lineWidth: 0.5,
             )
         }
@@ -354,20 +361,24 @@ private struct ImageInfoPanel: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Image Info")
+      Text("Info")
         .font(.headline)
 
       VStack(alignment: .leading, spacing: 8) {
         ImageInfoRow(title: "Name", value: info.fileName)
-        ImageInfoRow(title: "Kind", value: kindDescription)
-        ImageInfoRow(title: "Format", value: formatDescription)
-        ImageInfoRow(title: "Dimensions", value: "\(info.pixelWidth) x \(info.pixelHeight) px")
-        ImageInfoRow(title: "File Size", value: info.fileSizeDescription)
         ImageInfoRow(title: "Location", value: info.sourceURL.deletingLastPathComponent().path)
+        ImageInfoRow(title: "Format", value: formatDescription)
+        ImageInfoRow(title: "File Size", value: info.fileSizeDescription)
+
+        Divider()
+
+        ImageInfoRow(title: "Kind", value: kindDescription)
+        ImageInfoRow(title: "Pixel Width", value: String(info.pixelWidth))
+        ImageInfoRow(title: "Pixel Height", value: String(info.pixelHeight))
       }
     }
     .padding(14)
-    .frame(width: 340, alignment: .leading)
+    .frame(width: 360, alignment: .leading)
   }
 
   private var kindDescription: String {
@@ -380,8 +391,11 @@ private struct ImageInfoPanel: View {
   }
 
   private var formatDescription: String {
-    let pathExtension = info.sourceURL.pathExtension
-    return pathExtension.isEmpty ? "Unknown" : pathExtension.uppercased()
+    if let fileType = loadedImage.info.type {
+      fileType.preferredFilenameExtension?.uppercased() ?? "Unknown"
+    } else {
+      "Unknown"
+    }
   }
 }
 
@@ -392,14 +406,15 @@ private struct ImageInfoRow: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 10) {
       Text(title)
-        .font(.caption)
+        .font(.caption.pointSize(12))
         .foregroundStyle(.secondary)
-        .frame(width: 72, alignment: .trailing)
+        .textSelection(.enabled)
+        .frame(maxWidth: 81, alignment: .trailing)
 
       Text(value)
-        .font(.caption)
+        .font(.caption.pointSize(12))
         .foregroundStyle(.primary)
-        .lineLimit(2)
+        .lineLimit(3)
         .truncationMode(.middle)
         .textSelection(.enabled)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -414,11 +429,11 @@ private extension View {
       .frame(height: Constants.topBarButtonHeight + Constants.topBarControlGroupPadding * 2)
       .background {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-          .fill(Color(nsColor: .controlBackgroundColor).opacity(0.42))
+          .fill(.controlBackground.opacity(0.42))
       }
       .overlay {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-          .stroke(Color(nsColor: .separatorColor).opacity(0.24), lineWidth: 0.5)
+          .stroke(.separator.opacity(0.24), lineWidth: 0.5)
       }
   }
 }

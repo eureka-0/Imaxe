@@ -91,6 +91,7 @@ enum ImageKind: Equatable {
 struct ImageInfo {
   let fileName: String
   let sourceURL: URL
+  let type: UTType?
   let fileSize: Int
   let pixelWidth: Int
   let pixelHeight: Int
@@ -139,6 +140,7 @@ struct LoadedImage {
     info = ImageInfo(
       fileName: sourceURL.lastPathComponent,
       sourceURL: sourceURL,
+      type: ImageFile.getUTType(for: sourceURL),
       fileSize: (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0,
       pixelWidth: Int(self.displaySize.width),
       pixelHeight: Int(self.displaySize.height),

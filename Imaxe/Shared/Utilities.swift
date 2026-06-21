@@ -1,5 +1,5 @@
 //
-//  Extensions.swift
+//  Utilities.swift
 //  Imaxe
 //
 //  Created by lxlong on 2026/6/18.
@@ -8,10 +8,56 @@
 import Foundation
 import SwiftUI
 
+func getTopHoveredWindow() -> NSWindow? {
+  let mouseLocation = NSEvent.mouseLocation
+  for window in NSApplication.shared.orderedWindows {
+    if window.frame.contains(mouseLocation) {
+      return window
+    }
+  }
+  return nil
+}
+
 extension CGFloat {
   func roundedDownToPixel(scale: CGFloat) -> CGFloat {
     guard scale > 0 else { return self }
     return floor(self * scale) / scale
+  }
+}
+
+extension ShapeStyle where Self == Color {
+  static var windowBackground: Color {
+    Color(nsColor: .windowBackgroundColor)
+  }
+
+  static var controlBackground: Color {
+    Color(nsColor: .controlBackgroundColor)
+  }
+
+  static var controlAccent: Color {
+    Color(nsColor: .controlAccentColor)
+  }
+
+  static var controlText: Color {
+    Color(nsColor: .controlTextColor)
+  }
+
+  static var separator: Color {
+    Color(nsColor: .separatorColor)
+  }
+
+  func fromHex(_ hex: String) -> Color {
+    var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+    hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
+
+    var rgb: UInt64 = 0
+    Scanner(string: hexSanitized).scanHexInt64(&rgb)
+
+    let r = Double((rgb & 0xFF0000) >> 16) / 255.0
+    let g = Double((rgb & 0x00FF00) >> 8) / 255.0
+    let b = Double(rgb & 0x0000FF) / 255.0
+
+    return Color(red: r, green: g, blue: b)
   }
 }
 
@@ -64,5 +110,13 @@ extension NSRect {
 extension NSSize {
   func isApproximatelyEqual(to other: NSSize) -> Bool {
     abs(width - other.width) < 1.0 && abs(height - other.height) < 1.0
+  }
+}
+
+extension NSWindow {
+  func setStandardButtonsVisibility(to showWindowButtons: Bool) {
+    standardWindowButton(.closeButton)?.isHidden = !showWindowButtons
+    standardWindowButton(.miniaturizeButton)?.isHidden = !showWindowButtons
+    standardWindowButton(.zoomButton)?.isHidden = !showWindowButtons
   }
 }
