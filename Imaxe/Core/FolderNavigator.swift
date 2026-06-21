@@ -69,7 +69,7 @@ struct FolderNavigator {
     }
 
     imageURLs = contents
-      .filter { Self.isRegularFile($0) && ImageFile.isSupportedImage($0) }
+      .filter { Self.isRegularFile($0) && ImageLoader.isSupportedImage($0) }
       .sorted { first, second in
         let fn1 = first.lastPathComponent
         let fn2 = second.lastPathComponent

@@ -10,43 +10,6 @@ import OrderedCollections
 import PocketSVG
 import UniformTypeIdentifiers
 
-enum ImageFile {
-  nonisolated static let supportedImageTypes: [UTType] = [
-    // Bitmap formats
-    .bmp,
-    .gif,
-    .heic,
-    .heif,
-    .ico,
-    .jpeg,
-    .png,
-    .tiff,
-    .webP,
-    // Vector formats
-    .svg,
-  ].compactMap(\.self)
-
-  nonisolated static var supportedImageExtensions: [String] {
-    supportedImageTypes.compactMap(\.preferredFilenameExtension)
-  }
-
-  nonisolated static var supportedImageExtensionsDescription: String {
-    supportedImageExtensions.joined(separator: ", ")
-  }
-
-  nonisolated static func getUTType(for url: URL) -> UTType? {
-    UTType(filenameExtension: url.pathExtension)
-  }
-
-  nonisolated static func isSupportedImage(_ url: URL) -> Bool {
-    guard let fileType = getUTType(for: url) else {
-      return false
-    }
-
-    return supportedImageTypes.contains { fileType.conforms(to: $0) }
-  }
-}
-
 enum ImageKind: Equatable {
   case bitmap
   case vector
@@ -140,7 +103,7 @@ struct LoadedImage {
     info = ImageInfo(
       fileName: sourceURL.lastPathComponent,
       sourceURL: sourceURL,
-      type: ImageFile.getUTType(for: sourceURL),
+      type: ImageLoader.getUTType(for: sourceURL),
       fileSize: (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0,
       pixelWidth: Int(self.displaySize.width),
       pixelHeight: Int(self.displaySize.height),
@@ -298,7 +261,7 @@ enum ImageLoadingError: Error, LocalizedError {
     case let .unsupportedImageType(url):
       """
       Unsupported image type for: \(url.path).
-      Supported types: \(ImageFile.supportedImageExtensionsDescription).
+      Supported types: \(ImageLoader.supportedImageExtensionsDescription).
       """
     case let .failedToLoad(url):
       "Failed to load image from URL: \(url.path)"
@@ -309,12 +272,47 @@ enum ImageLoadingError: Error, LocalizedError {
 final class ImageLoader {
   static let shared = ImageLoader()
 
-  private var cache = OrderedDictionary<URL, LoadedImage>()
-
   private init() {}
 
+  private var cache = OrderedDictionary<URL, LoadedImage>()
+
+  nonisolated static let supportedImageTypes: [UTType] = [
+    // Bitmap formats
+    .bmp,
+    .gif,
+    .heic,
+    .heif,
+    .ico,
+    .jpeg,
+    .png,
+    .tiff,
+    .webP,
+    // Vector formats
+    .svg,
+  ].compactMap(\.self)
+
+  nonisolated static var supportedImageExtensions: [String] {
+    supportedImageTypes.compactMap(\.preferredFilenameExtension)
+  }
+
+  nonisolated static var supportedImageExtensionsDescription: String {
+    supportedImageExtensions.joined(separator: ", ")
+  }
+
+  nonisolated static func getUTType(for url: URL) -> UTType? {
+    UTType(filenameExtension: url.pathExtension)
+  }
+
+  nonisolated static func isSupportedImage(_ url: URL) -> Bool {
+    guard let fileType = getUTType(for: url) else {
+      return false
+    }
+
+    return supportedImageTypes.contains { fileType.conforms(to: $0) }
+  }
+
   func load(from url: URL) throws(ImageLoadingError) -> LoadedImage {
-    guard ImageFile.isSupportedImage(url) else {
+    guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
 
@@ -324,7 +322,7 @@ final class ImageLoader {
       return cachedImage
     }
 
-    let loadedImage: LoadedImage? = if ImageFile.getUTType(for: url) == .svg {
+    let loadedImage: LoadedImage? = if Self.getUTType(for: url) == .svg {
       loadSVG(from: url)
     } else {
       loadBitmap(from: url)
