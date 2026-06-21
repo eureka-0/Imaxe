@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct HoverTrackingStrip: NSViewRepresentable {
-  let onHoverChange: (Bool) -> Void
+  let onHoverChange: (Bool, NSWindow?) -> Void
 
   func makeNSView(context _: Context) -> HoverTrackingNSView {
     let view = HoverTrackingNSView()
@@ -20,8 +20,13 @@ struct HoverTrackingStrip: NSViewRepresentable {
     nsView.onHoverChange = onHoverChange
   }
 
+  static func dismantleNSView(_ nsView: HoverTrackingNSView, coordinator _: ()) {
+    nsView.resetHovering()
+    nsView.onHoverChange = nil
+  }
+
   final class HoverTrackingNSView: NSView {
-    var onHoverChange: ((Bool) -> Void)?
+    var onHoverChange: ((Bool, NSWindow?) -> Void)?
 
     private var isHovering = false
     private var trackingArea: NSTrackingArea?
@@ -67,8 +72,10 @@ struct HoverTrackingStrip: NSViewRepresentable {
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
 
-      if window == nil {
-        setHovering(false)
+      if let window {
+        onHoverChange?(isHovering, window)
+      } else {
+        resetHovering()
       }
     }
 
@@ -76,7 +83,11 @@ struct HoverTrackingStrip: NSViewRepresentable {
       guard self.isHovering != isHovering else { return }
 
       self.isHovering = isHovering
-      onHoverChange?(isHovering)
+      onHoverChange?(isHovering, window)
+    }
+
+    func resetHovering() {
+      isHovering = false
     }
   }
 }

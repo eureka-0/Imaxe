@@ -34,19 +34,15 @@ struct ImageView: View {
         .animation(.easeInOut(duration: 0.2), value: imageSession.showTopBar)
         .allowsHitTesting(imageSession.showTopBar)
 
-      HoverTrackingStrip { isHovering in
+      HoverTrackingStrip { isHovering, window in
         isTopBarHovering = isHovering
-        updateTopBarVisibility()
+        updateTopBarVisibility(in: window)
       }
       .frame(maxWidth: .infinity)
       .frame(height: Constants.topBarHoverStripHeight)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
-      if let window = NSApplication.shared.mainWindow {
-        window.setStandardButtonsVisibility(to: false)
-      }
-
       DispatchQueue.main.async {
         imageSession.fitToWindow()
       }
@@ -233,8 +229,8 @@ struct ImageView: View {
     isScalePickerPresented = false
   }
 
-  private func updateTopBarVisibility() {
-    imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented)
+  private func updateTopBarVisibility(in window: NSWindow? = nil) {
+    imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
   }
 }
 

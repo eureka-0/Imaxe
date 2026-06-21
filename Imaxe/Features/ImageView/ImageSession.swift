@@ -19,6 +19,7 @@ final class ImageSession {
   private(set) var folderNavigator: FolderNavigator
 
   var alert: ImageAlert?
+  @ObservationIgnored private weak var owningWindow: NSWindow?
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
 
   init(loadedImage: LoadedImage) {
@@ -26,7 +27,11 @@ final class ImageSession {
     folderNavigator = FolderNavigator(for: loadedImage.info.sourceURL)
   }
 
-  func setTopBarVisibility(to isVisible: Bool) {
+  func setTopBarVisibility(to isVisible: Bool, in window: NSWindow? = nil) {
+    if let window {
+      bindWindow(window)
+    }
+
     topBarHideTask?.cancel()
 
     if !isVisible {
@@ -42,22 +47,23 @@ final class ImageSession {
     applyTopBarVisibility(true)
   }
 
-  private func applyTopBarVisibility(_ isVisible: Bool) {
-    showTopBar = isVisible
-    for window in NSApplication.shared.windows {
+  func bindWindow(_ window: NSWindow?) {
+    guard let window else { return }
+
+    owningWindow = window
+    if !showTopBar {
       window.setStandardButtonsVisibility(to: false)
     }
-    if let window = getTopHoveredWindow() {
-      window.setStandardButtonsVisibility(to: isVisible)
-    }
+  }
+
+  private func applyTopBarVisibility(_ isVisible: Bool) {
+    showTopBar = isVisible
+    owningWindow?.setStandardButtonsVisibility(to: isVisible)
   }
 
   func toggleWindowPinning() {
     isWindowPinned.toggle()
-
-    if let window = NSApplication.shared.keyWindow {
-      window.level = isWindowPinned ? .floating : .normal
-    }
+    owningWindow?.level = isWindowPinned ? .floating : .normal
   }
 
   func fitToWindow() {

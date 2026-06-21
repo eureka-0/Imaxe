@@ -8,16 +8,6 @@
 import Foundation
 import SwiftUI
 
-func getTopHoveredWindow() -> NSWindow? {
-  let mouseLocation = NSEvent.mouseLocation
-  for window in NSApplication.shared.orderedWindows {
-    if window.frame.contains(mouseLocation) {
-      return window
-    }
-  }
-  return nil
-}
-
 extension CGFloat {
   func roundedDownToPixel(scale: CGFloat) -> CGFloat {
     guard scale > 0 else { return self }
