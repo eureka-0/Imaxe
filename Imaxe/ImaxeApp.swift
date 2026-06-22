@@ -31,6 +31,7 @@ struct ImaxeApp: App {
     .restorationBehavior(.disabled)
     .commands {
       FileOperationCommands()
+      ViewCommands()
     }
   }
 }

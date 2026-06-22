@@ -69,6 +69,10 @@ nonisolated struct LoadedImage: @unchecked Sendable {
     )
   }
 
+  func revealInFinder() {
+    NSWorkspace.shared.activateFileViewerSelecting([info.sourceURL])
+  }
+
   private static func displaySize(for image: NSImage, preferredSize: NSSize?) -> NSSize {
     if let preferredSize, preferredSize.width > 0, preferredSize.height > 0 {
       return preferredSize

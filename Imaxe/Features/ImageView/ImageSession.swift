@@ -104,6 +104,46 @@ final class ImageSession {
     setScale(imageScale / Constants.imageZoomStep)
   }
 
+  func openImageFromPasteboard() {
+    let pasteboard = NSPasteboard.general
+
+    if let imageType = pasteboard.availableType(from: [.fileURL, .URL, .png, .tiff]) {
+      switch imageType {
+      case .fileURL:
+        if let fileURLString = pasteboard.string(forType: .fileURL),
+           let fileURL = URL(string: fileURLString)
+        {
+          loadImage(from: fileURL, failureTitle: "Failed to Load Image from Pasteboard")
+        }
+      case .URL:
+        if let urlString = pasteboard.string(forType: .URL),
+           let url = URL(string: urlString)
+        {
+          loadImage(from: url, failureTitle: "Failed to Load Image from Pasteboard")
+        }
+      case .png, .tiff:
+        if let data = pasteboard.data(forType: imageType),
+           let tempDirectory = try? FileManager.default.url(
+             for: .itemReplacementDirectory,
+             in: .userDomainMask,
+             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
+             create: true,
+           )
+        {
+          let tempFileURL = tempDirectory.appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(imageType == .png ? "png" : "tiff")
+          do { try data.write(to: tempFileURL)
+            loadImage(from: tempFileURL, failureTitle: "Failed to Load Image from Pasteboard")
+          } catch {
+            print("Failed to write image data to temporary file: \(error.localizedDescription)")
+          }
+        }
+      default:
+        break
+      }
+    }
+  }
+
   func openImage() {
     isImporterPresented = true
   }
