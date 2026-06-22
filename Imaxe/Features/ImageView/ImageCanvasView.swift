@@ -6,7 +6,6 @@
 //
 
 import AppKit
-import PocketSVG
 
 final class ImageCanvasView: NSView {
   var loadedImage: LoadedImage {
@@ -64,12 +63,6 @@ final class ImageCanvasView: NSView {
       return
     }
 
-    if let vectorContent = loadedImage.vectorContent {
-      stopGIFAnimation()
-      drawSVG(vectorContent, in: currentContext.cgContext)
-      return
-    }
-
     let previousInterpolation = currentContext.imageInterpolation
     let interpolation = imageInterpolation
     let hints: [NSImageRep.HintKey: Any] = [
@@ -87,63 +80,11 @@ final class ImageCanvasView: NSView {
   }
 
   private var imageInterpolation: NSImageInterpolation {
-    switch loadedImage.kind {
-    case .bitmap:
-      scale > 1.0 ? .none : .high
-    case .vector:
-      .high
-    }
+    scale > 1.0 ? .none : .high
   }
 
   private var cgInterpolationQuality: CGInterpolationQuality {
-    switch loadedImage.kind {
-    case .bitmap:
-      scale > 1.0 ? .none : .high
-    case .vector:
-      .high
-    }
-  }
-
-  private func drawSVG(_ vectorContent: SVGVectorContent, in context: CGContext) {
-    NSGraphicsContext.saveGraphicsState()
-    context.setShouldAntialias(false)
-    context.clip(to: bounds)
-
-    let viewBox = vectorContent.viewBox
-    context.scaleBy(
-      x: bounds.width / viewBox.width,
-      y: bounds.height / viewBox.height,
-    )
-    context.translateBy(x: -viewBox.minX, y: -viewBox.minY)
-
-    for path in vectorContent.paths {
-      drawSVGPath(path)
-    }
-
-    NSGraphicsContext.restoreGraphicsState()
-  }
-
-  private func drawSVGPath(_ path: SVGBezierPath) {
-    let fillColor = cgColor(from: path.svgAttributes["fill"]) ?? NSColor.black.cgColor
-    if fillColor.alpha > 0 {
-      NSColor(cgColor: fillColor)?.setFill()
-      path.fill()
-    }
-
-    if let strokeColor = cgColor(from: path.svgAttributes["stroke"]),
-       strokeColor.alpha > 0
-    {
-      NSColor(cgColor: strokeColor)?.setStroke()
-      path.stroke()
-    }
-  }
-
-  private func cgColor(from value: Any?) -> CGColor? {
-    guard let value else { return nil }
-
-    let object = value as AnyObject
-    guard CFGetTypeID(object) == CGColor.typeID else { return nil }
-    return (object as! CGColor)
+    scale > 1.0 ? .none : .high
   }
 
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {

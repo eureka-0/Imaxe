@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		1E050B192FE6582900720067 /* PocketSVG in Frameworks */ = {isa = PBXBuildFile; productRef = 1E050B182FE6582900720067 /* PocketSVG */; };
 		1E3435372FE592EB00011D1D /* Collections in Frameworks */ = {isa = PBXBuildFile; productRef = 1E3435362FE592EB00011D1D /* Collections */; };
 /* End PBXBuildFile section */
 
@@ -58,7 +57,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				1E3435372FE592EB00011D1D /* Collections in Frameworks */,
-				1E050B192FE6582900720067 /* PocketSVG in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -120,7 +118,6 @@
 			name = Imaxe;
 			packageProductDependencies = (
 				1E3435362FE592EB00011D1D /* Collections */,
-				1E050B182FE6582900720067 /* PocketSVG */,
 			);
 			productName = Imaxe;
 			productReference = 1E7D568D2FDEEBFE0035C627 /* Imaxe.app */;
@@ -206,7 +203,6 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				1E3435352FE592EB00011D1D /* XCRemoteSwiftPackageReference "swift-collections" */,
-				1E050B172FE6582900720067 /* XCRemoteSwiftPackageReference "pocketsvg" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 1E7D568E2FDEEBFE0035C627 /* Products */;
@@ -590,14 +586,6 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		1E050B172FE6582900720067 /* XCRemoteSwiftPackageReference "pocketsvg" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/pocketsvg/pocketsvg";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 3.2.0;
-			};
-		};
 		1E3435352FE592EB00011D1D /* XCRemoteSwiftPackageReference "swift-collections" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/apple/swift-collections";
@@ -609,11 +597,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		1E050B182FE6582900720067 /* PocketSVG */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 1E050B172FE6582900720067 /* XCRemoteSwiftPackageReference "pocketsvg" */;
-			productName = PocketSVG;
-		};
 		1E3435362FE592EB00011D1D /* Collections */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 1E3435352FE592EB00011D1D /* XCRemoteSwiftPackageReference "swift-collections" */;

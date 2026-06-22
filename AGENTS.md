@@ -77,6 +77,7 @@ If an API appears in the project but is unfamiliar, assume it may be new and sea
 - Keep imports simple and at the top of files.
 - Prefer strong types and avoid force unwrapping.
 - Prefer Swift concurrency with `async`/`await`; avoid adding Combine unless there is a clear need.
+- Follow Swift 6 concurrency rules strictly. Avoid `unsafe`, `unchecked`, and similar escape hatches unless they are truly necessary and there is no reasonable safe alternative.
 - Add comments only for complex or non-obvious logic.
 - Do not add broad abstractions while the project is small. Prefer direct, explicit types that match the current feature boundary.
 
@@ -86,6 +87,7 @@ If an API appears in the project but is unfamiliar, assume it may be new and sea
 - For UI changes, consider adding a simple XCUI test to validate the change if it is not easily manually testable.
 - Validate small Swift changes first with `XcodeRefreshCodeIssuesInFile` when practical.
 - Use `BuildProject` before considering implementation work complete.
+- Unless the user explicitly asks for tests, do not compile or run test targets by default. Prefer single-file diagnostics plus a project build.
 - For image canvas changes, manually test with the images in `SampleImages/` when possible:
   - image smaller than the window,
   - wide image,

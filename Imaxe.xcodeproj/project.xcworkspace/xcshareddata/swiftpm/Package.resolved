@@ -1,15 +1,6 @@
 {
-  "originHash" : "eb6af8e97c3bd9dd9e04082690f4689226f178e5ac11a24c05abed2890ea0257",
+  "originHash" : "7977a4e01aecd0e88ba25ee78b8cec0f4c20d0ccf2eb3ff93743283037ef1aa0",
   "pins" : [
-    {
-      "identity" : "pocketsvg",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/pocketsvg/pocketsvg",
-      "state" : {
-        "revision" : "83c653699f5c7d7688f6ede73a78305319b96584",
-        "version" : "3.2.0"
-      }
-    },
     {
       "identity" : "swift-collections",
       "kind" : "remoteSourceControl",

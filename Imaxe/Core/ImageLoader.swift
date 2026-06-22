@@ -7,49 +7,7 @@
 
 import AppKit
 import OrderedCollections
-import PocketSVG
 import UniformTypeIdentifiers
-
-nonisolated enum ImageKind: Equatable {
-  case bitmap
-  case vector
-
-  var cacheMode: NSImage.CacheMode {
-    switch self {
-    case .bitmap:
-      .default
-    case .vector:
-      .never
-    }
-  }
-
-  init(sourceURL: URL, image: NSImage) {
-    if sourceURL.pathExtension.localizedCaseInsensitiveCompare("svg") == .orderedSame {
-      self = .vector
-    } else if Self.hasOnlyBitmapRepresentations(image) {
-      self = .bitmap
-    } else {
-      self = .vector
-    }
-  }
-
-  private nonisolated static func hasOnlyBitmapRepresentations(_ image: NSImage) -> Bool {
-    !image.representations.isEmpty && image.representations.allSatisfy { representation in
-      representation is NSBitmapImageRep || (
-        representation.pixelsWide > 0 && representation.pixelsHigh > 0
-      )
-    }
-  }
-
-  nonisolated static func == (lhs: ImageKind, rhs: ImageKind) -> Bool {
-    switch (lhs, rhs) {
-    case (.bitmap, .bitmap), (.vector, .vector):
-      true
-    default:
-      false
-    }
-  }
-}
 
 nonisolated struct ImageInfo {
   let fileName: String
@@ -91,42 +49,19 @@ nonisolated struct ImageInfo {
   }
 }
 
-nonisolated struct SVGVectorContent: @unchecked Sendable {
-  let paths: [SVGBezierPath]
-  let viewBox: NSRect
-
-  var displaySize: NSSize {
-    viewBox.size
-  }
-}
-
 nonisolated struct LoadedImage: @unchecked Sendable {
   let image: NSImage
-  let kind: ImageKind
-  let vectorContent: SVGVectorContent?
   let displaySize: NSSize
   let info: ImageInfo
-
-  var svgPaths: [SVGBezierPath]? {
-    vectorContent?.paths
-  }
 
   init(
     image: NSImage,
     sourceURL: URL,
-    kind: ImageKind? = nil,
-    svgPaths: [SVGBezierPath]? = nil,
     displaySize: NSSize? = nil,
   ) {
     self.image = image
-    self.kind = kind ?? ImageKind(sourceURL: sourceURL, image: image)
-    vectorContent = Self.vectorContent(from: svgPaths, displaySize: displaySize)
-    self.displaySize = Self.displaySize(
-      for: image,
-      preferredSize: displaySize,
-      vectorContent: vectorContent,
-    )
-    image.cacheMode = self.kind.cacheMode
+    self.displaySize = Self.displaySize(for: image, preferredSize: displaySize)
+    image.cacheMode = .default
     info = ImageInfo(
       url: sourceURL,
       pixelWidth: Int(self.displaySize.width),
@@ -134,42 +69,7 @@ nonisolated struct LoadedImage: @unchecked Sendable {
     )
   }
 
-  private static func vectorContent(
-    from svgPaths: [SVGBezierPath]?,
-    displaySize: NSSize?,
-  ) -> SVGVectorContent? {
-    guard let paths = normalizedSVGPaths(svgPaths) else { return nil }
-
-    let viewBox = paths.first?.viewBox.validRect
-      ?? NSRect(origin: .zero, size: displaySize ?? .zero).validRect
-      ?? SVGBoundingRectForPaths(paths).validRect
-      ?? NSRect(x: 0, y: 0, width: 1, height: 1)
-
-    return SVGVectorContent(paths: paths, viewBox: viewBox)
-  }
-
-  private static func normalizedSVGPaths(_ svgPaths: [SVGBezierPath]?) -> [SVGBezierPath]? {
-    guard let svgPaths, !svgPaths.isEmpty else { return nil }
-
-    let normalizedPaths = svgPaths.compactMap { path -> SVGBezierPath? in
-      guard path.svgAttributes["display"] as? String != "none" else { return nil }
-      guard let transform = path.svgAttributes["transform"] as? NSValue else { return path }
-
-      path.apply(transform.svg_CGAffineTransform())
-      return path
-    }
-    return normalizedPaths.isEmpty ? nil : normalizedPaths
-  }
-
-  private static func displaySize(
-    for image: NSImage,
-    preferredSize: NSSize?,
-    vectorContent: SVGVectorContent?,
-  ) -> NSSize {
-    if let vectorContent {
-      return vectorContent.displaySize
-    }
-
+  private static func displaySize(for image: NSImage, preferredSize: NSSize?) -> NSSize {
     if let preferredSize, preferredSize.width > 0, preferredSize.height > 0 {
       return preferredSize
     }
@@ -374,35 +274,73 @@ actor ImageLoader {
   }
 
   private nonisolated static func loadSVG(from url: URL) -> LoadedImage? {
-    if let svgString = try? String(contentsOf: url, encoding: .utf8),
-       svgString.isSupportedByPocketSVGNativeDrawing
-    {
-      let documentSize = SVGDocumentSize(svgString: svgString)
-      let svgPaths = SVGBezierPath.paths(fromSVGString: svgString)
+    guard let sourceImage = NSImage(contentsOf: url) else { return nil }
 
-      if !svgPaths.isEmpty {
-        let displaySize = documentSize.bestSize
-          ?? svgPaths.first?.viewBox.validSize
-          ?? SVGBoundingRectForPaths(svgPaths).validSize
-          ?? NSSize(width: 1, height: 1)
-        let image = NSImage(size: displaySize)
-        return LoadedImage(
-          image: image,
-          sourceURL: url,
-          kind: .vector,
-          svgPaths: svgPaths,
-          displaySize: displaySize,
-        )
-      }
+    let documentSize = (try? String(contentsOf: url, encoding: .utf8))
+      .map(SVGDocumentSize.init(svgString:))
+    let displaySize = documentSize?.bestSize
+      ?? sourceImage.pixelSize.validSize
+      ?? sourceImage.size.validSize
+      ?? NSSize(width: 1, height: 1)
+
+    guard let image = rasterizedSVGImage(from: sourceImage, displaySize: displaySize) else {
+      return nil
     }
 
-    guard let image = NSImage(contentsOf: url) else { return nil }
-    return LoadedImage(image: image, sourceURL: url, kind: .vector)
+    return LoadedImage(image: image, sourceURL: url, displaySize: displaySize)
   }
 
   private nonisolated static func loadBitmap(from url: URL) -> LoadedImage? {
     guard let image = NSImage(contentsOf: url) else { return nil }
     return LoadedImage(image: image, sourceURL: url)
+  }
+
+  private nonisolated static func rasterizedSVGImage(
+    from sourceImage: NSImage,
+    displaySize: NSSize,
+  ) -> NSImage? {
+    let pixelsWide = max(1, Int(displaySize.width.rounded(.up)))
+    let pixelsHigh = max(1, Int(displaySize.height.rounded(.up)))
+
+    guard let bitmapRep = NSBitmapImageRep(
+      bitmapDataPlanes: nil,
+      pixelsWide: pixelsWide,
+      pixelsHigh: pixelsHigh,
+      bitsPerSample: 8,
+      samplesPerPixel: 4,
+      hasAlpha: true,
+      isPlanar: false,
+      colorSpaceName: .deviceRGB,
+      bitmapFormat: .alphaFirst,
+      bytesPerRow: 0,
+      bitsPerPixel: 0,
+    ),
+      let context = NSGraphicsContext(bitmapImageRep: bitmapRep)
+    else { return nil }
+
+    bitmapRep.size = displaySize
+    sourceImage.size = displaySize
+
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = context
+    context.imageInterpolation = .high
+
+    let drawingRect = NSRect(origin: .zero, size: displaySize)
+    NSColor.clear.setFill()
+    drawingRect.fill()
+    sourceImage.draw(
+      in: drawingRect,
+      from: drawingRect,
+      operation: .copy,
+      fraction: 1.0,
+      respectFlipped: false,
+      hints: [.interpolation: NSNumber(value: NSImageInterpolation.high.rawValue)],
+    )
+    NSGraphicsContext.restoreGraphicsState()
+
+    let image = NSImage(size: displaySize)
+    image.addRepresentation(bitmapRep)
+    return image
   }
 
   private func evictLeastRecentlyUsed() {
@@ -426,15 +364,12 @@ private nonisolated extension NSRect {
   }
 }
 
-private nonisolated extension String {
-  var isSupportedByPocketSVGNativeDrawing: Bool {
-    range(
-      of: #"<\s*(?:clipPath|mask|filter|pattern|image|use|text|linearGradient|radialGradient)\b"#,
-      options: [.regularExpression, .caseInsensitive],
-    ) == nil
-      && range(
-        of: #"(?:fill|stroke)\s*(?:=|:)\s*["']?url\("#,
-        options: [.regularExpression, .caseInsensitive],
-      ) == nil
+private nonisolated extension NSSize {
+  var validSize: NSSize? {
+    if width > 0, height > 0 {
+      self
+    } else {
+      nil
+    }
   }
 }

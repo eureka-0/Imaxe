@@ -421,22 +421,12 @@ private struct ImageInfoPanel: View {
 
         Divider()
 
-        ImageInfoRow(title: "Kind", value: kindDescription)
         ImageInfoRow(title: "Pixel Width", value: String(info.pixelWidth))
         ImageInfoRow(title: "Pixel Height", value: String(info.pixelHeight))
       }
     }
     .padding(14)
     .frame(width: 360, alignment: .leading)
-  }
-
-  private var kindDescription: String {
-    switch loadedImage.kind {
-    case .bitmap:
-      "Bitmap"
-    case .vector:
-      "Vector"
-    }
   }
 
   private var formatDescription: String {

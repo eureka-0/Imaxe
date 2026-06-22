@@ -6,7 +6,6 @@
 //
 
 import AppKit
-import PocketSVG
 import SwiftUI
 
 struct ImageScrollView: NSViewRepresentable {
@@ -21,9 +20,10 @@ struct ImageScrollView: NSViewRepresentable {
   func onScaleChange(_ newScale: CGFloat) {
     guard newScale.isFinite else { return }
 
+    let clampedScale = newScale.clamped(to: Constants.imageScaleRange)
     DispatchQueue.main.async {
-      guard abs(scale - newScale) > scaleUpdateTolerance else { return }
-      scale = newScale
+      guard abs(scale - clampedScale) > scaleUpdateTolerance else { return }
+      scale = clampedScale
     }
   }
 
@@ -44,7 +44,8 @@ struct ImageScrollView: NSViewRepresentable {
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = ImageNSScrollView()
     let centeringClipView = CenteringClipView()
-    centeringClipView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: scale)
+    let clampedScale = scale.clamped(to: Constants.imageScaleRange)
+    centeringClipView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: clampedScale)
     scrollView.contentView = centeringClipView
 
     // Disable automatic content insets adjustment to ensure the image can be properly centered and
@@ -61,18 +62,25 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.minMagnification = Constants.imageScaleRange.lowerBound
     scrollView.maxMagnification = Constants.imageScaleRange.upperBound
     scrollView.usesPredominantAxisScrolling = false
-    scrollView.magnification = scale.clamped(to: Constants.imageScaleRange)
+    scrollView.magnification = clampedScale
     context.coordinator.prepareForImage(
       loadedImage,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
     )
-    context.coordinator.alwaysFitToWindow = alwaysFitToWindow
+    context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
     scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
       guard let scrollView else { return }
       coordinator?.scrollViewDidLayout(scrollView)
     }
-    scrollView.onUserMagnification = { [weak coordinator = context.coordinator] in
+    scrollView.onLiveMagnificationStart = { [weak coordinator = context.coordinator] in
+      coordinator?.beginUserMagnification()
+    }
+    scrollView.onLiveMagnificationEnd = { [weak coordinator = context.coordinator, weak scrollView] in
+      guard let scrollView else { return }
+      coordinator?.endUserMagnification(scrollView)
+    }
+    scrollView.onSmartMagnification = { [weak coordinator = context.coordinator] in
       coordinator?.disableAlwaysFitToWindowForUserMagnification()
     }
     context.coordinator.observe(scrollView)
@@ -82,15 +90,18 @@ struct ImageScrollView: NSViewRepresentable {
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
     context.coordinator.onScaleChange = onScaleChange
     context.coordinator.onAlwaysFitToWindowChange = onAlwaysFitToWindowChange
-    context.coordinator.alwaysFitToWindow = alwaysFitToWindow
+    context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
     context.coordinator.observe(scrollView)
+    let clampedScale = scale.clamped(to: Constants.imageScaleRange)
 
     if let imageView = scrollView.documentView as? ImageCanvasView {
-      imageView.loadedImage = loadedImage
-      imageView.scale = scale
-      scrollView.reflectScrolledClipView(scrollView.contentView)
+      if imageView.loadedImage.image !== loadedImage.image {
+        imageView.loadedImage = loadedImage
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+      }
+      imageView.scale = clampedScale
     } else {
-      scrollView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: scale)
+      scrollView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: clampedScale)
     }
 
     context.coordinator.prepareForImage(
@@ -98,21 +109,28 @@ struct ImageScrollView: NSViewRepresentable {
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
     )
-    scrollView.layoutSubtreeIfNeeded()
+    if !context.coordinator.isLiveMagnifying || context.coordinator.hasPendingRequests {
+      scrollView.layoutSubtreeIfNeeded()
+    }
 
-    let clampedScale = scale.clamped(to: Constants.imageScaleRange)
-    if !alwaysFitToWindow, !context.coordinator.hasPendingRequests,
-       scrollView.magnification != clampedScale
+    if !context.coordinator.isLiveMagnifying,
+       !context.coordinator.alwaysFitToWindow, !context.coordinator.hasPendingRequests,
+       abs(scrollView.magnification - clampedScale) > scaleUpdateTolerance
     {
       scrollView.magnification = clampedScale
     }
 
-    context.coordinator.performPendingRequests(scrollView)
+    if !context.coordinator.isLiveMagnifying {
+      context.coordinator.performPendingRequests(scrollView)
+    }
   }
 
   final class ImageNSScrollView: NSScrollView {
     var onLayout: (() -> Void)?
-    var onUserMagnification: (() -> Void)?
+    var onLiveMagnificationStart: (() -> Void)?
+    var onLiveMagnificationEnd: (() -> Void)?
+    var onSmartMagnification: (() -> Void)?
+    private var receivedMagnifyEvent = false
 
     override var intrinsicContentSize: NSSize {
       NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
@@ -124,13 +142,22 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     override func magnify(with event: NSEvent) {
-      onUserMagnification?()
+      receivedMagnifyEvent = true
+      onLiveMagnificationStart?()
       super.magnify(with: event)
     }
 
     override func smartMagnify(with event: NSEvent) {
-      onUserMagnification?()
+      onSmartMagnification?()
       super.smartMagnify(with: event)
+    }
+
+    override func endGesture(with event: NSEvent) {
+      super.endGesture(with: event)
+
+      guard receivedMagnifyEvent else { return }
+      receivedMagnifyEvent = false
+      onLiveMagnificationEnd?()
     }
   }
 
@@ -172,15 +199,22 @@ struct ImageScrollView: NSViewRepresentable {
       pendingFitToWindowRequest != nil || pendingFitWindowToImageRequest != nil
     }
 
+    private(set) var isLiveMagnifying = false
+
     private var imageIdentifier: ObjectIdentifier?
+    private var latestFitToWindowRequest = 0
     private var pendingFitToWindowRequest: Int?
     private var pendingFitWindowToImageRequest: Int?
     private var completedFitToWindowRequest = 0
     private var completedFitWindowToImageRequest = 0
+    private var pendingLiveMagnificationEnd = false
+    private var pendingUserAlwaysFitDisable = false
     private var suppressAlwaysFitForProgrammaticResize = false
     private var suppressedAlwaysFitViewportSize: NSSize?
     private var observedScrollView: NSScrollView?
     private var magnificationObservation: NSKeyValueObservation?
+    private var willStartLiveMagnifyObserver: NSObjectProtocol?
+    private var didEndLiveMagnifyObserver: NSObjectProtocol?
 
     init(
       onScaleChange: @escaping (CGFloat) -> Void,
@@ -190,9 +224,33 @@ struct ImageScrollView: NSViewRepresentable {
       self.onAlwaysFitToWindowChange = onAlwaysFitToWindowChange
     }
 
+    deinit {
+      MainActor.assumeIsolated {
+        removeLiveMagnifyObservers()
+      }
+    }
+
+    func updateAlwaysFitToWindowFromBinding(_ newAlwaysFitToWindow: Bool) {
+      if pendingUserAlwaysFitDisable {
+        if !newAlwaysFitToWindow {
+          pendingUserAlwaysFitDisable = false
+        } else {
+          return
+        }
+      }
+
+      if isLiveMagnifying, newAlwaysFitToWindow {
+        return
+      }
+
+      alwaysFitToWindow = newAlwaysFitToWindow
+    }
+
     func prepareForImage(
       _ loadedImage: LoadedImage, fitToWindowRequest: Int, fitWindowToImageRequest: Int,
     ) {
+      latestFitToWindowRequest = fitToWindowRequest
+
       let newIdentifier = ObjectIdentifier(loadedImage.image)
       if imageIdentifier != newIdentifier {
         imageIdentifier = newIdentifier
@@ -209,6 +267,8 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     func scrollViewDidLayout(_ scrollView: NSScrollView) {
+      guard !isLiveMagnifying else { return }
+
       performPendingRequests(
         scrollView,
         shouldUpdateLayout: false,
@@ -220,10 +280,33 @@ struct ImageScrollView: NSViewRepresentable {
       fitToWindow(scrollView)
     }
 
+    func beginUserMagnification() {
+      isLiveMagnifying = true
+      pendingLiveMagnificationEnd = false
+      pendingFitToWindowRequest = nil
+      completedFitToWindowRequest = latestFitToWindowRequest
+      disableAlwaysFitToWindowForUserMagnification()
+    }
+
+    func endUserMagnification(_ scrollView: NSScrollView) {
+      guard isLiveMagnifying, !pendingLiveMagnificationEnd else { return }
+
+      pendingLiveMagnificationEnd = true
+      DispatchQueue.main.async { [weak self, weak scrollView] in
+        guard let self, let scrollView else { return }
+
+        isLiveMagnifying = false
+        pendingLiveMagnificationEnd = false
+        clampScrollBounds(scrollView)
+        onScaleChange(scrollView.magnification)
+      }
+    }
+
     func disableAlwaysFitToWindowForUserMagnification() {
       guard alwaysFitToWindow else { return }
 
       alwaysFitToWindow = false
+      pendingUserAlwaysFitDisable = true
       onAlwaysFitToWindowChange(false)
     }
 
@@ -394,6 +477,7 @@ struct ImageScrollView: NSViewRepresentable {
     func observe(_ scrollView: NSScrollView) {
       guard observedScrollView !== scrollView else { return }
 
+      removeLiveMagnifyObservers()
       observedScrollView = scrollView
       magnificationObservation = scrollView
         .observe(\.magnification, options: [.new]) { [weak self] scrollView, _ in
@@ -402,6 +486,40 @@ struct ImageScrollView: NSViewRepresentable {
             onScaleChange(scrollView.magnification)
           }
         }
+
+      willStartLiveMagnifyObserver = NotificationCenter.default.addObserver(
+        forName: NSScrollView.willStartLiveMagnifyNotification,
+        object: scrollView,
+        queue: .main,
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.beginUserMagnification()
+        }
+      }
+
+      didEndLiveMagnifyObserver = NotificationCenter.default.addObserver(
+        forName: NSScrollView.didEndLiveMagnifyNotification,
+        object: scrollView,
+        queue: .main,
+      ) { [weak self, weak scrollView] _ in
+        Task { @MainActor [weak self, weak scrollView] in
+          guard let self, let scrollView else { return }
+
+          endUserMagnification(scrollView)
+        }
+      }
+    }
+
+    private func removeLiveMagnifyObservers() {
+      if let willStartLiveMagnifyObserver {
+        NotificationCenter.default.removeObserver(willStartLiveMagnifyObserver)
+        self.willStartLiveMagnifyObserver = nil
+      }
+
+      if let didEndLiveMagnifyObserver {
+        NotificationCenter.default.removeObserver(didEndLiveMagnifyObserver)
+        self.didEndLiveMagnifyObserver = nil
+      }
     }
   }
 }

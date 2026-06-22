@@ -10,7 +10,7 @@ import Foundation
 enum Constants {
   static let topBarHeight: CGFloat = 32
   static let topBarHoverStripHeight: CGFloat = 50
-  static let topBarHideDelay: TimeInterval = 0.5
+  static let topBarHideDelay: TimeInterval = 1.5
   static let topBarItemSpacing: CGFloat = 6
   static let topBarControlGroupSpacing: CGFloat = 1
   static let topBarControlGroupPadding: CGFloat = 1

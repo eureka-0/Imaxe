@@ -12,67 +12,35 @@ import AppKit
 @MainActor
 struct ImaxeTests {
 
-  @Test func svgExtensionIsTreatedAsVector() {
-    let image = bitmapImage()
-    let url = URL(fileURLWithPath: "/tmp/example.svg")
-
-    let kind = ImageKind(sourceURL: url, image: image)
-
-    #expect(kind == .vector)
-  }
-
-  @Test func bitmapRepresentationsAreTreatedAsBitmap() throws {
-    let image = bitmapImage()
-    let url = URL(fileURLWithPath: "/tmp/example.png")
-
-    let kind = ImageKind(sourceURL: url, image: image)
-
-    #expect(kind == .bitmap)
-    #expect(kind.cacheMode == .default)
-  }
-
-  @Test func bitmapLoadedImageUsesPixelSizeAndHasNoSVGPaths() {
+  @Test func bitmapLoadedImageUsesPixelSize() {
     let image = bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
 
     let loadedImage = LoadedImage(image: image, sourceURL: url)
 
-    #expect(loadedImage.kind == .bitmap)
-    #expect(loadedImage.svgPaths == nil)
     #expect(loadedImage.displaySize == NSSize(width: 10, height: 20))
     #expect(loadedImage.info.pixelWidth == 10)
     #expect(loadedImage.info.pixelHeight == 20)
   }
 
-  @Test func nonBitmapRepresentationsAreTreatedAsVector() {
-    let image = NSImage(size: NSSize(width: 100, height: 80), flipped: false) { _ in
-      true
-    }
-    let url = URL(fileURLWithPath: "/tmp/example.pdf")
-
-    let kind = ImageKind(sourceURL: url, image: image)
-
-    #expect(kind == .vector)
-    #expect(kind.cacheMode == .never)
-  }
-
-  @Test func svgLoadedImageStoresVectorPathsAndUsesViewBoxSize() async throws {
+  @Test func svgLoadedImageRasterizesToBitmapAndUsesViewBoxSize() async throws {
     let url = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appending(path: "SampleImages/sample_1280×853.svg")
 
     let loadedImage = try await ImageLoader.shared.load(from: url)
+    let bitmapRep = try #require(loadedImage.image.representations.first as? NSBitmapImageRep)
 
-    #expect(loadedImage.kind == .vector)
-    #expect(loadedImage.svgPaths?.isEmpty == false)
     #expect(loadedImage.displaySize == NSSize(width: 1280, height: 853))
     #expect(loadedImage.info.pixelWidth == 1280)
     #expect(loadedImage.info.pixelHeight == 853)
-    #expect(loadedImage.image.representations.isEmpty)
+    #expect(loadedImage.image.representations.count == 1)
+    #expect(bitmapRep.pixelsWide == 1280)
+    #expect(bitmapRep.pixelsHigh == 853)
   }
 
-  @Test func complexSVGUsesNSImageFallback() async throws {
+  @Test func complexSVGRasterizesToBitmap() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-svg-with-paint-server.svg")
     let svg = """
@@ -90,11 +58,12 @@ struct ImaxeTests {
     try svg.write(to: url, atomically: true, encoding: .utf8)
 
     let loadedImage = try await ImageLoader.shared.load(from: url)
+    let bitmapRep = try #require(loadedImage.image.representations.first as? NSBitmapImageRep)
 
-    #expect(loadedImage.kind == .vector)
-    #expect(loadedImage.svgPaths == nil)
     #expect(loadedImage.displaySize == NSSize(width: 4267, height: 4267))
-    #expect(loadedImage.image.representations.isEmpty == false)
+    #expect(loadedImage.image.representations.count == 1)
+    #expect(bitmapRep.pixelsWide == 4267)
+    #expect(bitmapRep.pixelsHigh == 4267)
   }
 
   private func bitmapImage() -> NSImage {
