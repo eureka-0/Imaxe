@@ -10,7 +10,7 @@ import OrderedCollections
 import PocketSVG
 import UniformTypeIdentifiers
 
-enum ImageKind: Equatable {
+nonisolated enum ImageKind: Equatable {
   case bitmap
   case vector
 
@@ -51,7 +51,7 @@ enum ImageKind: Equatable {
   }
 }
 
-struct ImageInfo {
+nonisolated struct ImageInfo {
   let fileName: String
   let sourceURL: URL
   let type: UTType?
@@ -62,9 +62,36 @@ struct ImageInfo {
   var fileSizeDescription: String {
     ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
   }
+
+  init(
+    fileName: String,
+    sourceURL: URL,
+    type: UTType?,
+    fileSize: Int,
+    pixelWidth: Int,
+    pixelHeight: Int,
+  ) {
+    self.fileName = fileName
+    self.sourceURL = sourceURL
+    self.type = type
+    self.fileSize = fileSize
+    self.pixelWidth = pixelWidth
+    self.pixelHeight = pixelHeight
+  }
+
+  init(url: URL, pixelWidth: Int = 0, pixelHeight: Int = 0) {
+    self.init(
+      fileName: url.lastPathComponent,
+      sourceURL: url,
+      type: ImageLoader.getUTType(for: url),
+      fileSize: (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0,
+      pixelWidth: pixelWidth,
+      pixelHeight: pixelHeight,
+    )
+  }
 }
 
-struct SVGVectorContent {
+nonisolated struct SVGVectorContent: @unchecked Sendable {
   let paths: [SVGBezierPath]
   let viewBox: NSRect
 
@@ -73,7 +100,7 @@ struct SVGVectorContent {
   }
 }
 
-struct LoadedImage {
+nonisolated struct LoadedImage: @unchecked Sendable {
   let image: NSImage
   let kind: ImageKind
   let vectorContent: SVGVectorContent?
@@ -101,10 +128,7 @@ struct LoadedImage {
     )
     image.cacheMode = self.kind.cacheMode
     info = ImageInfo(
-      fileName: sourceURL.lastPathComponent,
-      sourceURL: sourceURL,
-      type: ImageLoader.getUTType(for: sourceURL),
-      fileSize: (try? sourceURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0,
+      url: sourceURL,
       pixelWidth: Int(self.displaySize.width),
       pixelHeight: Int(self.displaySize.height),
     )
@@ -159,7 +183,7 @@ struct LoadedImage {
   }
 }
 
-private struct SVGDocumentSize {
+private nonisolated struct SVGDocumentSize {
   let viewBox: NSRect?
   let size: NSSize?
 
@@ -269,7 +293,7 @@ enum ImageLoadingError: Error, LocalizedError {
   }
 }
 
-final class ImageLoader {
+actor ImageLoader {
   static let shared = ImageLoader()
 
   private init() {}
@@ -311,7 +335,7 @@ final class ImageLoader {
     return supportedImageTypes.contains { fileType.conforms(to: $0) }
   }
 
-  func load(from url: URL) throws(ImageLoadingError) -> LoadedImage {
+  func load(from url: URL) async throws -> LoadedImage {
     guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
@@ -322,6 +346,18 @@ final class ImageLoader {
       return cachedImage
     }
 
+    let loadedImage = try await Self.decode(from: url)
+    try Task.checkCancellation()
+
+    cache[url] = loadedImage
+    evictLeastRecentlyUsed()
+
+    return loadedImage
+  }
+
+  private nonisolated static func decode(from url: URL) async throws -> LoadedImage {
+    try Task.checkCancellation()
+
     let loadedImage: LoadedImage? = if Self.getUTType(for: url) == .svg {
       loadSVG(from: url)
     } else {
@@ -331,13 +367,13 @@ final class ImageLoader {
     guard let loadedImage else {
       throw ImageLoadingError.failedToLoad(url)
     }
-    cache[url] = loadedImage
-    evictLeastRecentlyUsed()
+
+    try Task.checkCancellation()
 
     return loadedImage
   }
 
-  private func loadSVG(from url: URL) -> LoadedImage? {
+  private nonisolated static func loadSVG(from url: URL) -> LoadedImage? {
     if let svgString = try? String(contentsOf: url, encoding: .utf8),
        svgString.isSupportedByPocketSVGNativeDrawing
     {
@@ -364,7 +400,7 @@ final class ImageLoader {
     return LoadedImage(image: image, sourceURL: url, kind: .vector)
   }
 
-  private func loadBitmap(from url: URL) -> LoadedImage? {
+  private nonisolated static func loadBitmap(from url: URL) -> LoadedImage? {
     guard let image = NSImage(contentsOf: url) else { return nil }
     return LoadedImage(image: image, sourceURL: url)
   }
@@ -380,7 +416,7 @@ final class ImageLoader {
   }
 }
 
-private extension NSRect {
+private nonisolated extension NSRect {
   var validRect: NSRect? {
     !isNull && width > 0 && height > 0 ? self : nil
   }
@@ -390,7 +426,7 @@ private extension NSRect {
   }
 }
 
-private extension String {
+private nonisolated extension String {
   var isSupportedByPocketSVGNativeDrawing: Bool {
     range(
       of: #"<\s*(?:clipPath|mask|filter|pattern|image|use|text|linearGradient|radialGradient)\b"#,

@@ -9,6 +9,7 @@ import Testing
 @testable import Imaxe
 import AppKit
 
+@MainActor
 struct ImaxeTests {
 
   @Test func svgExtensionIsTreatedAsVector() {
@@ -55,13 +56,13 @@ struct ImaxeTests {
     #expect(kind.cacheMode == .never)
   }
 
-  @Test func svgLoadedImageStoresVectorPathsAndUsesViewBoxSize() throws {
+  @Test func svgLoadedImageStoresVectorPathsAndUsesViewBoxSize() async throws {
     let url = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appending(path: "SampleImages/sample_1280×853.svg")
 
-    let loadedImage = try ImageLoader.shared.load(from: url)
+    let loadedImage = try await ImageLoader.shared.load(from: url)
 
     #expect(loadedImage.kind == .vector)
     #expect(loadedImage.svgPaths?.isEmpty == false)
@@ -71,7 +72,7 @@ struct ImaxeTests {
     #expect(loadedImage.image.representations.isEmpty)
   }
 
-  @Test func complexSVGUsesNSImageFallback() throws {
+  @Test func complexSVGUsesNSImageFallback() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-svg-with-paint-server.svg")
     let svg = """
@@ -88,7 +89,7 @@ struct ImaxeTests {
     """
     try svg.write(to: url, atomically: true, encoding: .utf8)
 
-    let loadedImage = try ImageLoader.shared.load(from: url)
+    let loadedImage = try await ImageLoader.shared.load(from: url)
 
     #expect(loadedImage.kind == .vector)
     #expect(loadedImage.svgPaths == nil)

@@ -41,7 +41,9 @@ final class ImageCanvasView: NSView {
   }
 
   deinit {
-    stopGIFAnimation()
+    MainActor.assumeIsolated {
+      gifTimer?.invalidate()
+    }
   }
 
   override func viewDidMoveToWindow() {
@@ -199,17 +201,31 @@ final class ImageCanvasView: NSView {
     }
 
     gifTimer?.invalidate()
-    let timer = Timer(timeInterval: frameDuration, repeats: false) { [weak self, weak bitmapRep] _ in
-      guard let self, let bitmapRep, self.gifBitmapRep === bitmapRep else { return }
-
-      currentGIFFrame = (currentGIFFrame + 1) % frameCount
-      bitmapRep.setProperty(.currentFrame, withValue: currentGIFFrame)
-      needsDisplay = true
-
-      scheduleNextGIFFrame(for: bitmapRep)
-    }
+    let timer = Timer(
+      timeInterval: frameDuration,
+      target: self,
+      selector: #selector(advanceGIFFrame(_:)),
+      userInfo: nil,
+      repeats: false,
+    )
 
     gifTimer = timer
     RunLoop.main.add(timer, forMode: .common)
+  }
+
+  @objc private func advanceGIFFrame(_: Timer) {
+    guard let bitmapRep = gifBitmapRep else { return }
+    guard let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue,
+          frameCount > 1
+    else {
+      stopGIFAnimation()
+      return
+    }
+
+    currentGIFFrame = (currentGIFFrame + 1) % frameCount
+    bitmapRep.setProperty(.currentFrame, withValue: currentGIFFrame)
+    needsDisplay = true
+
+    scheduleNextGIFFrame(for: bitmapRep)
   }
 }

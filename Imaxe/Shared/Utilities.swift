@@ -58,7 +58,7 @@ extension Comparable {
 }
 
 extension NSImage {
-  var pixelSize: NSSize {
+  nonisolated var pixelSize: NSSize {
     var representationSize = NSSize.zero
 
     for representation in representations {

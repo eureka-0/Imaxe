@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
 
 struct ImageView: View {
   @Bindable var imageSession: ImageSession
+
   @State private var isTopBarHovering = false
   @State private var isImageInfoPresented = false
   @State private var isScalePickerPresented = false
@@ -19,27 +20,31 @@ struct ImageView: View {
     isImageInfoPresented || isScalePickerPresented
   }
 
+  private var displayedImageInfo: ImageInfo? {
+    imageSession.loadingImageInfo ?? imageSession.currentImage?.info
+  }
+
   var body: some View {
-    ZStack(alignment: .top) {
-      ImageScrollView(
-        loadedImage: imageSession.currentImage,
-        fitToWindowRequest: imageSession.fitToWindowRequest,
-        fitWindowToImageRequest: imageSession.fitWindowToImageRequest,
-        scale: $imageSession.imageScale,
-        alwaysFitToWindow: $imageSession.alwaysFitToWindow,
-      )
+    Group {
+      if imageSession.currentImage != nil || imageSession.isLoading {
+        ZStack(alignment: .top) {
+          imageContent
 
-      topBar
-        .opacity(imageSession.showTopBar ? 1 : 0)
-        .animation(.easeInOut(duration: 0.2), value: imageSession.showTopBar)
-        .allowsHitTesting(imageSession.showTopBar)
+          topBar
+            .opacity(imageSession.showTopBar ? 1 : 0)
+            .animation(.easeInOut(duration: 0.2), value: imageSession.showTopBar)
+            .allowsHitTesting(imageSession.showTopBar)
 
-      HoverTrackingStrip { isHovering, window in
-        isTopBarHovering = isHovering
-        updateTopBarVisibility(in: window)
+          HoverTrackingStrip { isHovering, window in
+            isTopBarHovering = isHovering
+            updateTopBarVisibility(in: window)
+          }
+          .frame(maxWidth: .infinity)
+          .frame(height: Constants.topBarHoverStripHeight)
+        }
+      } else {
+        HomeView()
       }
-      .frame(maxWidth: .infinity)
-      .frame(height: Constants.topBarHoverStripHeight)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .onAppear {
@@ -52,6 +57,26 @@ struct ImageView: View {
     }
     .onChange(of: isPopoverPresented) { _, _ in
       updateTopBarVisibility()
+    }
+    .onChange(of: imageSession.isLoading) { _, _ in
+      updateTopBarVisibility()
+    }
+  }
+
+  @ViewBuilder
+  private var imageContent: some View {
+    if imageSession.isLoading {
+      LoadingImageView()
+    } else if let currentImage = imageSession.currentImage {
+      ImageScrollView(
+        loadedImage: currentImage,
+        fitToWindowRequest: imageSession.fitToWindowRequest,
+        fitWindowToImageRequest: imageSession.fitWindowToImageRequest,
+        scale: $imageSession.imageScale,
+        alwaysFitToWindow: $imageSession.alwaysFitToWindow,
+      )
+    } else {
+      HomeView()
     }
   }
 
@@ -82,14 +107,14 @@ struct ImageView: View {
   }
 
   private var fileNameLabel: some View {
-    Text(imageSession.currentImage.info.fileName)
+    Text(displayedImageInfo?.fileName ?? "")
       .font(.system(size: 13, weight: .medium))
       .foregroundStyle(.primary)
       .lineLimit(1)
       .truncationMode(.tail)
       .frame(minWidth: 72, maxWidth: 320, alignment: .leading)
-      .help(Text(imageSession.currentImage.info.fileName))
-      .accessibilityLabel(Text("File name \(imageSession.currentImage.info.fileName)"))
+      .help(Text(displayedImageInfo?.fileName ?? ""))
+      .accessibilityLabel(Text("File name \(displayedImageInfo?.fileName ?? "")"))
   }
 
   private var topBarControls: some View {
@@ -110,23 +135,23 @@ struct ImageView: View {
       Button(action: imageSession.navigateToPreviousImage) {
         topBarIconLabel("Previous Image", systemImage: "chevron.left")
       }
-      .disabled(!imageSession.folderNavigator.canNavigateToPrevious)
+      .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
       .help(Text("Previous image"))
 
-      Text(imageSession.folderNavigator.positionDescription)
+      Text(imageSession.folderNavigator?.positionDescription ?? "1/1")
         .font(.system(size: 12, weight: .medium, design: .rounded))
         .monospacedDigit()
         .foregroundStyle(.secondary)
         .lineLimit(1)
         .frame(width: Constants.topBarPositionWidth, height: Constants.topBarButtonHeight)
         .accessibilityLabel(
-          Text("Image position \(imageSession.folderNavigator.positionDescription)"),
+          Text("Image position \(imageSession.folderNavigator?.positionDescription ?? "1/1")"),
         )
 
       Button(action: imageSession.navigateToNextImage) {
         topBarIconLabel("Next Image", systemImage: "chevron.right")
       }
-      .disabled(!imageSession.folderNavigator.canNavigateToNext)
+      .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
       .help(Text("Next image"))
     }
     .topBarControlGroup()
@@ -137,6 +162,7 @@ struct ImageView: View {
       topBarIconLabel("Fit to Window", systemImage: "arrow.up.left.and.arrow.down.right.rectangle")
     }
     .keyboardShortcut("f", modifiers: .command)
+    .disabled(imageSession.isLoading)
     .help(Text("Fit the image to the window"))
   }
 
@@ -145,7 +171,8 @@ struct ImageView: View {
       Button(action: imageSession.zoomOut) {
         topBarIconLabel("Zoom Out", systemImage: "minus.magnifyingglass")
       }
-      .disabled(imageSession.imageScale <= Constants.imageScaleRange.lowerBound)
+      .disabled(imageSession.isLoading || imageSession.imageScale <= Constants.imageScaleRange
+        .lowerBound)
       .help(Text("Zoom out"))
 
       scaleButton
@@ -153,7 +180,8 @@ struct ImageView: View {
       Button(action: imageSession.zoomIn) {
         topBarIconLabel("Zoom In", systemImage: "plus.magnifyingglass")
       }
-      .disabled(imageSession.imageScale >= Constants.imageScaleRange.upperBound)
+      .disabled(imageSession.isLoading || imageSession.imageScale >= Constants.imageScaleRange
+        .upperBound)
       .help(Text("Zoom in"))
     }
     .topBarControlGroup()
@@ -182,6 +210,7 @@ struct ImageView: View {
         onApplyCustomScale: applyCustomScale,
       )
     }
+    .disabled(imageSession.isLoading)
     .help(Text("Choose image scale"))
   }
 
@@ -192,6 +221,7 @@ struct ImageView: View {
         systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
       )
     }
+    .disabled(imageSession.isLoading)
     .help(Text("Resize the window to fit the image"))
   }
 
@@ -202,8 +232,11 @@ struct ImageView: View {
       topBarIconLabel("Image Info", systemImage: "info.circle")
     }
     .popover(isPresented: $isImageInfoPresented, arrowEdge: .top) {
-      ImageInfoPanel(loadedImage: imageSession.currentImage)
+      if let currentImage = imageSession.currentImage {
+        ImageInfoPanel(loadedImage: currentImage)
+      }
     }
+    .disabled(imageSession.isLoading)
     .help(Text("Show image info"))
   }
 
@@ -230,7 +263,27 @@ struct ImageView: View {
   }
 
   private func updateTopBarVisibility(in window: NSWindow? = nil) {
-    imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
+    imageSession.setTopBarVisibility(
+      to: isTopBarHovering || isPopoverPresented || imageSession.isLoading,
+      in: window,
+    )
+  }
+}
+
+private struct LoadingImageView: View {
+  var body: some View {
+    VStack(spacing: 12) {
+      ProgressView()
+        .controlSize(.large)
+
+      Text("Loading...")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.secondary)
+    }
+    .padding(24)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text("Loading..."))
   }
 }
 

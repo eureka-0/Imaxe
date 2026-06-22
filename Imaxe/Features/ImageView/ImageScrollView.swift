@@ -114,6 +114,10 @@ struct ImageScrollView: NSViewRepresentable {
     var onLayout: (() -> Void)?
     var onUserMagnification: (() -> Void)?
 
+    override var intrinsicContentSize: NSSize {
+      NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+    }
+
     override func layout() {
       super.layout()
       onLayout?()
@@ -192,6 +196,8 @@ struct ImageScrollView: NSViewRepresentable {
       let newIdentifier = ObjectIdentifier(loadedImage.image)
       if imageIdentifier != newIdentifier {
         imageIdentifier = newIdentifier
+        completedFitWindowToImageRequest = fitWindowToImageRequest
+        pendingFitWindowToImageRequest = nil
         queueFitToWindow(fitToWindowRequest)
       } else if fitToWindowRequest != completedFitToWindowRequest {
         queueFitToWindow(fitToWindowRequest)
@@ -345,12 +351,14 @@ struct ImageScrollView: NSViewRepresentable {
 
           window.animator().setFrame(frame, display: false)
         } completionHandler: { [weak self, weak scrollView] in
-          guard let self, let scrollView else { return }
+          Task { @MainActor [weak self, weak scrollView] in
+            guard let self, let scrollView else { return }
 
-          scrollView.layoutSubtreeIfNeeded()
-          clampScrollBounds(scrollView)
-          suppressedAlwaysFitViewportSize = scrollView.contentSize
-          onScaleChange(scrollView.magnification)
+            scrollView.layoutSubtreeIfNeeded()
+            clampScrollBounds(scrollView)
+            suppressedAlwaysFitViewportSize = scrollView.contentSize
+            onScaleChange(scrollView.magnification)
+          }
         }
       }
     }
@@ -389,7 +397,10 @@ struct ImageScrollView: NSViewRepresentable {
       observedScrollView = scrollView
       magnificationObservation = scrollView
         .observe(\.magnification, options: [.new]) { [weak self] scrollView, _ in
-          self?.onScaleChange(scrollView.magnification)
+          Task { @MainActor [weak self, weak scrollView] in
+            guard let self, let scrollView else { return }
+            onScaleChange(scrollView.magnification)
+          }
         }
     }
   }

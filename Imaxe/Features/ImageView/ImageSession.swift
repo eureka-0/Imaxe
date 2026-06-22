@@ -9,22 +9,32 @@ import SwiftUI
 
 @Observable
 final class ImageSession {
-  private(set) var currentImage: LoadedImage
+  private(set) var currentImage: LoadedImage?
+  var isImporterPresented = false
+  private(set) var isLoading = false
+  private(set) var loadingImageInfo: ImageInfo?
   var imageScale: CGFloat = 1.0
   private(set) var fitToWindowRequest = 0
   private(set) var fitWindowToImageRequest = 0
   private(set) var isWindowPinned = false
   var alwaysFitToWindow = true
   private(set) var showTopBar = false
-  private(set) var folderNavigator: FolderNavigator
+  private(set) var folderNavigator: FolderNavigator?
 
   var alert: ImageAlert?
   @ObservationIgnored private weak var owningWindow: NSWindow?
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
+  @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
+  @ObservationIgnored private var imageLoadRequestID = 0
 
-  init(loadedImage: LoadedImage) {
+  init(loadedImage: LoadedImage? = nil) {
     currentImage = loadedImage
-    folderNavigator = FolderNavigator(for: loadedImage.info.sourceURL)
+    folderNavigator = loadedImage.map { FolderNavigator(for: $0.info.sourceURL) }
+  }
+
+  deinit {
+    topBarHideTask?.cancel()
+    imageLoadTask?.cancel()
   }
 
   func setTopBarVisibility(to isVisible: Bool, in window: NSWindow? = nil) {
@@ -94,25 +104,71 @@ final class ImageSession {
     setScale(imageScale / Constants.imageZoomStep)
   }
 
-  func reloadCurrentImage() {
-    do {
-      currentImage = try ImageLoader.shared.load(from: folderNavigator.currentImageURL)
-    } catch {
-      alert = ImageAlert(title: "Failed to Load Image", message: error.localizedDescription)
+  func openImage() {
+    isImporterPresented = true
+  }
+
+  func onOpenImage(result: Result<URL, Error>) {
+    switch result {
+    case let .success(url):
+      loadImage(from: url, failureTitle: "Failed to Open Image")
+    case let .failure(error):
+      print("Failed to open file: \(error.localizedDescription)")
     }
   }
 
+  func reloadCurrentImage() {
+    guard let folderNavigator else { return }
+    loadImage(from: folderNavigator.currentImageURL, failureTitle: "Failed to Load Image")
+  }
+
   func navigateToPreviousImage() {
-    let success = folderNavigator.moveToPrevious()
+    let success = folderNavigator?.moveToPrevious() ?? false
     if success {
       reloadCurrentImage()
     }
   }
 
   func navigateToNextImage() {
-    let success = folderNavigator.moveToNext()
+    let success = folderNavigator?.moveToNext() ?? false
     if success {
       reloadCurrentImage()
+    }
+  }
+
+  private func loadImage(from url: URL, failureTitle: String) {
+    imageLoadTask?.cancel()
+    imageLoadRequestID += 1
+    let requestID = imageLoadRequestID
+    let previousImage = currentImage
+    let previousFolderNavigator = folderNavigator
+
+    isLoading = true
+    loadingImageInfo = ImageInfo(url: url)
+    folderNavigator = FolderNavigator(for: url)
+    currentImage = nil
+
+    imageLoadTask = Task { @MainActor [weak self] in
+      guard let self, requestID == imageLoadRequestID, !Task.isCancelled else { return }
+
+      defer {
+        isLoading = false
+      }
+
+      do {
+        let loadedImage = try await ImageLoader.shared.load(from: url)
+        loadingImageInfo = nil
+        currentImage = loadedImage
+        folderNavigator = FolderNavigator(for: loadedImage.info.sourceURL)
+        imageScale = 1.0
+        alwaysFitToWindow = true
+        fitToWindow()
+      } catch {
+        loadingImageInfo = nil
+        currentImage = previousImage
+        folderNavigator = previousFolderNavigator
+        alert = ImageAlert(title: failureTitle, message: error.localizedDescription)
+      }
     }
   }
 }

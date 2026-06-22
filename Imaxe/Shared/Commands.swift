@@ -8,15 +8,15 @@
 import SwiftUI
 
 struct FileOperationCommands: Commands {
-  @FocusedValue(ContentViewModel.self) private var contentViewModel
+  @FocusedValue(ImageSession.self) private var imageSession
 
   var body: some Commands {
     CommandGroup(after: .newItem) {
       Button("Open Image...") {
-        contentViewModel?.openImage()
+        imageSession?.openImage()
       }
       .keyboardShortcut("o", modifiers: .command)
-      .disabled(contentViewModel == nil)
+      .disabled(imageSession == nil)
     }
   }
 }
