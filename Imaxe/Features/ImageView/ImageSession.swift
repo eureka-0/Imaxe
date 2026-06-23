@@ -144,10 +144,6 @@ final class ImageSession {
     }
   }
 
-  func openImage() {
-    isImporterPresented = true
-  }
-
   func onOpenImage(result: Result<URL, Error>) {
     switch result {
     case let .success(url):
@@ -159,7 +155,7 @@ final class ImageSession {
 
   func reloadCurrentImage() {
     guard let folderNavigator else { return }
-    loadImage(from: folderNavigator.currentImageURL, failureTitle: "Failed to Load Image")
+    loadImage(from: folderNavigator.currentImageURL)
   }
 
   func navigateToPreviousImage() {
@@ -176,7 +172,7 @@ final class ImageSession {
     }
   }
 
-  private func loadImage(from url: URL, failureTitle: String) {
+  func loadImage(from url: URL, failureTitle: String? = nil) {
     imageLoadTask?.cancel()
     imageLoadRequestID += 1
     let requestID = imageLoadRequestID
@@ -207,7 +203,10 @@ final class ImageSession {
         loadingImageInfo = nil
         currentImage = previousImage
         folderNavigator = previousFolderNavigator
-        alert = ImageAlert(title: failureTitle, message: error.localizedDescription)
+        alert = ImageAlert(
+          title: failureTitle ?? "Failed to Load Image",
+          message: error.localizedDescription,
+        )
       }
     }
   }

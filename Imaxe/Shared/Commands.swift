@@ -15,7 +15,7 @@ struct FileOperationCommands: Commands {
       Divider()
 
       Button("Open Image...") {
-        imageSession?.openImage()
+        imageSession?.isImporterPresented = true
       }
       .keyboardShortcut("o", modifiers: .command)
       .disabled(imageSession == nil)
