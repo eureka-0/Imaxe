@@ -9,9 +9,15 @@ import SwiftUI
 
 @main
 struct ImaxeApp: App {
+  @AppStorage(AppSettings.Keys.appearance.rawValue)
+  private var appearance: Appearance = AppSettings.Defaults.appearance
+
   var body: some Scene {
     WindowGroup {
       ContentView()
+        .onChange(of: appearance) {
+          applyAppearance(appearance)
+        }
         .frame(
           minWidth: Constants.minimumWindowContentWidth,
           minHeight: Constants.minimumWindowContentHeight,
@@ -32,6 +38,21 @@ struct ImaxeApp: App {
     .commands {
       FileOperationCommands()
       ViewCommands()
+    }
+
+    Settings {
+      SettingsView()
+        .onChange(of: appearance) {
+          applyAppearance(appearance)
+        }
+    }
+  }
+
+  private func applyAppearance(_ appearance: Appearance) {
+    switch appearance {
+    case .light: NSApp.appearance = NSAppearance(named: .aqua)
+    case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+    case .system: NSApp.appearance = nil
     }
   }
 }
