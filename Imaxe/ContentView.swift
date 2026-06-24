@@ -20,6 +20,7 @@ struct ContentView: View {
         HomeView()
       }
     }
+    .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
     .overlay(
       ContainerRelativeShape()
         .strokeBorder(

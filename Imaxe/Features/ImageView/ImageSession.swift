@@ -195,7 +195,6 @@ final class ImageSession {
         let loadedImage = try await ImageLoader.shared.load(from: url)
         loadingImageInfo = nil
         currentImage = loadedImage
-        folderNavigator = FolderNavigator(for: loadedImage.info.sourceURL)
         imageScale = 1.0
         alwaysFitToWindow = true
         fitToWindow()
