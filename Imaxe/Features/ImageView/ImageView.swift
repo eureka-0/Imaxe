@@ -143,7 +143,11 @@ struct ImageView: View {
         .monospacedDigit()
         .foregroundStyle(.secondary)
         .lineLimit(1)
-        .frame(width: Constants.topBarPositionWidth, height: Constants.topBarButtonHeight)
+        .frame(
+          minWidth: Constants.topBarPositionMinWidth,
+          maxWidth: Constants.topbarPositionMaxWidth,
+        )
+        .frame(height: Constants.topBarButtonHeight)
         .accessibilityLabel(
           Text("Image position \(imageSession.folderNavigator?.positionDescription ?? "1/1")"),
         )
@@ -414,7 +418,7 @@ private struct ImageInfoPanel: View {
         .font(.headline)
 
       VStack(alignment: .leading, spacing: 8) {
-        ImageInfoRow(title: "Name", value: info.fileName)
+        ImageInfoRow(title: "File Name", value: info.fileName)
         ImageInfoRow(title: "Location", value: info.sourceURL.deletingLastPathComponent().path)
         ImageInfoRow(title: "Format", value: formatDescription)
         ImageInfoRow(title: "File Size", value: info.fileSizeDescription)
@@ -423,6 +427,7 @@ private struct ImageInfoPanel: View {
 
         ImageInfoRow(title: "Pixel Width", value: String(info.pixelWidth))
         ImageInfoRow(title: "Pixel Height", value: String(info.pixelHeight))
+        ImageInfoRow(title: "Image DPI", value: info.DPIDescription)
       }
     }
     .padding(14)
@@ -468,7 +473,7 @@ private extension View {
       .frame(height: Constants.topBarButtonHeight + Constants.topBarControlGroupPadding * 2)
       .background {
         RoundedRectangle(cornerRadius: 7, style: .continuous)
-          .fill(.controlBackground.opacity(0.42))
+          .fill(.controlBackground.opacity(0.8))
       }
       .overlay {
         RoundedRectangle(cornerRadius: 7, style: .continuous)

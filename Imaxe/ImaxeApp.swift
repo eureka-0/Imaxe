@@ -15,25 +15,23 @@ struct ImaxeApp: App {
   var body: some Scene {
     WindowGroup {
       ContentView()
-        .onChange(of: appearance) {
-          applyAppearance(appearance)
-        }
+        .applyAppearance(appearance)
         .frame(
-          minWidth: Constants.minimumWindowContentWidth,
-          minHeight: Constants.minimumWindowContentHeight,
+          minWidth: Constants.minimumWindowWidth,
+          minHeight: Constants.minimumWindowHeight,
         )
         .configureWindow { window in
           window.isMovableByWindowBackground = true
           window.contentMinSize = NSSize(
-            width: Constants.minimumWindowContentWidth,
-            height: Constants.minimumWindowContentHeight,
+            width: Constants.minimumWindowWidth,
+            height: Constants.minimumWindowHeight,
           )
         }
         .ignoresSafeArea()
     }
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
-    .defaultSize(width: 900, height: 630)
+    .defaultSize(width: Constants.minimumWindowWidth, height: Constants.minimumWindowHeight)
     .restorationBehavior(.disabled)
     .commands {
       FileOperationCommands()
@@ -42,17 +40,7 @@ struct ImaxeApp: App {
 
     Settings {
       SettingsView()
-        .onChange(of: appearance) {
-          applyAppearance(appearance)
-        }
-    }
-  }
-
-  private func applyAppearance(_ appearance: Appearance) {
-    switch appearance {
-    case .light: NSApp.appearance = NSAppearance(named: .aqua)
-    case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
-    case .system: NSApp.appearance = nil
+        .applyAppearance(appearance)
     }
   }
 }
@@ -81,5 +69,22 @@ private struct WindowConfigurator: NSViewRepresentable {
 private extension View {
   func configureWindow(_ configure: @escaping (NSWindow) -> Void) -> some View {
     background(WindowConfigurator(configure: configure))
+  }
+
+  func applyAppearance(_ appearance: Appearance) -> some View {
+    onAppear {
+      switch appearance {
+      case .light: NSApp.appearance = NSAppearance(named: .aqua)
+      case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+      case .system: NSApp.appearance = nil
+      }
+    }
+    .onChange(of: appearance) { _, newValue in
+      switch newValue {
+      case .light: NSApp.appearance = NSAppearance(named: .aqua)
+      case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
+      case .system: NSApp.appearance = nil
+      }
+    }
   }
 }

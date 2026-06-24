@@ -6,46 +6,68 @@
 //
 
 import AppKit
+import ImageIO
 import OrderedCollections
 import UniformTypeIdentifiers
 
 nonisolated struct ImageInfo {
   let fileName: String
   let sourceURL: URL
-  let type: UTType?
   let fileSize: Int
+  let type: UTType?
   let pixelWidth: Int
   let pixelHeight: Int
+  let DPI: (Int, Int)
 
   var fileSizeDescription: String {
     ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
   }
 
-  init(
-    fileName: String,
-    sourceURL: URL,
-    type: UTType?,
-    fileSize: Int,
-    pixelWidth: Int,
-    pixelHeight: Int,
-  ) {
-    self.fileName = fileName
-    self.sourceURL = sourceURL
-    self.type = type
-    self.fileSize = fileSize
-    self.pixelWidth = pixelWidth
-    self.pixelHeight = pixelHeight
+  var DPIDescription: String {
+    if DPI.0 == DPI.1 {
+      "\(DPI.0) Pixels/Inch"
+    } else {
+      "\(DPI.0) x \(DPI.1) Pixels/Inch"
+    }
   }
 
   init(url: URL, pixelWidth: Int = 0, pixelHeight: Int = 0) {
-    self.init(
-      fileName: url.lastPathComponent,
-      sourceURL: url,
-      type: ImageLoader.getUTType(for: url),
-      fileSize: (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0,
-      pixelWidth: pixelWidth,
-      pixelHeight: pixelHeight,
-    )
+    fileName = url.lastPathComponent
+    sourceURL = url
+    fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+    type = ImageLoader.getUTType(for: url)
+    self.pixelWidth = pixelWidth
+    self.pixelHeight = pixelHeight
+
+    let properties = Self.getImageProperties(from: url)
+    DPI = Self.getImageDPI(from: properties) ?? (72, 72)
+  }
+
+  private nonisolated static func getImageProperties(from url: URL) -> [CFString: Any]? {
+    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+
+    let propertiesOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+    let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, propertiesOptions)
+    return properties as? [CFString: Any]
+  }
+
+  private nonisolated static func getImageDPI(from properties: [CFString: Any]?) -> (Int, Int)? {
+    let dpiWidth = properties?[kCGImagePropertyDPIWidth] as? Int
+    let dpiHeight = properties?[kCGImagePropertyDPIHeight] as? Int
+
+    if let dpiWidth, let dpiHeight {
+      return (dpiWidth, dpiHeight)
+    }
+
+    if let dpiWidth {
+      return (dpiWidth, dpiWidth)
+    }
+
+    if let dpiHeight {
+      return (dpiHeight, dpiHeight)
+    }
+
+    return nil
   }
 }
 

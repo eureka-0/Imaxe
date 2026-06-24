@@ -12,6 +12,19 @@ struct HomeView: View {
 
   var body: some View {
     VStack {
+      HStack {
+        Spacer()
+
+        SettingsLink {
+          Label("Settings", systemImage: "gearshape")
+        }
+        .buttonStyle(.borderless)
+        .padding(.top, 8)
+        .padding(.horizontal)
+      }
+
+      Spacer()
+
       Text("Welcome to Imaxe")
         .font(.largeTitle)
         .padding()
@@ -19,6 +32,8 @@ struct HomeView: View {
       Text("Import an image to get started.")
         .foregroundStyle(.secondary)
         .padding()
+
+      Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
