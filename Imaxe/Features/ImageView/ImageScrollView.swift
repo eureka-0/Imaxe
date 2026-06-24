@@ -76,7 +76,10 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.onLiveMagnificationStart = { [weak coordinator = context.coordinator] in
       coordinator?.beginUserMagnification()
     }
-    scrollView.onLiveMagnificationEnd = { [weak coordinator = context.coordinator, weak scrollView] in
+    scrollView.onLiveMagnificationEnd = { [
+      weak coordinator = context.coordinator,
+      weak scrollView,
+    ] in
       guard let scrollView else { return }
       coordinator?.endUserMagnification(scrollView)
     }
@@ -379,13 +382,26 @@ struct ImageScrollView: NSViewRepresentable {
 
       let screen = window.screen ?? NSScreen.main
       let visibleFrame = screen?.visibleFrame ?? window.frame
-      let frameViewportDelta = NSSize(
-        width: max(0, window.frame.width - viewportSize.width),
-        height: max(0, window.frame.height - viewportSize.height),
+      let contentSize = window.contentView?.bounds.size ?? window.contentLayoutRect.size
+      let contentViewportDelta = NSSize(
+        width: max(0, contentSize.width - viewportSize.width),
+        height: max(0, contentSize.height - viewportSize.height),
+      )
+      let frameContentDelta = NSSize(
+        width: max(0, window.frame.width - contentSize.width),
+        height: max(0, window.frame.height - contentSize.height),
+      )
+      let minimumContentSize = NSSize(
+        width: max(window.contentMinSize.width, Constants.minimumWindowWidth),
+        height: max(window.contentMinSize.height, Constants.minimumWindowHeight),
+      )
+      let maximumContentSize = NSSize(
+        width: max(1, visibleFrame.width - frameContentDelta.width),
+        height: max(1, visibleFrame.height - frameContentDelta.height),
       )
       let maxViewportSize = NSSize(
-        width: max(1, visibleFrame.width - frameViewportDelta.width),
-        height: max(1, visibleFrame.height - frameViewportDelta.height),
+        width: max(1, maximumContentSize.width - contentViewportDelta.width),
+        height: max(1, maximumContentSize.height - contentViewportDelta.height),
       )
       let currentScale = scrollView.magnification.clamped(to: Constants.imageScaleRange)
       let targetImageDisplaySize = NSSize(
@@ -393,25 +409,32 @@ struct ImageScrollView: NSViewRepresentable {
         height: imageSize.height * currentScale,
       )
       let backingScale = window.backingScaleFactor
-      let targetViewportSize = NSSize(
-        width: min(targetImageDisplaySize.width, maxViewportSize.width)
-          .roundedDownToPixel(scale: backingScale),
-        height: min(targetImageDisplaySize.height, maxViewportSize.height)
-          .roundedDownToPixel(scale: backingScale),
+      let targetContentSize = NSSize(
+        width: clampedDimension(
+          min(targetImageDisplaySize.width, maxViewportSize.width)
+            .roundedDownToPixel(scale: backingScale) + contentViewportDelta.width,
+          minimum: minimumContentSize.width,
+          maximum: maximumContentSize.width,
+        ),
+        height: clampedDimension(
+          min(targetImageDisplaySize.height, maxViewportSize.height)
+            .roundedDownToPixel(scale: backingScale) + contentViewportDelta.height,
+          minimum: minimumContentSize.height,
+          maximum: maximumContentSize.height,
+        ),
       )
-      let targetFrameSize = NSSize(
-        width: targetViewportSize.width + frameViewportDelta.width,
-        height: targetViewportSize.height + frameViewportDelta.height,
+      let targetFrameSize = window.frameRect(
+        forContentRect: NSRect(origin: .zero, size: targetContentSize),
       )
-      let currentCenter = NSPoint(x: window.frame.midX, y: window.frame.midY)
-      let centeredFrame = NSRect(
-        x: currentCenter.x - targetFrameSize.width / 2.0,
-        y: currentCenter.y - targetFrameSize.height / 2.0,
+      .size
+      let targetFrame = NSRect(
+        x: window.frame.midX - targetFrameSize.width / 2.0,
+        y: window.frame.midY - targetFrameSize.height / 2.0,
         width: targetFrameSize.width,
         height: targetFrameSize.height,
       )
       let constrainedFrame = window.constrainFrameRect(
-        centeredFrame.constrained(to: visibleFrame), to: screen,
+        targetFrame.positioned(within: visibleFrame), to: screen,
       )
 
       pendingFitWindowToImageRequest = nil
@@ -444,6 +467,13 @@ struct ImageScrollView: NSViewRepresentable {
           }
         }
       }
+    }
+
+    private func clampedDimension(
+      _ value: CGFloat, minimum: CGFloat, maximum: CGFloat,
+    ) -> CGFloat {
+      guard maximum >= minimum else { return maximum }
+      return value.clamped(to: minimum ... maximum)
     }
 
     private func shouldApplyAlwaysFitToWindow(_ scrollView: NSScrollView) -> Bool {

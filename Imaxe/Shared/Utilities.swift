@@ -95,6 +95,25 @@ extension NSRect {
 
     return rect
   }
+
+  func positioned(within visibleFrame: NSRect) -> NSRect {
+    var rect = self
+
+    if rect.maxX > visibleFrame.maxX {
+      rect.origin.x = visibleFrame.maxX - rect.width
+    }
+    if rect.minX < visibleFrame.minX {
+      rect.origin.x = visibleFrame.minX
+    }
+    if rect.maxY > visibleFrame.maxY {
+      rect.origin.y = visibleFrame.maxY - rect.height
+    }
+    if rect.minY < visibleFrame.minY {
+      rect.origin.y = visibleFrame.minY
+    }
+
+    return rect
+  }
 }
 
 extension NSSize {
