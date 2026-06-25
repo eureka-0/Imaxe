@@ -145,7 +145,7 @@ struct ImageView: View {
         .lineLimit(1)
         .frame(
           minWidth: Constants.topBarPositionMinWidth,
-          maxWidth: Constants.topbarPositionMaxWidth,
+          maxWidth: Constants.topBarPositionMaxWidth,
         )
         .frame(height: Constants.topBarButtonHeight)
         .accessibilityLabel(

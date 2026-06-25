@@ -392,8 +392,8 @@ struct ImageScrollView: NSViewRepresentable {
         height: max(0, window.frame.height - contentSize.height),
       )
       let minimumContentSize = NSSize(
-        width: max(window.contentMinSize.width, Constants.minimumWindowWidth),
-        height: max(window.contentMinSize.height, Constants.minimumWindowHeight),
+        width: max(window.contentMinSize.width, Constants.minimumWindowContentWidth),
+        height: max(window.contentMinSize.height, Constants.minimumWindowContentHeight),
       )
       let maximumContentSize = NSSize(
         width: max(1, visibleFrame.width - frameContentDelta.width),

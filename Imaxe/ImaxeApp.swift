@@ -16,22 +16,18 @@ struct ImaxeApp: App {
     WindowGroup {
       ContentView()
         .applyAppearance(appearance)
+        .ignoresSafeArea()
         .frame(
-          minWidth: Constants.minimumWindowWidth,
-          minHeight: Constants.minimumWindowHeight,
+          minWidth: Constants.minimumWindowContentWidth,
+          minHeight: Constants.minimumWindowContentHeight,
         )
         .configureWindow { window in
           window.isMovableByWindowBackground = true
-          window.contentMinSize = NSSize(
-            width: Constants.minimumWindowWidth,
-            height: Constants.minimumWindowHeight,
-          )
         }
-        .ignoresSafeArea()
     }
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
-    .defaultSize(width: Constants.minimumWindowWidth, height: Constants.minimumWindowHeight)
+    .defaultSize(width: 680, height: 520)
     .restorationBehavior(.disabled)
     .commands {
       FileOperationCommands()

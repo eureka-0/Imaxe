@@ -19,7 +19,14 @@ final class ImageCanvasView: NSView {
     }
   }
 
-  var scale: CGFloat
+  var scale: CGFloat {
+    didSet {
+      if oldValue != scale, (oldValue - 1) * (scale - 1) <= 0 {
+        needsDisplay = true
+      }
+    }
+  }
+
   private var gifTimer: Timer?
   private var gifBitmapRep: NSBitmapImageRep?
   private var currentGIFFrame = 0

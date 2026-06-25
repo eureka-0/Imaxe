@@ -132,10 +132,14 @@ final class ImageSession {
         {
           let tempFileURL = tempDirectory.appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(imageType == .png ? "png" : "tiff")
-          do { try data.write(to: tempFileURL)
+          do {
+            try data.write(to: tempFileURL)
             loadImage(from: tempFileURL, failureTitle: "Failed to Load Image from Pasteboard")
           } catch {
-            print("Failed to write image data to temporary file: \(error.localizedDescription)")
+            alert = ImageAlert(
+              title: "Failed to Load Image from Pasteboard",
+              message: error.localizedDescription,
+            )
           }
         }
       default:
@@ -149,7 +153,7 @@ final class ImageSession {
     case let .success(url):
       loadImage(from: url, failureTitle: "Failed to Open Image")
     case let .failure(error):
-      print("Failed to open file: \(error.localizedDescription)")
+      alert = ImageAlert(title: "Failed to Open Image", message: error.localizedDescription)
     }
   }
 
