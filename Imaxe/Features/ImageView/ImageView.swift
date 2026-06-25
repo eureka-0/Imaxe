@@ -267,10 +267,7 @@ struct ImageView: View {
   }
 
   private func updateTopBarVisibility(in window: NSWindow? = nil) {
-    imageSession.setTopBarVisibility(
-      to: isTopBarHovering || isPopoverPresented || imageSession.isLoading,
-      in: window,
-    )
+    imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
   }
 }
 
