@@ -14,7 +14,7 @@ final class ImageCanvasView: NSView {
         stopGIFAnimation()
         currentGIFFrame = 0
       }
-      frame.size = loadedImage.displaySize
+      updateCanvasSize()
       needsDisplay = true
     }
   }
@@ -27,6 +27,7 @@ final class ImageCanvasView: NSView {
     }
   }
 
+  private var lastBackingScale: CGFloat = 2.0
   private var gifTimer: Timer?
   private var gifBitmapRep: NSBitmapImageRep?
   private var currentGIFFrame = 0
@@ -38,7 +39,8 @@ final class ImageCanvasView: NSView {
   init(loadedImage: LoadedImage, scale: CGFloat) {
     self.loadedImage = loadedImage
     self.scale = scale
-    super.init(frame: NSRect(origin: .zero, size: loadedImage.displaySize))
+    super.init(frame: NSRect(origin: .zero, size: loadedImage.pixelSize))
+    updateCanvasSize()
   }
 
   @available(*, unavailable)
@@ -57,7 +59,32 @@ final class ImageCanvasView: NSView {
 
     if window == nil {
       stopGIFAnimation()
+    } else {
+      updateCanvasSize()
     }
+  }
+
+  override func viewDidChangeBackingProperties() {
+    super.viewDidChangeBackingProperties()
+
+    let currentBackingScale = window?.backingScaleFactor ?? 2.0
+    if currentBackingScale != lastBackingScale {
+      lastBackingScale = currentBackingScale
+      updateCanvasSize()
+    }
+  }
+
+  /// Sizes the canvas so that at 100% magnification the image occupies exactly `pixelSize` backing
+  /// pixels — one image pixel maps to one screen backing pixel. `pixelSize` is the stable baseline;
+  /// it is converted from the backing store into this view's point coordinate space. Until the view
+  /// has a window (and therefore a backing scale) to convert against, the pixel size is used as-is.
+  private func updateCanvasSize() {
+    let pointSize = window == nil
+      ? loadedImage.pixelSize
+      : convertFromBacking(loadedImage.pixelSize)
+
+    guard pointSize.width > 0, pointSize.height > 0, frame.size != pointSize else { return }
+    frame.size = pointSize
   }
 
   override func draw(_ dirtyRect: NSRect) {
@@ -97,7 +124,7 @@ final class ImageCanvasView: NSView {
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
     loadedImage.image.draw(
       in: bounds,
-      from: NSRect(origin: .zero, size: loadedImage.image.size),
+      from: NSRect(origin: .zero, size: loadedImage.pointSize),
       operation: .copy,
       fraction: 1.0,
       respectFlipped: true,

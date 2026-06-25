@@ -8,13 +8,6 @@
 import Foundation
 import SwiftUI
 
-extension CGFloat {
-  func roundedDownToPixel(scale: CGFloat) -> CGFloat {
-    guard scale > 0 else { return self }
-    return floor(self * scale) / scale
-  }
-}
-
 extension ShapeStyle where Self == Color {
   static var windowBackground: Color {
     Color(nsColor: .windowBackgroundColor)
@@ -54,23 +47,6 @@ extension ShapeStyle where Self == Color {
 extension Comparable {
   func clamped(to range: ClosedRange<Self>) -> Self {
     Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
-  }
-}
-
-extension NSImage {
-  nonisolated var pixelSize: NSSize {
-    var representationSize = NSSize.zero
-
-    for representation in representations {
-      representationSize.width = max(representationSize.width, CGFloat(representation.pixelsWide))
-      representationSize.height = max(representationSize.height, CGFloat(representation.pixelsHigh))
-    }
-
-    if representationSize.width > 0, representationSize.height > 0 {
-      return representationSize
-    }
-
-    return size
   }
 }
 

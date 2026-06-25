@@ -73,21 +73,27 @@ nonisolated struct ImageInfo {
 
 nonisolated struct LoadedImage: @unchecked Sendable {
   let image: NSImage
-  let displaySize: NSSize
+  /// The image's true size in pixels, used for the 100% display baseline and metadata.
+  let pixelSize: NSSize
   let info: ImageInfo
+
+  /// The image's size in points (`NSImage`'s coordinate space), used when drawing.
+  var pointSize: NSSize {
+    image.size
+  }
 
   init(
     image: NSImage,
     sourceURL: URL,
-    displaySize: NSSize? = nil,
+    pixelSize: NSSize? = nil,
   ) {
     self.image = image
-    self.displaySize = Self.displaySize(for: image, preferredSize: displaySize)
+    self.pixelSize = Self.resolvePixelSize(for: image, preferred: pixelSize)
     image.cacheMode = .default
     info = ImageInfo(
       url: sourceURL,
-      pixelWidth: Int(self.displaySize.width),
-      pixelHeight: Int(self.displaySize.height),
+      pixelWidth: Int(self.pixelSize.width),
+      pixelHeight: Int(self.pixelSize.height),
     )
   }
 
@@ -95,14 +101,19 @@ nonisolated struct LoadedImage: @unchecked Sendable {
     NSWorkspace.shared.activateFileViewerSelecting([info.sourceURL])
   }
 
-  private static func displaySize(for image: NSImage, preferredSize: NSSize?) -> NSSize {
-    if let preferredSize, preferredSize.width > 0, preferredSize.height > 0 {
-      return preferredSize
+  private static func resolvePixelSize(for image: NSImage, preferred: NSSize?) -> NSSize {
+    if let preferred, preferred.width > 0, preferred.height > 0 {
+      return preferred
     }
 
-    let imageSize = image.pixelSize
-    if imageSize.width > 0, imageSize.height > 0 {
-      return imageSize
+    var pixelSize = NSSize.zero
+    for representation in image.representations {
+      pixelSize.width = max(pixelSize.width, CGFloat(representation.pixelsWide))
+      pixelSize.height = max(pixelSize.height, CGFloat(representation.pixelsHigh))
+    }
+
+    if pixelSize.width > 0, pixelSize.height > 0 {
+      return pixelSize
     }
 
     return image.size
@@ -304,16 +315,15 @@ actor ImageLoader {
 
     let documentSize = (try? String(contentsOf: url, encoding: .utf8))
       .map(SVGDocumentSize.init(svgString:))
-    let displaySize = documentSize?.bestSize
-      ?? sourceImage.pixelSize.validSize
+    let pixelSize = documentSize?.bestSize
       ?? sourceImage.size.validSize
       ?? NSSize(width: 1, height: 1)
 
-    guard let image = rasterizedSVGImage(from: sourceImage, displaySize: displaySize) else {
+    guard let image = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
       return nil
     }
 
-    return LoadedImage(image: image, sourceURL: url, displaySize: displaySize)
+    return LoadedImage(image: image, sourceURL: url, pixelSize: pixelSize)
   }
 
   private nonisolated static func loadBitmap(from url: URL) -> LoadedImage? {
@@ -323,10 +333,10 @@ actor ImageLoader {
 
   private nonisolated static func rasterizedSVGImage(
     from sourceImage: NSImage,
-    displaySize: NSSize,
+    pixelSize: NSSize,
   ) -> NSImage? {
-    let pixelsWide = max(1, Int(displaySize.width.rounded(.up)))
-    let pixelsHigh = max(1, Int(displaySize.height.rounded(.up)))
+    let pixelsWide = max(1, Int(pixelSize.width.rounded(.up)))
+    let pixelsHigh = max(1, Int(pixelSize.height.rounded(.up)))
 
     guard let bitmapRep = NSBitmapImageRep(
       bitmapDataPlanes: nil,
@@ -344,14 +354,14 @@ actor ImageLoader {
       let context = NSGraphicsContext(bitmapImageRep: bitmapRep)
     else { return nil }
 
-    bitmapRep.size = displaySize
-    sourceImage.size = displaySize
+    bitmapRep.size = pixelSize
+    sourceImage.size = pixelSize
 
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = context
     context.imageInterpolation = .high
 
-    let drawingRect = NSRect(origin: .zero, size: displaySize)
+    let drawingRect = NSRect(origin: .zero, size: pixelSize)
     NSColor.clear.setFill()
     drawingRect.fill()
     sourceImage.draw(
@@ -364,7 +374,7 @@ actor ImageLoader {
     )
     NSGraphicsContext.restoreGraphicsState()
 
-    let image = NSImage(size: displaySize)
+    let image = NSImage(size: pixelSize)
     image.addRepresentation(bitmapRep)
     return image
   }
@@ -377,16 +387,6 @@ actor ImageLoader {
 
   private func clearCache() {
     cache.removeAll()
-  }
-}
-
-private nonisolated extension NSRect {
-  var validRect: NSRect? {
-    !isNull && width > 0 && height > 0 ? self : nil
-  }
-
-  var validSize: NSSize? {
-    validRect?.size
   }
 }
 

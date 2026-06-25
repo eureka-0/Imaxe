@@ -408,17 +408,21 @@ struct ImageScrollView: NSViewRepresentable {
         width: imageSize.width * currentScale,
         height: imageSize.height * currentScale,
       )
-      let backingScale = window.backingScaleFactor
+      let targetViewportSize = backingAlignedSize(
+        NSSize(
+          width: min(targetImageDisplaySize.width, maxViewportSize.width),
+          height: min(targetImageDisplaySize.height, maxViewportSize.height),
+        ),
+        in: scrollView.contentView,
+      )
       let targetContentSize = NSSize(
         width: clampedDimension(
-          min(targetImageDisplaySize.width, maxViewportSize.width)
-            .roundedDownToPixel(scale: backingScale) + contentViewportDelta.width,
+          targetViewportSize.width + contentViewportDelta.width,
           minimum: minimumContentSize.width,
           maximum: maximumContentSize.width,
         ),
         height: clampedDimension(
-          min(targetImageDisplaySize.height, maxViewportSize.height)
-            .roundedDownToPixel(scale: backingScale) + contentViewportDelta.height,
+          targetViewportSize.height + contentViewportDelta.height,
           minimum: minimumContentSize.height,
           maximum: maximumContentSize.height,
         ),
@@ -474,6 +478,17 @@ struct ImageScrollView: NSViewRepresentable {
     ) -> CGFloat {
       guard maximum >= minimum else { return maximum }
       return value.clamped(to: minimum ... maximum)
+    }
+
+    /// Rounds a point size down so its edges land on whole backing pixels for the given view's
+    /// screen, without hardcoding a scale factor.
+    private func backingAlignedSize(_ size: NSSize, in view: NSView) -> NSSize {
+      let backingSize = view.convertToBacking(size)
+      let alignedBackingSize = NSSize(
+        width: backingSize.width.rounded(.down),
+        height: backingSize.height.rounded(.down),
+      )
+      return view.convertFromBacking(alignedBackingSize)
     }
 
     private func shouldApplyAlwaysFitToWindow(_ scrollView: NSScrollView) -> Bool {

@@ -18,9 +18,30 @@ struct ImaxeTests {
 
     let loadedImage = LoadedImage(image: image, sourceURL: url)
 
-    #expect(loadedImage.displaySize == NSSize(width: 10, height: 20))
+    #expect(loadedImage.pixelSize == NSSize(width: 10, height: 20))
+    #expect(loadedImage.pointSize == NSSize(width: 10, height: 20))
     #expect(loadedImage.info.pixelWidth == 10)
     #expect(loadedImage.info.pixelHeight == 20)
+  }
+
+  @Test func canvasOccupiesImagePixelSizeInBackingPixels() {
+    let image = bitmapImage()
+    let url = URL(fileURLWithPath: "/tmp/example.png")
+    let loadedImage = LoadedImage(image: image, sourceURL: url)
+
+    let canvas = ImageCanvasView(loadedImage: loadedImage, scale: 1.0)
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),
+      styleMask: [.titled],
+      backing: .buffered,
+      defer: false,
+    )
+    window.contentView?.addSubview(canvas)
+
+    // At 100% the canvas must occupy exactly the image's pixel size in backing pixels, regardless of
+    // the screen's backing scale factor.
+    let backingSize = canvas.convertToBacking(canvas.bounds.size)
+    #expect(backingSize.isApproximatelyEqual(to: loadedImage.pixelSize))
   }
 
   @Test func svgLoadedImageRasterizesToBitmapAndUsesViewBoxSize() async throws {
@@ -32,7 +53,7 @@ struct ImaxeTests {
     let loadedImage = try await ImageLoader.shared.load(from: url)
     let bitmapRep = try #require(loadedImage.image.representations.first as? NSBitmapImageRep)
 
-    #expect(loadedImage.displaySize == NSSize(width: 1280, height: 853))
+    #expect(loadedImage.pixelSize == NSSize(width: 1280, height: 853))
     #expect(loadedImage.info.pixelWidth == 1280)
     #expect(loadedImage.info.pixelHeight == 853)
     #expect(loadedImage.image.representations.count == 1)
@@ -60,7 +81,7 @@ struct ImaxeTests {
     let loadedImage = try await ImageLoader.shared.load(from: url)
     let bitmapRep = try #require(loadedImage.image.representations.first as? NSBitmapImageRep)
 
-    #expect(loadedImage.displaySize == NSSize(width: 4267, height: 4267))
+    #expect(loadedImage.pixelSize == NSSize(width: 4267, height: 4267))
     #expect(loadedImage.image.representations.count == 1)
     #expect(bitmapRep.pixelsWide == 4267)
     #expect(bitmapRep.pixelsHigh == 4267)
