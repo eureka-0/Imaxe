@@ -92,6 +92,26 @@ extension NSRect {
   }
 }
 
+extension NSScreen {
+  func getPPI() -> (width: CGFloat, height: CGFloat)? {
+    guard let displayID =
+      deviceDescription[NSDeviceDescriptionKey(rawValue: "NSScreenNumber")] as? CGDirectDisplayID
+    else {
+      return nil
+    }
+
+    let physicalSize = CGDisplayScreenSize(displayID)
+    let physicalSizeInInches = CGSize(
+      width: physicalSize.width / 25.4,
+      height: physicalSize.height / 25.4,
+    )
+
+    let ppiWidth = frame.width * backingScaleFactor / physicalSizeInInches.width
+    let ppiHeight = frame.height * backingScaleFactor / physicalSizeInInches.height
+    return (width: ppiWidth, height: ppiHeight)
+  }
+}
+
 extension NSSize {
   func isApproximatelyEqual(to other: NSSize) -> Bool {
     abs(width - other.width) < 1.0 && abs(height - other.height) < 1.0
@@ -103,5 +123,20 @@ extension NSWindow {
     standardWindowButton(.closeButton)?.isHidden = !showWindowButtons
     standardWindowButton(.miniaturizeButton)?.isHidden = !showWindowButtons
     standardWindowButton(.zoomButton)?.isHidden = !showWindowButtons
+  }
+
+  func convertFromBacking(_ size: CGSize) -> CGSize {
+    convertFromBacking(NSRect(origin: .zero, size: size)).size
+  }
+}
+
+extension UserDefaults {
+  @objc dynamic var imageActualSizeStrategy: String? {
+    string(forKey: AppSettings.Keys.imageActualSizeStrategy.rawValue)
+  }
+
+  var imageActualSizeStrategyValue: ImageActualSizeStrategy {
+    imageActualSizeStrategy.flatMap { ImageActualSizeStrategy(rawValue: $0) }
+      ?? AppSettings.Defaults.imageActualSizeStrategy
   }
 }

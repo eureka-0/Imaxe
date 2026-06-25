@@ -8,26 +8,47 @@
 import SwiftUI
 
 struct SettingsView: View {
-  @AppStorage(AppSettings.Keys.appearance.rawValue)
-  private var appearance: Appearance = AppSettings.Defaults.appearance
-
   var body: some View {
     TabView {
-      generalSettings
+      GeneralSettingsView()
         .tabItem { Label("General", systemImage: "gearshape") }
+
+      ImageSettingsView()
+        .tabItem { Label("Image", systemImage: "photo.on.rectangle") }
     }
     .scenePadding()
     .frame(width: 520)
   }
+}
 
-  var generalSettings: some View {
+struct GeneralSettingsView: View {
+  @AppStorage(AppSettings.Keys.appearance.rawValue)
+  private var appearance = AppSettings.Defaults.appearance
+
+  var body: some View {
     Form {
-      Picker("Appearance", selection: $appearance) {
+      Picker("Appearance:", selection: $appearance) {
         ForEach(Appearance.allCases) {
           Text($0.id).tag($0)
         }
       }
-      .pickerStyle(SegmentedPickerStyle())
+      .pickerStyle(.segmented)
+    }
+  }
+}
+
+struct ImageSettingsView: View {
+  @AppStorage(AppSettings.Keys.imageActualSizeStrategy.rawValue)
+  private var imageActualSizeStrategy = AppSettings.Defaults.imageActualSizeStrategy
+
+  var body: some View {
+    Form {
+      Picker("Define 100% zoom as:", selection: $imageActualSizeStrategy) {
+        ForEach(ImageActualSizeStrategy.allCases) {
+          Text($0.description).tag($0)
+        }
+      }
+      .pickerStyle(.inline)
     }
   }
 }

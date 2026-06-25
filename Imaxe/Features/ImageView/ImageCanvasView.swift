@@ -31,6 +31,11 @@ final class ImageCanvasView: NSView {
   private var gifTimer: Timer?
   private var gifBitmapRep: NSBitmapImageRep?
   private var currentGIFFrame = 0
+  private var userDefaultsObservation: NSKeyValueObservation?
+
+  private var imageActualSizeStrategy: ImageActualSizeStrategy {
+    UserDefaults.standard.imageActualSizeStrategyValue
+  }
 
   override var isFlipped: Bool {
     true
@@ -41,6 +46,7 @@ final class ImageCanvasView: NSView {
     self.scale = scale
     super.init(frame: NSRect(origin: .zero, size: loadedImage.pixelSize))
     updateCanvasSize()
+    setupObservation()
   }
 
   @available(*, unavailable)
@@ -48,7 +54,21 @@ final class ImageCanvasView: NSView {
     nil
   }
 
+  private func setupObservation() {
+    userDefaultsObservation = UserDefaults.standard.observe(
+      \.imageActualSizeStrategy, options: [.initial, .new],
+    ) { [weak self] _, _ in
+      guard let self else { return }
+
+      DispatchQueue.main.async {
+        self.updateCanvasSize()
+        self.needsDisplay = true
+      }
+    }
+  }
+
   deinit {
+    userDefaultsObservation?.invalidate()
     MainActor.assumeIsolated {
       gifTimer?.invalidate()
     }
@@ -74,17 +94,31 @@ final class ImageCanvasView: NSView {
     }
   }
 
-  /// Sizes the canvas so that at 100% magnification the image occupies exactly `pixelSize` backing
-  /// pixels — one image pixel maps to one screen backing pixel. `pixelSize` is the stable baseline;
-  /// it is converted from the backing store into this view's point coordinate space. Until the view
-  /// has a window (and therefore a backing scale) to convert against, the pixel size is used as-is.
+  /// Updates the canvas size based on the current image actual size strategy and the loaded image's
+  /// properties.
   private func updateCanvasSize() {
-    let pointSize = window == nil
-      ? loadedImage.pixelSize
-      : convertFromBacking(loadedImage.pixelSize)
-
-    guard pointSize.width > 0, pointSize.height > 0, frame.size != pointSize else { return }
-    frame.size = pointSize
+    switch imageActualSizeStrategy {
+    case .pixelSize:
+      let pointSize = window?.convertFromBacking(loadedImage.pixelSize) ?? loadedImage.pixelSize
+      guard pointSize.width > 0, pointSize.height > 0, frame.size != pointSize else { return }
+      frame.size = pointSize
+    case .pointSize:
+      guard frame.size != loadedImage.pointSize else { return }
+      frame.size = loadedImage.pixelSize
+    case .printSize:
+      let inchesSize = CGSize(
+        width: loadedImage.pixelSize.width / CGFloat(loadedImage.info.DPI.width),
+        height: loadedImage.pixelSize.height / CGFloat(loadedImage.info.DPI.height),
+      )
+      let ppi = window?.screen?.getPPI() ?? Constants.fallbackScreenPPI
+      let screenPixelSize = CGSize(
+        width: inchesSize.width * ppi.width,
+        height: inchesSize.height * ppi.height,
+      )
+      let pointSize = window?.convertFromBacking(screenPixelSize) ?? screenPixelSize
+      guard pointSize.width > 0, pointSize.height > 0, frame.size != pointSize else { return }
+      frame.size = pointSize
+    }
   }
 
   override func draw(_ dirtyRect: NSRect) {

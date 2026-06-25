@@ -17,17 +17,17 @@ nonisolated struct ImageInfo {
   let type: UTType?
   let pixelWidth: Int
   let pixelHeight: Int
-  let DPI: (Int, Int)
+  let DPI: (width: Int, height: Int)
 
   var fileSizeDescription: String {
     ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
   }
 
   var DPIDescription: String {
-    if DPI.0 == DPI.1 {
-      "\(DPI.0) Pixels/Inch"
+    if DPI.width == DPI.height {
+      "\(DPI.width) Pixels/Inch"
     } else {
-      "\(DPI.0) x \(DPI.1) Pixels/Inch"
+      "\(DPI.width) x \(DPI.height) Pixels/Inch"
     }
   }
 

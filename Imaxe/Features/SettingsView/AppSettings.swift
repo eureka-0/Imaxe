@@ -26,9 +26,28 @@ enum Appearance: String, CaseIterable, Identifiable {
   }
 }
 
+enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
+  case pixelSize = "Pixel Size"
+  case pointSize = "Point Size"
+  case printSize = "Print Size"
+
+  var id: String {
+    rawValue
+  }
+
+  var description: String {
+    switch self {
+    case .pixelSize: "1 image pixel corresponds to 1 screen pixel"
+    case .pointSize: "1 image pixel corresponds to 1 screen point"
+    case .printSize: "Actual print size based on image DPI and screen PPI"
+    }
+  }
+}
+
 enum AppSettings {
   enum Keys: String, CaseIterable, Identifiable {
     case appearance
+    case imageActualSizeStrategy
 
     var id: String {
       rawValue
@@ -37,5 +56,6 @@ enum AppSettings {
 
   enum Defaults {
     static let appearance: Appearance = .system
+    static let imageActualSizeStrategy: ImageActualSizeStrategy = .pixelSize
   }
 }

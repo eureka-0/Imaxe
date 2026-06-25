@@ -27,4 +27,6 @@ enum Constants {
   static let imageScaleRange: ClosedRange<CGFloat> = 0.05 ... 16.0
   static let commonScales: [CGFloat] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
   static let imageZoomStep: CGFloat = 1.25
+
+  static let fallbackScreenPPI: (CGFloat, CGFloat) = (254, 254)
 }
