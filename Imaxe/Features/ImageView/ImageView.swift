@@ -460,13 +460,13 @@ private struct ImageInfoRow: View {
   var body: some View {
     HStack(alignment: .firstTextBaseline, spacing: 10) {
       Text(title)
-        .font(.caption.pointSize(12))
+        .font(.system(size: 12))
         .foregroundStyle(.secondary)
         .textSelection(.enabled)
         .frame(maxWidth: 81, alignment: .trailing)
 
       Text(value)
-        .font(.caption.pointSize(12))
+        .font(.system(size: 12))
         .foregroundStyle(.primary)
         .lineLimit(3)
         .truncationMode(.middle)

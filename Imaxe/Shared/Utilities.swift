@@ -82,6 +82,13 @@ extension NSWindow {
     frame.height - contentLayoutRect.height
   }
 
+  func resizeToDefaultSize() {
+    setContentSize(NSSize(
+      width: Constants.defaultWindowWidth,
+      height: Constants.defaultWindowHeight - titlebarHeight,
+    ))
+  }
+
   func setStandardButtonsVisibility(to showWindowButtons: Bool) {
     standardWindowButton(.closeButton)?.isHidden = !showWindowButtons
     standardWindowButton(.miniaturizeButton)?.isHidden = !showWindowButtons
