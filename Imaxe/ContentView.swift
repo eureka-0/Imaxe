@@ -15,6 +15,9 @@ struct ContentView: View {
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
   private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
 
+  @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue)
+  private var enableLoopBrowsing = AppSettings.Defaults.enableLoopBrowsing
+
   var body: some View {
     Group {
       if imageSession.currentImage != nil || imageSession.isLoading {
@@ -34,9 +37,13 @@ struct ContentView: View {
     .focusedSceneValue(imageSession)
     .onAppear {
       imageSession.topBarHideDelay = topBarHideDelay
+      imageSession.enableLoopBrowsing = enableLoopBrowsing
     }
     .onChange(of: topBarHideDelay) { _, newValue in
       imageSession.topBarHideDelay = newValue
+    }
+    .onChange(of: enableLoopBrowsing) { _, newValue in
+      imageSession.enableLoopBrowsing = newValue
     }
     .fileImporter(
       isPresented: $imageSession.isImporterPresented,

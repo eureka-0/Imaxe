@@ -180,7 +180,6 @@ struct ImageView: View {
     Button(action: imageSession.fitToWindow) {
       topBarIconLabel("Fit to Window", systemImage: "arrow.up.left.and.arrow.down.right.rectangle")
     }
-    .keyboardShortcut("f", modifiers: .command)
     .disabled(imageSession.isLoading)
     .help(Text("Fit the image to the window"))
   }
@@ -263,7 +262,6 @@ struct ImageView: View {
     Button(action: imageSession.toggleWindowPinning) {
       topBarIconLabel("Pin Window", systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin")
     }
-    .keyboardShortcut("p", modifiers: .command)
     .help(Text("Toggle window pinning"))
   }
 

@@ -28,6 +28,9 @@ struct GeneralSettingsView: View {
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
   private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
 
+  @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue)
+  private var enableLoopBrowsing = AppSettings.Defaults.enableLoopBrowsing
+
   var body: some View {
     Form {
       Picker("Appearance:", selection: $appearance) {
@@ -47,6 +50,9 @@ struct GeneralSettingsView: View {
         }
       }
       .pickerStyle(.menu)
+
+      Toggle("Enable loop browsing:", isOn: $enableLoopBrowsing)
+        .toggleStyle(SettingsToggleStyle())
     }
   }
 }
@@ -164,5 +170,18 @@ struct ImageSettingsView: View {
 
   private func sanitizedHeight(_ value: Double) -> Double {
     value.clamped(to: Constants.minimumWindowContentHeight ... 10000)
+  }
+}
+
+private struct SettingsToggleStyle: ToggleStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    LabeledContent {
+      Toggle("", isOn: configuration.$isOn)
+        .labelsHidden()
+        .toggleStyle(.switch)
+        .controlSize(.small)
+    } label: {
+      configuration.label
+    }
   }
 }

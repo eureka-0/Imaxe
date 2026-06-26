@@ -22,6 +22,8 @@ enum Constants {
 
   static let minimumWindowContentWidth: CGFloat = 520
   static let minimumWindowContentHeight: CGFloat = 360
+  static let defaultWindowWidth: CGFloat = 680
+  static let defaultWindowHeight: CGFloat = 520
 
   static let imageScaleRange: ClosedRange<CGFloat> = 0.05 ... 20.0
   static let scaleUpdateTolerance: CGFloat = 0.0001

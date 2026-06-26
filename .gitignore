@@ -11,3 +11,6 @@ build/
 
 ## Affinity lock files
 *.af~lock~
+
+## Built applications
+Builds/

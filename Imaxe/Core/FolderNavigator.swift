@@ -16,6 +16,8 @@ struct FolderNavigator {
     }
   }
 
+  var enableLoopBrowsing: Bool
+
   private(set) var imageURLs: [URL]
 
   var rootURL: URL {
@@ -36,20 +38,21 @@ struct FolderNavigator {
 
   var canNavigateToPrevious: Bool {
     if let currentIndex {
-      return currentIndex > 0
+      return currentIndex > 0 || enableLoopBrowsing
     }
     return false
   }
 
   var canNavigateToNext: Bool {
     if let currentIndex {
-      return currentIndex < imageURLs.count - 1
+      return currentIndex < imageURLs.count - 1 || enableLoopBrowsing
     }
     return false
   }
 
-  init(for url: URL) {
+  init(for url: URL, enableLoopBrowsing: Bool) {
     currentImageURL = url
+    self.enableLoopBrowsing = enableLoopBrowsing
     imageURLs = []
     reload()
   }
@@ -78,14 +81,28 @@ struct FolderNavigator {
   }
 
   mutating func moveToPrevious() -> Bool {
-    guard let currentIndex, currentIndex > 0 else { return false }
-    currentImageURL = imageURLs[currentIndex - 1]
-    return true
+    guard let currentIndex else { return false }
+
+    if currentIndex == 0, enableLoopBrowsing {
+      currentImageURL = imageURLs.last ?? currentImageURL
+      return true
+    } else if currentIndex > 0 {
+      currentImageURL = imageURLs[currentIndex - 1]
+      return true
+    }
+    return false
   }
 
   mutating func moveToNext() -> Bool {
-    guard let currentIndex, currentIndex < imageURLs.count - 1 else { return false }
-    currentImageURL = imageURLs[currentIndex + 1]
-    return true
+    guard let currentIndex else { return false }
+
+    if currentIndex == imageURLs.count - 1, enableLoopBrowsing {
+      currentImageURL = imageURLs.first ?? currentImageURL
+      return true
+    } else if currentIndex < imageURLs.count - 1 {
+      currentImageURL = imageURLs[currentIndex + 1]
+      return true
+    }
+    return false
   }
 }

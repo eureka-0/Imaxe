@@ -22,16 +22,28 @@ final class ImageSession {
   private(set) var showTopBar = false
   private(set) var folderNavigator: FolderNavigator?
 
-  var alert: ImageAlert?
   var topBarHideDelay: TimeInterval = AppSettings.Defaults.topBarHideDelay
+
+  var enableLoopBrowsing: Bool = AppSettings.Defaults.enableLoopBrowsing {
+    didSet {
+      folderNavigator?.enableLoopBrowsing = enableLoopBrowsing
+    }
+  }
+
+  var alert: ImageAlert?
   @ObservationIgnored private weak var owningWindow: NSWindow?
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadRequestID = 0
 
   init(loadedImage: LoadedImage? = nil) {
-    currentImage = loadedImage
-    folderNavigator = loadedImage.map { FolderNavigator(for: $0.info.sourceURL) }
+    if let loadedImage {
+      currentImage = loadedImage
+      folderNavigator = FolderNavigator(
+        for: loadedImage.info.sourceURL,
+        enableLoopBrowsing: enableLoopBrowsing,
+      )
+    }
   }
 
   deinit {
@@ -194,7 +206,7 @@ final class ImageSession {
 
     isLoading = true
     loadingImageInfo = ImageInfo(url: url)
-    folderNavigator = FolderNavigator(for: url)
+    folderNavigator = FolderNavigator(for: url, enableLoopBrowsing: enableLoopBrowsing)
     currentImage = nil
 
     imageLoadTask = Task { @MainActor [weak self] in

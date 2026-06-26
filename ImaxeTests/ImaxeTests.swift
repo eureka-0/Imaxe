@@ -5,14 +5,13 @@
 //  Created by lxlong on 2026/6/14.
 //
 
-import Testing
-@testable import Imaxe
 import AppKit
+@testable import Imaxe
+import Testing
 
 @MainActor
 struct ImaxeTests {
-
-  @Test func bitmapLoadedImageUsesPixelSize() {
+  @Test func `bitmap loaded image uses pixel size`() {
     let image = bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
 
@@ -24,7 +23,7 @@ struct ImaxeTests {
     #expect(loadedImage.info.pixelHeight == 20)
   }
 
-  @Test func canvasOccupiesImagePixelSizeInBackingPixels() {
+  @Test func `canvas occupies image pixel size in backing pixels`() {
     let image = bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
     let loadedImage = LoadedImage(image: image, sourceURL: url)
@@ -38,13 +37,13 @@ struct ImaxeTests {
     )
     window.contentView?.addSubview(canvas)
 
-    // At 100% the canvas must occupy exactly the image's pixel size in backing pixels, regardless of
-    // the screen's backing scale factor.
+    // At 100% the canvas must occupy exactly the image's pixel size in backing pixels, regardless
+    // of the screen's backing scale factor.
     let backingSize = canvas.convertToBacking(canvas.bounds.size)
     #expect(backingSize.isApproximatelyEqual(to: loadedImage.pixelSize))
   }
 
-  @Test func svgLoadedImageRasterizesToBitmapAndUsesViewBoxSize() async throws {
+  @Test func `svg loaded image rasterizes to bitmap and uses view box size`() async throws {
     let url = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
@@ -61,7 +60,7 @@ struct ImaxeTests {
     #expect(bitmapRep.pixelsHigh == 853)
   }
 
-  @Test func complexSVGRasterizesToBitmap() async throws {
+  @Test func `complex SVG rasterizes to bitmap`() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-svg-with-paint-server.svg")
     let svg = """
