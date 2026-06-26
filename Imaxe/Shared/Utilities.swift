@@ -5,8 +5,23 @@
 //  Created by lxlong on 2026/6/18.
 //
 
+import AppKit
 import Foundation
 import SwiftUI
+
+struct WindowViewportSizingContext {
+  let screen: NSScreen?
+  let visibleFrame: NSRect
+  let viewportContentDelta: NSSize
+  let minimumContentSize: NSSize
+  let maximumContentSize: NSSize
+  let maxViewportSize: NSSize
+}
+
+struct WindowViewportResizeTarget {
+  let frame: NSRect
+  let viewportSize: NSSize
+}
 
 extension ShapeStyle where Self == Color {
   static var windowBackground: Color {
@@ -118,6 +133,30 @@ extension NSSize {
   }
 }
 
+extension NSView {
+  func backingAlignedSize(
+    _ size: NSSize, roundingRule: FloatingPointRoundingRule = .down,
+  ) -> NSSize {
+    let backingSize = convertToBacking(size)
+    let alignedBackingSize = NSSize(
+      width: backingSize.width.rounded(roundingRule),
+      height: backingSize.height.rounded(roundingRule),
+    )
+    return convertFromBacking(alignedBackingSize)
+  }
+
+  func backingAlignedPoint(
+    _ point: NSPoint, roundingRule: FloatingPointRoundingRule = .toNearestOrAwayFromZero,
+  ) -> NSPoint {
+    let backingPoint = convertToBacking(point)
+    let alignedBackingPoint = NSPoint(
+      x: backingPoint.x.rounded(roundingRule),
+      y: backingPoint.y.rounded(roundingRule),
+    )
+    return convertFromBacking(alignedBackingPoint)
+  }
+}
+
 extension NSWindow {
   func setStandardButtonsVisibility(to showWindowButtons: Bool) {
     standardWindowButton(.closeButton)?.isHidden = !showWindowButtons
@@ -127,6 +166,138 @@ extension NSWindow {
 
   func convertFromBacking(_ size: CGSize) -> CGSize {
     convertFromBacking(NSRect(origin: .zero, size: size)).size
+  }
+
+  func viewportResizeTarget(
+    forViewportSize viewportSize: NSSize,
+    in sizingContext: WindowViewportSizingContext,
+    aligningViewportIn view: NSView,
+  ) -> WindowViewportResizeTarget {
+    let targetViewportSize = view.backingAlignedSize(
+      NSSize(width: max(1, viewportSize.width), height: max(1, viewportSize.height)),
+    )
+    let targetContentSize = contentSize(
+      forViewportSize: targetViewportSize,
+      in: sizingContext,
+    )
+    let effectiveViewportSize = NSSize(
+      width: max(1, targetContentSize.width - sizingContext.viewportContentDelta.width),
+      height: max(1, targetContentSize.height - sizingContext.viewportContentDelta.height),
+    )
+    let targetFrame = centeredFrame(forContentSize: targetContentSize)
+    let constrainedFrame = constrainedBackingAlignedFrame(targetFrame, in: sizingContext)
+    return WindowViewportResizeTarget(frame: constrainedFrame, viewportSize: effectiveViewportSize)
+  }
+
+  func contentSize(
+    forViewportSize viewportSize: NSSize,
+    in sizingContext: WindowViewportSizingContext,
+  ) -> NSSize {
+    NSSize(
+      width: Self.clampedDimension(
+        viewportSize.width + sizingContext.viewportContentDelta.width,
+        minimum: sizingContext.minimumContentSize.width,
+        maximum: sizingContext.maximumContentSize.width,
+      ),
+      height: Self.clampedDimension(
+        viewportSize.height + sizingContext.viewportContentDelta.height,
+        minimum: sizingContext.minimumContentSize.height,
+        maximum: sizingContext.maximumContentSize.height,
+      ),
+    )
+  }
+
+  func centeredFrame(forContentSize contentSize: NSSize) -> NSRect {
+    let frameSize = frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
+    return NSRect(
+      x: frame.midX - frameSize.width / 2.0,
+      y: frame.midY - frameSize.height / 2.0,
+      width: frameSize.width,
+      height: frameSize.height,
+    )
+  }
+
+  func constrainedBackingAlignedFrame(
+    _ frame: NSRect,
+    in sizingContext: WindowViewportSizingContext,
+  ) -> NSRect {
+    let constrainedFrame = constrainFrameRect(
+      frame.positioned(within: sizingContext.visibleFrame),
+      to: sizingContext.screen,
+    )
+    let backingAlignedFrame = backingAlignedScreenFrame(
+      constrainedFrame,
+      screen: sizingContext.screen,
+    )
+    return constrainFrameRect(
+      backingAlignedFrame.positioned(within: sizingContext.visibleFrame),
+      to: sizingContext.screen,
+    )
+  }
+
+  @discardableResult func correctFrameToMatchViewportIfNeeded(
+    _ desiredViewportSize: NSSize,
+    actualViewportSize: NSSize,
+    sizingContext: WindowViewportSizingContext,
+    aligningViewportIn view: NSView,
+  ) -> Bool {
+    let desiredBackingSize = view.convertToBacking(desiredViewportSize)
+    let actualBackingSize = view.convertToBacking(actualViewportSize)
+    let overageInBackingPixels = NSSize(
+      width: actualBackingSize.width - desiredBackingSize.width,
+      height: actualBackingSize.height - desiredBackingSize.height,
+    )
+    let maxOverage = max(overageInBackingPixels.width, overageInBackingPixels.height)
+
+    guard maxOverage > 0.25, maxOverage <= 1.25 else { return false }
+
+    let correctedTarget = viewportResizeTarget(
+      forViewportSize: desiredViewportSize,
+      in: sizingContext,
+      aligningViewportIn: view,
+    )
+    guard !frame.isApproximatelyEqual(to: correctedTarget.frame) else { return false }
+
+    setFrame(correctedTarget.frame, display: true)
+    return true
+  }
+
+  private func backingAlignedScreenFrame(_ frame: NSRect, screen: NSScreen?) -> NSRect {
+    if let screen {
+      return screen.backingAlignedRect(
+        frame,
+        options: [
+          .alignMinXNearest,
+          .alignMinYNearest,
+          .alignWidthNearest,
+          .alignHeightNearest,
+        ],
+      )
+    }
+
+    let scale = max(1, backingScaleFactor)
+    return NSRect(
+      x: (frame.origin.x * scale).rounded() / scale,
+      y: (frame.origin.y * scale).rounded() / scale,
+      width: max(1 / scale, (frame.width * scale).rounded() / scale),
+      height: max(1 / scale, (frame.height * scale).rounded() / scale),
+    )
+  }
+
+  private static func clampedDimension(
+    _ value: CGFloat, minimum: CGFloat, maximum: CGFloat,
+  ) -> CGFloat {
+    guard maximum >= minimum else { return maximum }
+    return value.clamped(to: minimum ... maximum)
+  }
+}
+
+extension NSRect {
+  func isApproximatelyEqual(to other: NSRect) -> Bool {
+    abs(origin.x - other.origin.x) < 0.5
+      && abs(origin.y - other.origin.y) < 0.5
+      && abs(width - other.width) < 0.5
+      && abs(height - other.height) < 0.5
   }
 }
 

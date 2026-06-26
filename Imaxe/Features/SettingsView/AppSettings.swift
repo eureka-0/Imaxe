@@ -9,12 +9,18 @@ import Foundation
 import SwiftUI
 
 enum Appearance: String, CaseIterable, Identifiable {
-  case system = "System"
-  case light = "Light"
-  case dark = "Dark"
+  case system, light, dark
 
   var id: String {
     rawValue
+  }
+
+  var description: LocalizedStringKey {
+    switch self {
+    case .system: "System"
+    case .light: "Light"
+    case .dark: "Dark"
+    }
   }
 
   var colorScheme: ColorScheme? {
@@ -27,15 +33,13 @@ enum Appearance: String, CaseIterable, Identifiable {
 }
 
 enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
-  case pixelSize = "Pixel Size"
-  case pointSize = "Point Size"
-  case printSize = "Print Size"
+  case pixelSize, pointSize, printSize
 
   var id: String {
     rawValue
   }
 
-  var description: String {
+  var description: LocalizedStringKey {
     switch self {
     case .pixelSize: "1 image pixel corresponds to 1 screen pixel"
     case .pointSize: "1 image pixel corresponds to 1 screen point"
@@ -44,10 +48,47 @@ enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
   }
 }
 
+enum LoadedImageWindowSizeMode: String, CaseIterable, Identifiable {
+  case actualSizeLimitedToScreen, scaleToFitScreen, fillScreen, actualSize, fixedSize
+
+  var id: String {
+    rawValue
+  }
+
+  var description: LocalizedStringKey {
+    switch self {
+    case .actualSizeLimitedToScreen: "Actual size (limited to screen)"
+    case .scaleToFitScreen: "Scale to fit screen"
+    case .fillScreen: "Fill screen"
+    case .actualSize: "Actual size"
+    case .fixedSize: "Fixed size"
+    }
+  }
+}
+
+enum LoadedImageWindowSizeUnit: String, CaseIterable, Identifiable {
+  case points, pixels
+
+  var id: String {
+    rawValue
+  }
+
+  var description: LocalizedStringKey {
+    switch self {
+    case .points: "Points"
+    case .pixels: "Pixels"
+    }
+  }
+}
+
 enum AppSettings {
   enum Keys: String, CaseIterable, Identifiable {
     case appearance
     case imageActualSizeStrategy
+    case loadedImageWindowSizeMode
+    case fixedLoadedImageWindowWidth
+    case fixedLoadedImageWindowHeight
+    case fixedLoadedImageWindowSizeUnit
 
     var id: String {
       rawValue
@@ -57,5 +98,9 @@ enum AppSettings {
   enum Defaults {
     static let appearance: Appearance = .system
     static let imageActualSizeStrategy: ImageActualSizeStrategy = .pixelSize
+    static let loadedImageWindowSizeMode: LoadedImageWindowSizeMode = .actualSizeLimitedToScreen
+    static let fixedLoadedImageWindowWidth = 680.0
+    static let fixedLoadedImageWindowHeight = 520.0
+    static let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit = .points
   }
 }

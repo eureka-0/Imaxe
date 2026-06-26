@@ -16,6 +16,7 @@ final class ImageSession {
   var imageScale: CGFloat = 1.0
   private(set) var fitToWindowRequest = 0
   private(set) var fitWindowToImageRequest = 0
+  private(set) var applyLoadedImageWindowSizeRequest = 0
   private(set) var isWindowPinned = false
   var alwaysFitToWindow = true
   private(set) var showTopBar = false
@@ -86,6 +87,12 @@ final class ImageSession {
   func fitWindowToImage() {
     DispatchQueue.main.async {
       self.fitWindowToImageRequest += 1
+    }
+  }
+
+  func applyLoadedImageWindowSize() {
+    DispatchQueue.main.async {
+      self.applyLoadedImageWindowSizeRequest += 1
     }
   }
 
@@ -198,10 +205,10 @@ final class ImageSession {
       do {
         let loadedImage = try await ImageLoader.shared.load(from: url)
         loadingImageInfo = nil
-        currentImage = loadedImage
         imageScale = 1.0
-        alwaysFitToWindow = true
-        fitToWindow()
+        alwaysFitToWindow = false
+        applyLoadedImageWindowSizeRequest += 1
+        currentImage = loadedImage
       } catch {
         loadingImageInfo = nil
         currentImage = previousImage

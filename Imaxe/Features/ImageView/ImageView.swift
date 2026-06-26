@@ -16,12 +16,28 @@ struct ImageView: View {
   @State private var isScalePickerPresented = false
   @State private var customScaleText = ""
 
+  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue)
+  private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
+
+  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue)
+  private var fixedLoadedImageWindowWidth = AppSettings.Defaults.fixedLoadedImageWindowWidth
+
+  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue)
+  private var fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
+
+  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
+  private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+
   private var isPopoverPresented: Bool {
     isImageInfoPresented || isScalePickerPresented
   }
 
   private var displayedImageInfo: ImageInfo? {
     imageSession.loadingImageInfo ?? imageSession.currentImage?.info
+  }
+
+  private var fixedLoadedImageWindowSize: NSSize {
+    NSSize(width: fixedLoadedImageWindowWidth, height: fixedLoadedImageWindowHeight)
   }
 
   var body: some View {
@@ -47,11 +63,6 @@ struct ImageView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .onAppear {
-      DispatchQueue.main.async {
-        imageSession.fitToWindow()
-      }
-    }
     .alert(item: $imageSession.alert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
     }
@@ -70,6 +81,10 @@ struct ImageView: View {
     } else if let currentImage = imageSession.currentImage {
       ImageScrollView(
         loadedImage: currentImage,
+        loadedImageWindowSizeRequest: imageSession.applyLoadedImageWindowSizeRequest,
+        loadedImageWindowSizeMode: loadedImageWindowSizeMode,
+        fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
+        fixedLoadedImageWindowSizeUnit: fixedLoadedImageWindowSizeUnit,
         fitToWindowRequest: imageSession.fitToWindowRequest,
         fitWindowToImageRequest: imageSession.fitWindowToImageRequest,
         scale: $imageSession.imageScale,
@@ -375,7 +390,7 @@ private struct ScalePickerPopover: View {
   }
 
   private func scalePresetButton(for scale: CGFloat) -> some View {
-    let isSelected = abs(currentScale - scale) < 0.005
+    let isSelected = abs(currentScale - scale) < 0.001
 
     return Button {
       onSelectScale(scale)
