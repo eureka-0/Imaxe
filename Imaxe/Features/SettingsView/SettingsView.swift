@@ -25,6 +25,9 @@ struct GeneralSettingsView: View {
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance = AppSettings.Defaults.appearance
 
+  @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
+  private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
+
   var body: some View {
     Form {
       Picker("Appearance:", selection: $appearance) {
@@ -33,6 +36,17 @@ struct GeneralSettingsView: View {
         }
       }
       .pickerStyle(.segmented)
+
+      Picker("Top bar hide delay:", selection: $topBarHideDelay) {
+        ForEach([0, 0.5, 1.0, 1.5, 2.0, 3.0, 5.0, 10.0], id: \.self) { delay in
+          if delay == 1 {
+            Text("\(delay, specifier: "%.1f") second").tag(delay)
+          } else {
+            Text("\(delay, specifier: "%.1f") seconds").tag(delay)
+          }
+        }
+      }
+      .pickerStyle(.menu)
     }
   }
 }

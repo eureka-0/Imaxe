@@ -12,6 +12,9 @@ struct ContentView: View {
   @State private var imageSession = ImageSession()
   @State private var isTargetedForDrop = false
 
+  @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
+  private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
+
   var body: some View {
     Group {
       if imageSession.currentImage != nil || imageSession.isLoading {
@@ -29,6 +32,12 @@ struct ContentView: View {
         ),
     )
     .focusedSceneValue(imageSession)
+    .onAppear {
+      imageSession.topBarHideDelay = topBarHideDelay
+    }
+    .onChange(of: topBarHideDelay) { _, newValue in
+      imageSession.topBarHideDelay = newValue
+    }
     .fileImporter(
       isPresented: $imageSession.isImporterPresented,
       allowedContentTypes: [.image],

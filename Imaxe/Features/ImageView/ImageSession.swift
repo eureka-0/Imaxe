@@ -23,6 +23,7 @@ final class ImageSession {
   private(set) var folderNavigator: FolderNavigator?
 
   var alert: ImageAlert?
+  var topBarHideDelay: TimeInterval = AppSettings.Defaults.topBarHideDelay
   @ObservationIgnored private weak var owningWindow: NSWindow?
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
@@ -47,10 +48,11 @@ final class ImageSession {
 
     if !isVisible {
       topBarHideTask = Task { @MainActor [weak self] in
-        try? await Task.sleep(for: .seconds(Constants.topBarHideDelay))
-        guard !Task.isCancelled else { return }
+        guard let self else { return }
 
-        self?.applyTopBarVisibility(false)
+        try? await Task.sleep(for: .seconds(topBarHideDelay))
+        guard !Task.isCancelled else { return }
+        applyTopBarVisibility(false)
       }
       return
     }

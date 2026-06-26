@@ -89,6 +89,7 @@ enum AppSettings {
     case fixedLoadedImageWindowWidth
     case fixedLoadedImageWindowHeight
     case fixedLoadedImageWindowSizeUnit
+    case topBarHideDelay
 
     var id: String {
       rawValue
@@ -102,6 +103,7 @@ enum AppSettings {
     static let fixedLoadedImageWindowWidth = 680.0
     static let fixedLoadedImageWindowHeight = 520.0
     static let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit = .points
+    static let topBarHideDelay = 1.5
 
     static var fixedLoadedImageWindowSize: NSSize {
       NSSize(
