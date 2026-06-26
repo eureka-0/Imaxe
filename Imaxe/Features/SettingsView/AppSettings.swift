@@ -102,5 +102,12 @@ enum AppSettings {
     static let fixedLoadedImageWindowWidth = 680.0
     static let fixedLoadedImageWindowHeight = 520.0
     static let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit = .points
+
+    static var fixedLoadedImageWindowSize: NSSize {
+      NSSize(
+        width: fixedLoadedImageWindowWidth,
+        height: fixedLoadedImageWindowHeight,
+      )
+    }
   }
 }

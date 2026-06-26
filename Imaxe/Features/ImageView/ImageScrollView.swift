@@ -19,14 +19,12 @@ struct ImageScrollView: NSViewRepresentable {
   @Binding var scale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
-  private let scaleUpdateTolerance: CGFloat = 0.000_1
-
   func onScaleChange(_ newScale: CGFloat) {
     guard newScale.isFinite else { return }
 
     let clampedScale = newScale.clamped(to: Constants.imageScaleRange)
     DispatchQueue.main.async {
-      guard abs(scale - clampedScale) > scaleUpdateTolerance else { return }
+      guard abs(scale - clampedScale) > Constants.scaleUpdateTolerance else { return }
       scale = clampedScale
     }
   }
@@ -132,7 +130,7 @@ struct ImageScrollView: NSViewRepresentable {
 
     if !context.coordinator.isLiveMagnifying,
        !context.coordinator.alwaysFitToWindow, !context.coordinator.hasPendingRequests,
-       abs(scrollView.magnification - clampedScale) > scaleUpdateTolerance
+       abs(scrollView.magnification - clampedScale) > Constants.scaleUpdateTolerance
     {
       scrollView.magnification = clampedScale
     }
@@ -209,26 +207,16 @@ struct ImageScrollView: NSViewRepresentable {
     }
   }
 
+  /// A coordinator class that manages the state and behavior of the `ImageScrollView`.
   final class Coordinator {
     var onScaleChange: (CGFloat) -> Void
     var onAlwaysFitToWindowChange: (Bool) -> Void
     var alwaysFitToWindow = false
 
-    var hasPendingRequests: Bool {
-      pendingLoadedImageWindowSizeRequest != nil
-        || pendingFitToWindowRequest != nil
-        || pendingFitWindowToImageRequest != nil
-    }
-
     private(set) var isLiveMagnifying = false
-
     private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
-    private var fixedLoadedImageWindowSize = NSSize(
-      width: AppSettings.Defaults.fixedLoadedImageWindowWidth,
-      height: AppSettings.Defaults.fixedLoadedImageWindowHeight,
-    )
-    private var fixedLoadedImageWindowSizeUnit =
-      AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+    private var fixedLoadedImageWindowSize = AppSettings.Defaults.fixedLoadedImageWindowSize
+    private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
     private var imageIdentifier: ObjectIdentifier?
     private var latestFitToWindowRequest = 0
     private var pendingLoadedImageWindowSizeRequest: Int?
@@ -246,10 +234,10 @@ struct ImageScrollView: NSViewRepresentable {
     private var willStartLiveMagnifyObserver: NSObjectProtocol?
     private var didEndLiveMagnifyObserver: NSObjectProtocol?
 
-    private struct LoadedImageWindowSizeTarget {
-      let frame: NSRect
-      let viewportSize: NSSize
-      let scale: CGFloat
+    var hasPendingRequests: Bool {
+      pendingLoadedImageWindowSizeRequest != nil
+        || pendingFitToWindowRequest != nil
+        || pendingFitWindowToImageRequest != nil
     }
 
     private struct WindowSizingContext {
@@ -261,17 +249,6 @@ struct ImageScrollView: NSViewRepresentable {
       let minimumContentSize: NSSize
       let maximumContentSize: NSSize
       let maxViewportSize: NSSize
-
-      var viewportSizingContext: WindowViewportSizingContext {
-        WindowViewportSizingContext(
-          screen: screen,
-          visibleFrame: visibleFrame,
-          viewportContentDelta: contentViewportDelta,
-          minimumContentSize: minimumContentSize,
-          maximumContentSize: maximumContentSize,
-          maxViewportSize: maxViewportSize,
-        )
-      }
     }
 
     init(
@@ -344,10 +321,7 @@ struct ImageScrollView: NSViewRepresentable {
     func scrollViewDidLayout(_ scrollView: NSScrollView) {
       guard !isLiveMagnifying else { return }
 
-      performPendingRequests(
-        scrollView,
-        shouldUpdateLayout: false,
-      )
+      performPendingRequests(scrollView, shouldUpdateLayout: false)
 
       guard alwaysFitToWindow, !hasPendingRequests else { return }
       guard shouldApplyAlwaysFitToWindow(scrollView) else { return }
@@ -396,20 +370,13 @@ struct ImageScrollView: NSViewRepresentable {
 
       if fitWindowToImageIfNeeded(scrollView) { return }
 
-      fitToWindowIfNeeded(scrollView)
+      if let request = pendingFitToWindowRequest, fitToWindow(scrollView) {
+        pendingFitToWindowRequest = nil
+        completedFitToWindowRequest = request
+      }
     }
 
-    private func fitToWindowIfNeeded(_ scrollView: NSScrollView) {
-      guard let request = pendingFitToWindowRequest,
-            fitToWindow(scrollView)
-      else { return }
-
-      pendingFitToWindowRequest = nil
-      completedFitToWindowRequest = request
-    }
-
-    @discardableResult
-    private func fitToWindow(_ scrollView: NSScrollView) -> Bool {
+    @discardableResult private func fitToWindow(_ scrollView: NSScrollView) -> Bool {
       guard let documentView = scrollView.documentView else { return false }
 
       let viewportSize = scrollView.contentSize
@@ -422,21 +389,9 @@ struct ImageScrollView: NSViewRepresentable {
       else { return false }
 
       let fitScale = min(
-        viewportSize.width / imageSize.width,
-        viewportSize.height / imageSize.height,
+        viewportSize.width / imageSize.width, viewportSize.height / imageSize.height,
       )
-      .clamped(to: Constants.imageScaleRange)
-      let center = NSPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0)
-
-      let shouldUpdateMagnification = abs(scrollView.magnification - fitScale) > 0.000_1
-      if shouldUpdateMagnification {
-        scrollView.setMagnification(fitScale, centeredAt: center)
-      }
-
-      clampScrollBounds(scrollView)
-      if shouldUpdateMagnification {
-        onScaleChange(scrollView.magnification)
-      }
+      applyScale(fitScale, to: scrollView)
       return true
     }
 
@@ -448,15 +403,9 @@ struct ImageScrollView: NSViewRepresentable {
 
       let currentScale = scrollView.magnification.clamped(to: Constants.imageScaleRange)
       let targetImageDisplaySize = NSSize(
-        width: documentView.frame.width * currentScale,
-        height: documentView.frame.height * currentScale,
+        width: documentView.bounds.width * currentScale,
+        height: documentView.bounds.height * currentScale,
       )
-      let resizeTarget = windowResizeTarget(
-        forViewportSize: targetImageDisplaySize,
-        in: sizingContext,
-        scrollView: scrollView,
-      )
-
       pendingFitWindowToImageRequest = nil
       completedFitWindowToImageRequest = request
       suppressAlwaysFitForProgrammaticResize = true
@@ -464,9 +413,7 @@ struct ImageScrollView: NSViewRepresentable {
       applyWindowFrame(
         scrollView,
         window: sizingContext.window,
-        frame: resizeTarget.frame,
-        desiredViewportSize: resizeTarget.viewportSize,
-        viewportSizingContext: sizingContext.viewportSizingContext,
+        frame: sizingContext.window.centeredConstrainedFrame(forSize: targetImageDisplaySize),
       )
       return true
     }
@@ -477,7 +424,7 @@ struct ImageScrollView: NSViewRepresentable {
             let target = loadedImageWindowSizeTarget(in: sizingContext, scrollView: scrollView)
       else { return false }
 
-      applyScale(target.scale, to: scrollView, imageSize: sizingContext.imageSize)
+      applyScale(target.scale, to: scrollView)
       pendingLoadedImageWindowSizeRequest = nil
       completedLoadedImageWindowSizeRequest = request
       suppressAlwaysFitForProgrammaticResize = true
@@ -486,16 +433,13 @@ struct ImageScrollView: NSViewRepresentable {
         scrollView,
         window: sizingContext.window,
         frame: target.frame,
-        desiredViewportSize: target.viewportSize,
-        viewportSizingContext: sizingContext.viewportSizingContext,
       )
       return true
     }
 
     private func loadedImageWindowSizeTarget(
-      in sizingContext: WindowSizingContext,
-      scrollView: NSScrollView,
-    ) -> LoadedImageWindowSizeTarget? {
+      in sizingContext: WindowSizingContext, scrollView: NSScrollView,
+    ) -> (frame: NSRect, scale: CGFloat)? {
       let imageSize = sizingContext.imageSize
       let fitScale = min(
         sizingContext.maxViewportSize.width / imageSize.width,
@@ -513,16 +457,8 @@ struct ImageScrollView: NSViewRepresentable {
           width: imageSize.width * targetScale,
           height: imageSize.height * targetScale,
         )
-        let resizeTarget = windowResizeTarget(
-          forViewportSize: targetSize,
-          in: sizingContext,
-          scrollView: scrollView,
-        )
-        return LoadedImageWindowSizeTarget(
-          frame: resizeTarget.frame,
-          viewportSize: resizeTarget.viewportSize,
-          scale: targetScale,
-        )
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: targetSize)
+        return (frame: targetFrame, scale: targetScale)
 
       case .scaleToFitScreen:
         let targetScale = fitScale.clamped(to: Constants.imageScaleRange)
@@ -530,16 +466,8 @@ struct ImageScrollView: NSViewRepresentable {
           width: imageSize.width * targetScale,
           height: imageSize.height * targetScale,
         )
-        let resizeTarget = windowResizeTarget(
-          forViewportSize: targetSize,
-          in: sizingContext,
-          scrollView: scrollView,
-        )
-        return LoadedImageWindowSizeTarget(
-          frame: resizeTarget.frame,
-          viewportSize: resizeTarget.viewportSize,
-          scale: targetScale,
-        )
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: targetSize)
+        return (frame: targetFrame, scale: targetScale)
 
       case .fillScreen:
         let targetScale = fillScale.clamped(to: Constants.imageScaleRange)
@@ -547,44 +475,24 @@ struct ImageScrollView: NSViewRepresentable {
           sizingContext.visibleFrame,
           to: sizingContext.screen,
         )
-        return LoadedImageWindowSizeTarget(
-          frame: frame,
-          viewportSize: sizingContext.maxViewportSize,
-          scale: targetScale,
-        )
+        return (frame: frame, scale: targetScale)
 
       case .actualSize:
         let targetScale = CGFloat(1.0).clamped(to: Constants.imageScaleRange)
         let targetSize = NSSize(width: imageSize.width, height: imageSize.height)
-        let resizeTarget = windowResizeTarget(
-          forViewportSize: targetSize,
-          in: sizingContext,
-          scrollView: scrollView,
-        )
-        return LoadedImageWindowSizeTarget(
-          frame: resizeTarget.frame,
-          viewportSize: resizeTarget.viewportSize,
-          scale: targetScale,
-        )
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: targetSize)
+        return (frame: targetFrame, scale: targetScale)
 
       case .fixedSize:
         guard let fixedViewportSize = fixedViewportSize(in: scrollView) else { return nil }
 
-        let resizeTarget = windowResizeTarget(
-          forViewportSize: fixedViewportSize,
-          in: sizingContext,
-          scrollView: scrollView,
-        )
         let targetScale = min(
-          resizeTarget.viewportSize.width / imageSize.width,
-          resizeTarget.viewportSize.height / imageSize.height,
+          fixedViewportSize.width / imageSize.width,
+          fixedViewportSize.height / imageSize.height,
         )
         .clamped(to: Constants.imageScaleRange)
-        return LoadedImageWindowSizeTarget(
-          frame: resizeTarget.frame,
-          viewportSize: resizeTarget.viewportSize,
-          scale: targetScale,
-        )
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: fixedViewportSize)
+        return (frame: targetFrame, scale: targetScale)
       }
     }
 
@@ -595,30 +503,31 @@ struct ImageScrollView: NSViewRepresentable {
             fixedLoadedImageWindowSize.height > 0
       else { return nil }
 
-      let pointSize = NSSize(
-        width: fixedLoadedImageWindowSize.width.clamped(to: 1 ... 10000),
-        height: fixedLoadedImageWindowSize.height.clamped(to: 1 ... 10000),
+      let fixedSize = NSSize(
+        width: fixedLoadedImageWindowSize.width,
+        height: fixedLoadedImageWindowSize.height,
       )
 
       switch fixedLoadedImageWindowSizeUnit {
       case .points:
-        return pointSize
+        return fixedSize
       case .pixels:
-        return scrollView.contentView.convertFromBacking(pointSize)
+        return scrollView.window?.convertFromBacking(fixedSize)
       }
     }
 
-    private func applyScale(_ scale: CGFloat, to scrollView: NSScrollView, imageSize: NSSize) {
-      let targetScale = scale.clamped(to: Constants.imageScaleRange)
-      let center = NSPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0)
-      let shouldUpdateMagnification = abs(scrollView.magnification - targetScale) > 0.000_1
+    private func applyScale(_ scale: CGFloat, to scrollView: NSScrollView) {
+      guard let documentView = scrollView.documentView else { return }
 
-      if shouldUpdateMagnification {
+      let targetScale = scale.clamped(to: Constants.imageScaleRange)
+      let imageSize = documentView.bounds.size
+      let center = NSPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0)
+      let scaleDelta = abs(scrollView.magnification - targetScale)
+      if scaleDelta > Constants.scaleUpdateTolerance {
         scrollView.setMagnification(targetScale, centeredAt: center)
+        clampScrollBounds(scrollView)
         onScaleChange(scrollView.magnification)
       }
-
-      clampScrollBounds(scrollView)
     }
 
     private func windowSizingContext(for scrollView: NSScrollView) -> WindowSizingContext? {
@@ -641,17 +550,15 @@ struct ImageScrollView: NSViewRepresentable {
         width: max(0, contentSize.width - viewportSize.width),
         height: max(0, contentSize.height - viewportSize.height),
       )
-      let frameContentDelta = NSSize(
-        width: max(0, window.frame.width - contentSize.width),
-        height: max(0, window.frame.height - contentSize.height),
-      )
       let minimumContentSize = NSSize(
         width: max(window.contentMinSize.width, Constants.minimumWindowContentWidth),
         height: max(window.contentMinSize.height, Constants.minimumWindowContentHeight),
       )
+      let maximumFrame = window.constrainFrameRect(visibleFrame, to: screen)
+      let maximumWindowContentSize = window.contentRect(forFrameRect: maximumFrame).size
       let maximumContentSize = NSSize(
-        width: max(1, visibleFrame.width - frameContentDelta.width),
-        height: max(1, visibleFrame.height - frameContentDelta.height),
+        width: max(1, maximumWindowContentSize.width),
+        height: max(1, maximumWindowContentSize.height),
       )
       let maxViewportSize = NSSize(
         width: max(1, maximumContentSize.width - contentViewportDelta.width),
@@ -670,24 +577,37 @@ struct ImageScrollView: NSViewRepresentable {
       )
     }
 
-    private func windowResizeTarget(
-      forViewportSize viewportSize: NSSize,
-      in sizingContext: WindowSizingContext,
-      scrollView: NSScrollView,
-    ) -> WindowViewportResizeTarget {
-      sizingContext.window.viewportResizeTarget(
-        forViewportSize: viewportSize,
-        in: sizingContext.viewportSizingContext,
-        aligningViewportIn: scrollView.contentView,
-      )
+    private func scaleToEliminateBlankSpaceIfNeeded(_ scrollView: NSScrollView) {
+      guard let documentView = scrollView.documentView else { return }
+
+      let viewportSize = scrollView.contentSize
+      let imageSize = documentView.bounds.size
+
+      guard viewportSize.width > 0,
+            viewportSize.height > 0,
+            imageSize.width > 0,
+            imageSize.height > 0
+      else { return }
+
+      let widthDelta = viewportSize.width - imageSize.width
+      let heightDelta = viewportSize.height - imageSize.height
+      let fitScale: CGFloat? = if widthDelta > 0, widthDelta < 1.0 {
+        viewportSize.width / imageSize.width
+      } else if heightDelta > 0, heightDelta < 1.0 {
+        viewportSize.height / imageSize.height
+      } else {
+        nil
+      }
+
+      guard let fitScale else { return }
+
+      applyScale(fitScale, to: scrollView)
     }
 
     private func applyWindowFrame(
       _ scrollView: NSScrollView,
       window: NSWindow,
       frame: NSRect,
-      desiredViewportSize: NSSize? = nil,
-      viewportSizingContext: WindowViewportSizingContext? = nil,
     ) {
       DispatchQueue.main.async { [weak self, weak scrollView, weak window] in
         guard let self, let scrollView, let window else { return }
@@ -695,22 +615,13 @@ struct ImageScrollView: NSViewRepresentable {
         NSAnimationContext.runAnimationGroup { context in
           context.duration = window.animationResizeTime(frame)
           context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-
           window.animator().setFrame(frame, display: false)
-        } completionHandler: { [weak self, weak scrollView, weak window] in
-          Task { @MainActor [weak self, weak scrollView, weak window] in
-            guard let self, let scrollView, let window else { return }
+        } completionHandler: { [weak self, weak scrollView] in
+          Task { @MainActor [weak self, weak scrollView] in
+            guard let self, let scrollView else { return }
 
+            scaleToEliminateBlankSpaceIfNeeded(scrollView)
             scrollView.layoutSubtreeIfNeeded()
-            if let desiredViewportSize, let viewportSizingContext {
-              _ = window.correctFrameToMatchViewportIfNeeded(
-                desiredViewportSize,
-                actualViewportSize: scrollView.contentSize,
-                sizingContext: viewportSizingContext,
-                aligningViewportIn: scrollView.contentView,
-              )
-              scrollView.layoutSubtreeIfNeeded()
-            }
             clampScrollBounds(scrollView)
             suppressedAlwaysFitViewportSize = scrollView.contentSize
             onScaleChange(scrollView.magnification)

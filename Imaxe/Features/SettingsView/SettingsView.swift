@@ -51,8 +51,10 @@ struct ImageSettingsView: View {
   private var fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
 
   @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
-  private var fixedLoadedImageWindowSizeUnit =
-    AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+  private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+
+  @FocusState private var widthInputFocused: Bool
+  @FocusState private var heightInputFocused: Bool
 
   var body: some View {
     Form {
@@ -74,12 +76,6 @@ struct ImageSettingsView: View {
         fixedLoadedImageWindowSizeField
       }
     }
-    .onChange(of: fixedLoadedImageWindowWidth) { _, newValue in
-      fixedLoadedImageWindowWidth = sanitizedWidth(newValue)
-    }
-    .onChange(of: fixedLoadedImageWindowHeight) { _, newValue in
-      fixedLoadedImageWindowHeight = sanitizedHeight(newValue)
-    }
   }
 
   private var fixedLoadedImageWindowSizeField: some View {
@@ -92,9 +88,18 @@ struct ImageSettingsView: View {
           value: $fixedLoadedImageWindowWidth,
           format: .number.precision(.fractionLength(0)),
         )
+        .focused($widthInputFocused)
+        .onSubmit {
+          fixedLoadedImageWindowWidth = sanitizedWidth(fixedLoadedImageWindowWidth)
+        }
+        .onChange(of: widthInputFocused) { _, newValue in
+          if !newValue {
+            fixedLoadedImageWindowWidth = sanitizedWidth(fixedLoadedImageWindowWidth)
+          }
+        }
         .labelsHidden()
         .monospacedDigit()
-        .frame(width: 52)
+        .frame(width: 62)
 
         Text("Height:")
 
@@ -103,9 +108,18 @@ struct ImageSettingsView: View {
           value: $fixedLoadedImageWindowHeight,
           format: .number.precision(.fractionLength(0)),
         )
+        .focused($heightInputFocused)
+        .onSubmit {
+          fixedLoadedImageWindowHeight = sanitizedHeight(fixedLoadedImageWindowHeight)
+        }
+        .onChange(of: heightInputFocused) { _, newValue in
+          if !newValue {
+            fixedLoadedImageWindowHeight = sanitizedHeight(fixedLoadedImageWindowHeight)
+          }
+        }
         .labelsHidden()
         .monospacedDigit()
-        .frame(width: 52)
+        .frame(width: 62)
 
         Picker("", selection: $fixedLoadedImageWindowSizeUnit) {
           ForEach(LoadedImageWindowSizeUnit.allCases) {
@@ -113,21 +127,28 @@ struct ImageSettingsView: View {
           }
         }
         .labelsHidden()
+
+        if fixedLoadedImageWindowWidth != AppSettings.Defaults.fixedLoadedImageWindowWidth
+          || fixedLoadedImageWindowHeight != AppSettings.Defaults.fixedLoadedImageWindowHeight
+          || fixedLoadedImageWindowSizeUnit != AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+        {
+          Button("Reset", systemImage: "arrow.counterclockwise") {
+            fixedLoadedImageWindowWidth = AppSettings.Defaults.fixedLoadedImageWindowWidth
+            fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
+            fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+          }
+          .buttonStyle(.borderless)
+          .labelStyle(.iconOnly)
+        }
       }
     }
   }
 
   private func sanitizedWidth(_ value: Double) -> Double {
-    guard value.isFinite, value > 0 else {
-      return AppSettings.Defaults.fixedLoadedImageWindowWidth
-    }
-    return value.clamped(to: Constants.minimumWindowContentWidth ... 10000)
+    value.clamped(to: Constants.minimumWindowContentWidth ... 10000)
   }
 
   private func sanitizedHeight(_ value: Double) -> Double {
-    guard value.isFinite, value > 0 else {
-      return AppSettings.Defaults.fixedLoadedImageWindowHeight
-    }
-    return value.clamped(to: Constants.minimumWindowContentHeight ... 10000)
+    value.clamped(to: Constants.minimumWindowContentHeight ... 10000)
   }
 }
