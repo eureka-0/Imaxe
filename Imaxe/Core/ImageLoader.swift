@@ -29,18 +29,54 @@ enum ImageLoadingError: Error, LocalizedError {
 actor ImageLoader {
   private final nonisolated class ImageInfoBox {
     let info: ImageInfo
+    let fileSignature: ImageFileSignature
 
-    init(info: ImageInfo) {
+    init(info: ImageInfo, fileSignature: ImageFileSignature) {
       self.info = info
+      self.fileSignature = fileSignature
+    }
+  }
+
+  private final nonisolated class ImageContainerBox {
+    let imageContainer: ImageContainer
+    let fileSignature: ImageFileSignature
+
+    init(imageContainer: ImageContainer, fileSignature: ImageFileSignature) {
+      self.imageContainer = imageContainer
+      self.fileSignature = fileSignature
+    }
+  }
+
+  private struct ImageInfoLoadTask {
+    let fileSignature: ImageFileSignature
+    let task: Task<ImageInfo, Error>
+  }
+
+  private struct ImageContainerLoadTask {
+    let fileSignature: ImageFileSignature
+    let task: Task<ImageContainer, Error>
+  }
+
+  nonisolated struct ImageFileSignature: Equatable {
+    let contentModificationDate: Date?
+    let fileSize: Int?
+
+    init?(url: URL) {
+      guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
+        return nil
+      }
+
+      contentModificationDate = attributes[.modificationDate] as? Date
+      fileSize = (attributes[.size] as? NSNumber)?.intValue
     }
   }
 
   static let shared = ImageLoader()
 
   private var infoCache = NSCache<NSURL, ImageInfoBox>()
-  private var imageCache = NSCache<NSURL, ImageContainer>()
-  private var infoLoadTasks: [URL: Task<ImageInfo, Error>] = [:]
-  private var imageLoadTasks: [URL: Task<ImageContainer, Error>] = [:]
+  private var imageCache = NSCache<NSURL, ImageContainerBox>()
+  private var infoLoadTasks: [URL: ImageInfoLoadTask] = [:]
+  private var imageLoadTasks: [URL: ImageContainerLoadTask] = [:]
 
   private init() {
     infoCache.name = "com.imaxe.Imaxe.infoCache"
@@ -91,12 +127,26 @@ actor ImageLoader {
       throw ImageLoadingError.unsupportedImageType(url)
     }
 
-    if let cachedInfo = infoCache.object(forKey: url as NSURL)?.info {
-      return cachedInfo
+    guard let fileSignature = ImageFileSignature(url: url) else {
+      throw ImageLoadingError.failedToLoad(url)
+    }
+
+    let cacheKey = url as NSURL
+    if let cachedInfo = infoCache.object(forKey: cacheKey) {
+      if cachedInfo.fileSignature == fileSignature {
+        return cachedInfo.info
+      }
+
+      infoCache.removeObject(forKey: cacheKey)
     }
 
     if let existingTask = infoLoadTasks[url] {
-      return try await existingTask.value
+      if existingTask.fileSignature == fileSignature {
+        return try await existingTask.task.value
+      }
+
+      existingTask.task.cancel()
+      infoLoadTasks[url] = nil
     }
 
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageInfo in
@@ -105,12 +155,17 @@ actor ImageLoader {
       try Task.checkCancellation()
       return info
     }
-    infoLoadTasks[url] = task
+    infoLoadTasks[url] = ImageInfoLoadTask(fileSignature: fileSignature, task: task)
 
     do {
       let info = try await task.value
       infoLoadTasks[url] = nil
-      infoCache.setObject(ImageInfoBox(info: info), forKey: url as NSURL)
+      if ImageFileSignature(url: url) == fileSignature {
+        infoCache.setObject(
+          ImageInfoBox(info: info, fileSignature: fileSignature),
+          forKey: cacheKey,
+        )
+      }
       return info
     } catch {
       infoLoadTasks[url] = nil
@@ -123,12 +178,26 @@ actor ImageLoader {
       throw ImageLoadingError.unsupportedImageType(url)
     }
 
-    if let cachedImage = imageCache.object(forKey: url as NSURL) {
-      return cachedImage
+    guard let fileSignature = ImageFileSignature(url: url) else {
+      throw ImageLoadingError.failedToLoad(url)
+    }
+
+    let cacheKey = url as NSURL
+    if let cachedImage = imageCache.object(forKey: cacheKey) {
+      if cachedImage.fileSignature == fileSignature {
+        return cachedImage.imageContainer
+      }
+
+      imageCache.removeObject(forKey: cacheKey)
     }
 
     if let existingTask = imageLoadTasks[url] {
-      return try await existingTask.value
+      if existingTask.fileSignature == fileSignature {
+        return try await existingTask.task.value
+      }
+
+      existingTask.task.cancel()
+      imageLoadTasks[url] = nil
     }
 
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageContainer in
@@ -146,12 +215,18 @@ actor ImageLoader {
       try Task.checkCancellation()
       return imageContainer
     }
-    imageLoadTasks[url] = task
+    imageLoadTasks[url] = ImageContainerLoadTask(fileSignature: fileSignature, task: task)
 
     do {
       let imageContainer = try await task.value
       imageLoadTasks[url] = nil
-      imageCache.setObject(imageContainer, forKey: url as NSURL, cost: imageContainer.cacheCost)
+      if ImageFileSignature(url: url) == fileSignature {
+        imageCache.setObject(
+          ImageContainerBox(imageContainer: imageContainer, fileSignature: fileSignature),
+          forKey: cacheKey,
+          cost: imageContainer.cacheCost,
+        )
+      }
       return imageContainer
     } catch {
       imageLoadTasks[url] = nil
@@ -160,14 +235,19 @@ actor ImageLoader {
   }
 
   private nonisolated static func loadBitmap(from url: URL) -> ImageContainer? {
-    guard let nsImage = NSImage(contentsOf: url) else { return nil }
+    guard let imageData = try? Data(contentsOf: url),
+          let nsImage = NSImage(data: imageData)
+    else { return nil }
+
     return ImageContainer(url: url, nsImage: nsImage)
   }
 
   private nonisolated static func loadSVG(from url: URL) -> ImageContainer? {
-    guard let sourceImage = NSImage(contentsOf: url) else { return nil }
+    guard let imageData = try? Data(contentsOf: url),
+          let sourceImage = NSImage(data: imageData)
+    else { return nil }
 
-    let documentSize = (try? String(contentsOf: url, encoding: .utf8))
+    let documentSize = String(data: imageData, encoding: .utf8)
       .map(SVGDocumentSize.init(svgString:))
     let pixelSize = documentSize?.bestSize ?? sourceImage.size.validSize
 

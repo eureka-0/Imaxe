@@ -32,6 +32,21 @@ enum Appearance: String, CaseIterable, Identifiable {
   }
 }
 
+enum ActionOnImageFileChange: String, CaseIterable, Identifiable {
+  case reload, ignore
+
+  var id: String {
+    rawValue
+  }
+
+  var description: LocalizedStringKey {
+    switch self {
+    case .reload: "Reload"
+    case .ignore: "Ignore"
+    }
+  }
+}
+
 enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
   case pixelSize, pointSize, printSize
 
@@ -86,6 +101,7 @@ enum AppSettings {
     case appearance
     case topBarHideDelay
     case enableLoopBrowsing
+    case actionOnImageFileChange
 
     case imageActualSizeStrategy
     case loadedImageWindowSizeMode
@@ -102,6 +118,7 @@ enum AppSettings {
     static let appearance: Appearance = .system
     static let topBarHideDelay = 1.5
     static let enableLoopBrowsing = true
+    static let actionOnImageFileChange: ActionOnImageFileChange = .reload
 
     static let imageActualSizeStrategy: ImageActualSizeStrategy = .pixelSize
     static let loadedImageWindowSizeMode: LoadedImageWindowSizeMode = .actualSizeLimitedToScreen

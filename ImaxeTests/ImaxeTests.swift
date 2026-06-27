@@ -109,6 +109,55 @@ struct ImaxeTests {
     #expect(firstImage === secondImage)
   }
 
+  @Test func `image loader reloads changed file at same url`() async throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-changing-image-\(UUID().uuidString).png")
+
+    try pngData(width: 10, height: 20).write(to: url)
+    let firstImage = try await ImageLoader.shared.loadImage(from: url)
+    let firstInfo = try await ImageLoader.shared.loadInfo(from: url)
+
+    try pngData(width: 12, height: 24).write(to: url)
+    try FileManager.default.setAttributes(
+      [.modificationDate: Date(timeIntervalSinceNow: 2)],
+      ofItemAtPath: url.path,
+    )
+
+    let secondImage = try await ImageLoader.shared.loadImage(from: url)
+    let secondInfo = try await ImageLoader.shared.loadInfo(from: url)
+
+    #expect(firstImage !== secondImage)
+    #expect(firstImage.pixelSize == NSSize(width: 10, height: 20))
+    #expect(firstInfo.pixelSize == IntSize(width: 10, height: 20))
+    #expect(secondImage.pixelSize == NSSize(width: 12, height: 24))
+    #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
+  }
+
+  @Test func `image file watcher reports stable file change`() async throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-watched-image-\(UUID().uuidString).png")
+    try pngData(width: 10, height: 20).write(to: url)
+    let changedImageData = try pngData(width: 12, height: 24)
+
+    var watcher: ImageFileWatcher?
+    let didChange = await withCheckedContinuation { continuation in
+      watcher = ImageFileWatcher(url: url) {
+        continuation.resume(returning: true)
+      }
+
+      DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(100)) {
+        try? changedImageData.write(to: url)
+        try? FileManager.default.setAttributes(
+          [.modificationDate: Date(timeIntervalSinceNow: 2)],
+          ofItemAtPath: url.path,
+        )
+      }
+    }
+
+    #expect(didChange)
+    _ = watcher
+  }
+
   private func sampleImageURL(_ fileName: String) -> URL {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -135,5 +184,29 @@ struct ImaxeTests {
       image.addRepresentation(representation)
     }
     return image
+  }
+
+  private func pngData(width: Int, height: Int) throws -> Data {
+    let representation = try #require(NSBitmapImageRep(
+      bitmapDataPlanes: nil,
+      pixelsWide: width,
+      pixelsHigh: height,
+      bitsPerSample: 8,
+      samplesPerPixel: 4,
+      hasAlpha: true,
+      isPlanar: false,
+      colorSpaceName: .deviceRGB,
+      bytesPerRow: 0,
+      bitsPerPixel: 0,
+    ))
+
+    let rect = NSRect(x: 0, y: 0, width: width, height: height)
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: representation)
+    NSColor.systemBlue.setFill()
+    rect.fill()
+    NSGraphicsContext.restoreGraphicsState()
+
+    return try #require(representation.representation(using: .png, properties: [:]))
   }
 }

@@ -40,7 +40,15 @@ nonisolated struct ImageInfo: Hashable {
   init(url: URL) {
     self.url = url
     fileName = url.lastPathComponent
-    fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+
+    if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+       let fileSize = attributes[.size] as? NSNumber
+    {
+      self.fileSize = fileSize.intValue
+    } else {
+      fileSize = 0
+    }
+
     type = ImageLoader.getUTType(for: url)
 
     let properties = Self.getImageProperties(from: url)

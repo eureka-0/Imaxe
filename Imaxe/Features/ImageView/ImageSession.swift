@@ -5,6 +5,7 @@
 //  Created by lxlong on 2026/6/17.
 //
 
+import AppKit
 import SwiftUI
 
 @Observable
@@ -30,11 +31,18 @@ final class ImageSession {
     }
   }
 
+  var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange {
+    didSet {
+      updateImageFileWatcher()
+    }
+  }
+
   var alert: ImageAlert?
   @ObservationIgnored private weak var owningWindow: NSWindow?
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadRequestID = 0
+  @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
 
   init(imageContainer: ImageContainer? = nil) {
     if let imageContainer {
@@ -50,6 +58,7 @@ final class ImageSession {
   deinit {
     topBarHideTask?.cancel()
     imageLoadTask?.cancel()
+    imageFileWatcher = nil
   }
 
   func setTopBarVisibility(to isVisible: Bool, in window: NSWindow? = nil) {
@@ -206,6 +215,7 @@ final class ImageSession {
 
   func loadImage(from url: URL, failureTitle: String? = nil) {
     imageLoadTask?.cancel()
+    imageFileWatcher = nil
     imageLoadRequestID += 1
     let requestID = imageLoadRequestID
     let previousImage = currentImage
@@ -253,12 +263,14 @@ final class ImageSession {
             }
             applyLoadedImageWindowSizeRequest += 1
             currentImage = imageContainer
+            updateImageFileWatcher()
 
           case let .image(.failure(error)):
             group.cancelAll()
             currentImage = previousImage
             currentImageInfo = previousImageInfo
             folderNavigator = previousFolderNavigator
+            updateImageFileWatcher()
             alert = ImageAlert(
               title: failureTitle ?? "Failed to Load Image",
               message: error.localizedDescription,
@@ -273,6 +285,23 @@ final class ImageSession {
   private enum ImageLoadEvent {
     case info(Result<ImageInfo, Error>)
     case image(Result<ImageContainer, Error>)
+  }
+
+  private func updateImageFileWatcher() {
+    imageFileWatcher = nil
+
+    guard actionOnImageFileChange == .reload,
+          let url = folderNavigator?.currentImageURL,
+          currentImage != nil
+    else { return }
+
+    imageFileWatcher = ImageFileWatcher(url: url) { [weak self] in
+      guard let self,
+            folderNavigator?.currentImageURL == url
+      else { return }
+
+      loadImage(from: url)
+    }
   }
 
   private nonisolated static func loadInfoResult(from url: URL) async -> Result<ImageInfo, Error> {

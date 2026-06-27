@@ -7,7 +7,7 @@
 
 import Foundation
 
-enum Constants {
+nonisolated enum Constants {
   static let topBarHeight: CGFloat = 32
   static let topBarHoverStripHeight: CGFloat = 50
   static let topBarItemSpacing: CGFloat = 6
@@ -31,4 +31,7 @@ enum Constants {
   static let imageZoomStep: CGFloat = 1.25
 
   static let fallbackScreenPPI: (CGFloat, CGFloat) = (254, 254)
+
+  static let stableFileCheckDeadline: DispatchTimeInterval = .seconds(10)
+  static let pollingIntervalOnFileChange: DispatchTimeInterval = .milliseconds(150)
 }

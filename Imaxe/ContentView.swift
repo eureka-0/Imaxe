@@ -18,6 +18,9 @@ struct ContentView: View {
   @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue)
   private var enableLoopBrowsing = AppSettings.Defaults.enableLoopBrowsing
 
+  @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue)
+  private var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange
+
   var body: some View {
     Group {
       if imageSession.currentImage != nil || imageSession.isLoading {
@@ -38,12 +41,16 @@ struct ContentView: View {
     .onAppear {
       imageSession.topBarHideDelay = topBarHideDelay
       imageSession.enableLoopBrowsing = enableLoopBrowsing
+      imageSession.actionOnImageFileChange = actionOnImageFileChange
     }
     .onChange(of: topBarHideDelay) { _, newValue in
       imageSession.topBarHideDelay = newValue
     }
     .onChange(of: enableLoopBrowsing) { _, newValue in
       imageSession.enableLoopBrowsing = newValue
+    }
+    .onChange(of: actionOnImageFileChange) { _, newValue in
+      imageSession.actionOnImageFileChange = newValue
     }
     .fileImporter(
       isPresented: $imageSession.isImporterPresented,
