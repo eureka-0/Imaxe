@@ -9,7 +9,8 @@ import AppKit
 import SwiftUI
 
 struct ImageScrollView: NSViewRepresentable {
-  let loadedImage: LoadedImage
+  let imageContainer: ImageContainer
+  let imageInfo: ImageInfo
   let loadedImageWindowSizeRequest: Int
   let loadedImageWindowSizeMode: LoadedImageWindowSizeMode
   let fixedLoadedImageWindowSize: NSSize
@@ -47,7 +48,11 @@ struct ImageScrollView: NSViewRepresentable {
     let scrollView = ImageNSScrollView()
     let centeringClipView = CenteringClipView()
     let clampedScale = scale.clamped(to: Constants.imageScaleRange)
-    centeringClipView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: clampedScale)
+    centeringClipView.documentView = ImageCanvasView(
+      imageContainer: imageContainer,
+      imageInfo: imageInfo,
+      scale: clampedScale,
+    )
     scrollView.contentView = centeringClipView
 
     scrollView.automaticallyAdjustsContentInsets = false
@@ -69,7 +74,7 @@ struct ImageScrollView: NSViewRepresentable {
       fixedSizeUnit: fixedLoadedImageWindowSizeUnit,
     )
     context.coordinator.prepareForImage(
-      loadedImage,
+      imageContainer,
       loadedImageWindowSizeRequest: loadedImageWindowSizeRequest,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
@@ -109,17 +114,24 @@ struct ImageScrollView: NSViewRepresentable {
     let clampedScale = scale.clamped(to: Constants.imageScaleRange)
 
     if let imageView = scrollView.documentView as? ImageCanvasView {
-      if imageView.loadedImage.image !== loadedImage.image {
-        imageView.loadedImage = loadedImage
+      if imageView.imageContainer.nsImage !== imageContainer.nsImage {
+        imageView.imageContainer = imageContainer
         scrollView.reflectScrolledClipView(scrollView.contentView)
+      }
+      if imageView.imageInfo != imageInfo {
+        imageView.imageInfo = imageInfo
       }
       imageView.scale = clampedScale
     } else {
-      scrollView.documentView = ImageCanvasView(loadedImage: loadedImage, scale: clampedScale)
+      scrollView.documentView = ImageCanvasView(
+        imageContainer: imageContainer,
+        imageInfo: imageInfo,
+        scale: clampedScale,
+      )
     }
 
     context.coordinator.prepareForImage(
-      loadedImage,
+      imageContainer,
       loadedImageWindowSizeRequest: loadedImageWindowSizeRequest,
       fitToWindowRequest: fitToWindowRequest,
       fitWindowToImageRequest: fitWindowToImageRequest,
@@ -292,14 +304,14 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     func prepareForImage(
-      _ loadedImage: LoadedImage,
+      _ imageContainer: ImageContainer,
       loadedImageWindowSizeRequest: Int,
       fitToWindowRequest: Int,
       fitWindowToImageRequest: Int,
     ) {
       latestFitToWindowRequest = fitToWindowRequest
 
-      let newIdentifier = ObjectIdentifier(loadedImage.image)
+      let newIdentifier = ObjectIdentifier(imageContainer.nsImage)
       if imageIdentifier != newIdentifier {
         imageIdentifier = newIdentifier
         completedFitToWindowRequest = fitToWindowRequest

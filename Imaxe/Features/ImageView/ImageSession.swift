@@ -9,10 +9,10 @@ import SwiftUI
 
 @Observable
 final class ImageSession {
-  private(set) var currentImage: LoadedImage?
+  private(set) var currentImage: ImageContainer?
+  private(set) var currentImageInfo: ImageInfo?
   var isImporterPresented = false
   private(set) var isLoading = false
-  private(set) var loadingImageInfo: ImageInfo?
   var imageScale: CGFloat = 1.0
   private(set) var fitToWindowRequest = 0
   private(set) var fitWindowToImageRequest = 0
@@ -36,11 +36,12 @@ final class ImageSession {
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadRequestID = 0
 
-  init(loadedImage: LoadedImage? = nil) {
-    if let loadedImage {
-      currentImage = loadedImage
+  init(imageContainer: ImageContainer? = nil) {
+    if let imageContainer {
+      currentImage = imageContainer
+      currentImageInfo = ImageInfo(url: imageContainer.url)
       folderNavigator = FolderNavigator(
-        for: loadedImage.info.sourceURL,
+        for: imageContainer.url,
         enableLoopBrowsing: enableLoopBrowsing,
       )
     }
@@ -89,6 +90,12 @@ final class ImageSession {
   func toggleWindowPinning() {
     isWindowPinned.toggle()
     owningWindow?.level = isWindowPinned ? .floating : .normal
+  }
+
+  func revealCurrentImageInFinder() {
+    if let url = currentImageInfo?.url ?? currentImage?.url {
+      NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
   }
 
   func fitToWindow() {
@@ -202,12 +209,13 @@ final class ImageSession {
     imageLoadRequestID += 1
     let requestID = imageLoadRequestID
     let previousImage = currentImage
+    let previousImageInfo = currentImageInfo
     let previousFolderNavigator = folderNavigator
 
     isLoading = true
-    loadingImageInfo = ImageInfo(url: url)
-    folderNavigator = FolderNavigator(for: url, enableLoopBrowsing: enableLoopBrowsing)
     currentImage = nil
+    currentImageInfo = nil
+    folderNavigator = FolderNavigator(for: url, enableLoopBrowsing: enableLoopBrowsing)
 
     imageLoadTask = Task { @MainActor [weak self] in
       guard let self, requestID == imageLoadRequestID, !Task.isCancelled else { return }
@@ -218,24 +226,70 @@ final class ImageSession {
         }
       }
 
-      do {
-        let loadedImage = try await ImageLoader.shared.load(from: url)
-        guard requestID == imageLoadRequestID, !Task.isCancelled else { return }
+      await withTaskGroup(of: ImageLoadEvent.self) { group in
+        group.addTask {
+          await .info(Self.loadInfoResult(from: url))
+        }
+        group.addTask {
+          await .image(Self.loadImageResult(from: url))
+        }
 
-        loadingImageInfo = nil
-        applyLoadedImageWindowSizeRequest += 1
-        currentImage = loadedImage
-      } catch {
-        guard requestID == imageLoadRequestID, !Task.isCancelled else { return }
+        for await event in group {
+          guard requestID == imageLoadRequestID, !Task.isCancelled else {
+            group.cancelAll()
+            return
+          }
 
-        loadingImageInfo = nil
-        currentImage = previousImage
-        folderNavigator = previousFolderNavigator
-        alert = ImageAlert(
-          title: failureTitle ?? "Failed to Load Image",
-          message: error.localizedDescription,
-        )
+          switch event {
+          case let .info(.success(info)):
+            currentImageInfo = info
+
+          case .info(.failure):
+            break
+
+          case let .image(.success(imageContainer)):
+            if currentImageInfo == nil {
+              currentImageInfo = try? await ImageLoader.shared.loadInfo(from: url)
+            }
+            applyLoadedImageWindowSizeRequest += 1
+            currentImage = imageContainer
+
+          case let .image(.failure(error)):
+            group.cancelAll()
+            currentImage = previousImage
+            currentImageInfo = previousImageInfo
+            folderNavigator = previousFolderNavigator
+            alert = ImageAlert(
+              title: failureTitle ?? "Failed to Load Image",
+              message: error.localizedDescription,
+            )
+            return
+          }
+        }
       }
+    }
+  }
+
+  private enum ImageLoadEvent {
+    case info(Result<ImageInfo, Error>)
+    case image(Result<ImageContainer, Error>)
+  }
+
+  private nonisolated static func loadInfoResult(from url: URL) async -> Result<ImageInfo, Error> {
+    do {
+      return try await .success(ImageLoader.shared.loadInfo(from: url))
+    } catch {
+      return .failure(error)
+    }
+  }
+
+  private nonisolated static func loadImageResult(
+    from url: URL,
+  ) async -> Result<ImageContainer, Error> {
+    do {
+      return try await .success(ImageLoader.shared.loadImage(from: url))
+    } catch {
+      return .failure(error)
     }
   }
 }

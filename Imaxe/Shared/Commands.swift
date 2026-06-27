@@ -29,10 +29,10 @@ struct FileOperationCommands: Commands {
       Divider()
 
       Button("Reveal in Finder") {
-        imageSession?.currentImage?.revealInFinder()
+        imageSession?.revealCurrentImageInFinder()
       }
       .keyboardShortcut("r", modifiers: [.command, .shift])
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentImageInfo == nil && imageSession?.currentImage == nil)
     }
   }
 }

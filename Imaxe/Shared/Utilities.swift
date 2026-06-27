@@ -6,11 +6,63 @@
 //
 
 import AppKit
+import OSLog
 import SwiftUI
+
+nonisolated struct IntSize: Hashable {
+  let width: Int
+  let height: Int
+
+  var isValid: Bool {
+    width > 0 && height > 0
+  }
+
+  var nsSize: NSSize {
+    NSSize(width: width, height: height)
+  }
+
+  init(width: Int = 0, height: Int = 0) {
+    self.width = width
+    self.height = height
+  }
+
+  init(nsSize: NSSize) {
+    if !nsSize.isApproximatelyInt {
+      debugPrint("Warning: NSSize \(nsSize) is not approximately integer.")
+    }
+
+    width = Int(nsSize.width.rounded())
+    height = Int(nsSize.height.rounded())
+  }
+}
 
 extension Comparable {
   func clamped(to range: ClosedRange<Self>) -> Self {
     Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
+  }
+}
+
+extension NSImage {
+  nonisolated var pixelSize: NSSize {
+    var pixelSize = NSSize.zero
+    for representation in representations {
+      pixelSize.width = max(pixelSize.width, CGFloat(representation.pixelsWide))
+      pixelSize.height = max(pixelSize.height, CGFloat(representation.pixelsHigh))
+    }
+
+    if pixelSize.width > 0, pixelSize.height > 0 {
+      return pixelSize
+    }
+
+    return size.validSize
+  }
+
+  nonisolated func pixelSize(preferred preferredSize: NSSize?) -> NSSize {
+    if let preferredSize, preferredSize.width > 0, preferredSize.height > 0 {
+      return preferredSize
+    }
+
+    return pixelSize
   }
 }
 
@@ -58,6 +110,22 @@ extension NSScreen {
 }
 
 extension NSSize {
+  nonisolated var validSize: NSSize {
+    if width > 0, height > 0 {
+      self
+    } else {
+      NSSize(width: 1, height: 1)
+    }
+  }
+
+  nonisolated var isApproximatelyInt: Bool {
+    abs(width.rounded() - width) < 0.1 && abs(height.rounded() - height) < 0.1
+  }
+
+  nonisolated var intSize: IntSize {
+    IntSize(nsSize: self)
+  }
+
   func isApproximatelyEqual(to other: NSSize) -> Bool {
     abs(width - other.width) < 1.0 && abs(height - other.height) < 1.0
   }

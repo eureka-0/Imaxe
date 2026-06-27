@@ -7,211 +7,7 @@
 
 import AppKit
 import ImageIO
-import OrderedCollections
 import UniformTypeIdentifiers
-
-nonisolated struct ImageInfo {
-  let fileName: String
-  let sourceURL: URL
-  let fileSize: Int
-  let type: UTType?
-  let pixelWidth: Int
-  let pixelHeight: Int
-  let DPI: (width: Int, height: Int)
-
-  var fileSizeDescription: String {
-    ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
-  }
-
-  var DPIDescription: String {
-    if DPI.width == DPI.height {
-      "\(DPI.width) Pixels/Inch"
-    } else {
-      "\(DPI.width) x \(DPI.height) Pixels/Inch"
-    }
-  }
-
-  init(url: URL, pixelWidth: Int = 0, pixelHeight: Int = 0) {
-    fileName = url.lastPathComponent
-    sourceURL = url
-    fileSize = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-    type = ImageLoader.getUTType(for: url)
-    self.pixelWidth = pixelWidth
-    self.pixelHeight = pixelHeight
-
-    let properties = Self.getImageProperties(from: url)
-    DPI = Self.getImageDPI(from: properties) ?? (72, 72)
-  }
-
-  private nonisolated static func getImageProperties(from url: URL) -> [CFString: Any]? {
-    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-
-    let propertiesOptions = [kCGImageSourceShouldCache: false] as CFDictionary
-    let properties = CGImageSourceCopyPropertiesAtIndex(imageSource, 0, propertiesOptions)
-    return properties as? [CFString: Any]
-  }
-
-  private nonisolated static func getImageDPI(from properties: [CFString: Any]?) -> (Int, Int)? {
-    let dpiWidth = properties?[kCGImagePropertyDPIWidth] as? Int
-    let dpiHeight = properties?[kCGImagePropertyDPIHeight] as? Int
-
-    if let dpiWidth, let dpiHeight {
-      return (dpiWidth, dpiHeight)
-    }
-
-    if let dpiWidth {
-      return (dpiWidth, dpiWidth)
-    }
-
-    if let dpiHeight {
-      return (dpiHeight, dpiHeight)
-    }
-
-    return nil
-  }
-}
-
-nonisolated struct LoadedImage: @unchecked Sendable {
-  let image: NSImage
-  /// The image's true size in pixels, used for the 100% display baseline and metadata.
-  let pixelSize: NSSize
-  let info: ImageInfo
-
-  /// The image's size in points (`NSImage`'s coordinate space), used when drawing.
-  var pointSize: NSSize {
-    image.size
-  }
-
-  init(
-    image: NSImage,
-    sourceURL: URL,
-    pixelSize: NSSize? = nil,
-  ) {
-    self.image = image
-    self.pixelSize = Self.resolvePixelSize(for: image, preferred: pixelSize)
-    image.cacheMode = .default
-    info = ImageInfo(
-      url: sourceURL,
-      pixelWidth: Int(self.pixelSize.width),
-      pixelHeight: Int(self.pixelSize.height),
-    )
-  }
-
-  func revealInFinder() {
-    NSWorkspace.shared.activateFileViewerSelecting([info.sourceURL])
-  }
-
-  private static func resolvePixelSize(for image: NSImage, preferred: NSSize?) -> NSSize {
-    if let preferred, preferred.width > 0, preferred.height > 0 {
-      return preferred
-    }
-
-    var pixelSize = NSSize.zero
-    for representation in image.representations {
-      pixelSize.width = max(pixelSize.width, CGFloat(representation.pixelsWide))
-      pixelSize.height = max(pixelSize.height, CGFloat(representation.pixelsHigh))
-    }
-
-    if pixelSize.width > 0, pixelSize.height > 0 {
-      return pixelSize
-    }
-
-    return image.size
-  }
-}
-
-private nonisolated struct SVGDocumentSize {
-  let viewBox: NSRect?
-  let size: NSSize?
-
-  var bestSize: NSSize? {
-    if let viewBox, viewBox.width > 0, viewBox.height > 0 {
-      return viewBox.size
-    }
-
-    if let size, size.width > 0, size.height > 0 {
-      return size
-    }
-
-    return nil
-  }
-
-  init(svgString: String) {
-    let svgTag = Self.rootSVGTag(in: svgString) ?? ""
-    let attributes = Self.attributes(in: svgTag)
-    viewBox = Self.viewBox(from: attributes["viewBox"])
-
-    if let width = Self.length(from: attributes["width"]),
-       let height = Self.length(from: attributes["height"])
-    {
-      size = NSSize(width: width, height: height)
-    } else {
-      size = nil
-    }
-  }
-
-  private static func rootSVGTag(in svgString: String) -> Substring? {
-    guard let start = svgString.range(of: "<svg")?.lowerBound,
-          let end = svgString[start...].firstIndex(of: ">")
-    else { return nil }
-
-    return svgString[start ... end]
-  }
-
-  private static func attributes(in tag: Substring) -> [String: String] {
-    let pattern = #"([A-Za-z_:][-A-Za-z0-9_:.]*)\s*=\s*(["'])(.*?)\2"#
-    guard let regex = try? NSRegularExpression(pattern: pattern) else { return [:] }
-
-    let tagString = String(tag)
-    let range = NSRange(tagString.startIndex ..< tagString.endIndex, in: tagString)
-    var attributes: [String: String] = [:]
-
-    regex.enumerateMatches(in: tagString, range: range) { match, _, _ in
-      guard let match,
-            let nameRange = Range(match.range(at: 1), in: tagString),
-            let valueRange = Range(match.range(at: 3), in: tagString)
-      else { return }
-
-      attributes[String(tagString[nameRange])] = String(tagString[valueRange])
-    }
-
-    return attributes
-  }
-
-  private static func viewBox(from value: String?) -> NSRect? {
-    guard let value else { return nil }
-
-    let components = value
-      .split { $0 == "," || $0 == " " || $0 == "\n" || $0 == "\t" }
-      .compactMap { Double($0) }
-
-    guard components.count == 4,
-          components[2] > 0,
-          components[3] > 0
-    else { return nil }
-
-    return NSRect(
-      x: components[0],
-      y: components[1],
-      width: components[2],
-      height: components[3],
-    )
-  }
-
-  private static func length(from value: String?) -> CGFloat? {
-    guard let value else { return nil }
-
-    let trimmedValue = value.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedValue.hasSuffix("%") else { return nil }
-
-    let numberPrefix = trimmedValue.prefix { character in
-      character.isNumber || character == "." || character == "-" || character == "+"
-    }
-    guard let number = Double(numberPrefix) else { return nil }
-
-    return number > 0 ? CGFloat(number) : nil
-  }
-}
 
 enum ImageLoadingError: Error, LocalizedError {
   case unsupportedImageType(URL)
@@ -231,11 +27,29 @@ enum ImageLoadingError: Error, LocalizedError {
 }
 
 actor ImageLoader {
+  private final nonisolated class ImageInfoBox {
+    let info: ImageInfo
+
+    init(info: ImageInfo) {
+      self.info = info
+    }
+  }
+
   static let shared = ImageLoader()
 
-  private init() {}
+  private var infoCache = NSCache<NSURL, ImageInfoBox>()
+  private var imageCache = NSCache<NSURL, ImageContainer>()
+  private var infoLoadTasks: [URL: Task<ImageInfo, Error>] = [:]
+  private var imageLoadTasks: [URL: Task<ImageContainer, Error>] = [:]
 
-  private var cache = OrderedDictionary<URL, LoadedImage>()
+  private init() {
+    infoCache.name = "com.imaxe.Imaxe.infoCache"
+    infoCache.countLimit = 500
+
+    imageCache.name = "com.imaxe.Imaxe.imageCache"
+    imageCache.countLimit = 50
+    imageCache.totalCostLimit = 100 * 1024 * 1024 // 100 MB
+  }
 
   nonisolated static let supportedImageTypes: [UTType] = [
     // Bitmap formats
@@ -272,64 +86,96 @@ actor ImageLoader {
     return supportedImageTypes.contains { fileType.conforms(to: $0) }
   }
 
-  func load(from url: URL) async throws -> LoadedImage {
+  func loadInfo(from url: URL) async throws -> ImageInfo {
     guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
 
-    if let cachedImage = cache[url] {
-      // Move accessed image to the front to mark it as most recently used
-      cache.move(keys: [url], to: 0)
+    if let cachedInfo = infoCache.object(forKey: url as NSURL)?.info {
+      return cachedInfo
+    }
+
+    if let existingTask = infoLoadTasks[url] {
+      return try await existingTask.value
+    }
+
+    let task = Task.detached(priority: .userInitiated) { () throws -> ImageInfo in
+      try Task.checkCancellation()
+      let info = ImageInfo(url: url)
+      try Task.checkCancellation()
+      return info
+    }
+    infoLoadTasks[url] = task
+
+    do {
+      let info = try await task.value
+      infoLoadTasks[url] = nil
+      infoCache.setObject(ImageInfoBox(info: info), forKey: url as NSURL)
+      return info
+    } catch {
+      infoLoadTasks[url] = nil
+      throw error
+    }
+  }
+
+  func loadImage(from url: URL) async throws -> ImageContainer {
+    guard Self.isSupportedImage(url) else {
+      throw ImageLoadingError.unsupportedImageType(url)
+    }
+
+    if let cachedImage = imageCache.object(forKey: url as NSURL) {
       return cachedImage
     }
 
-    let loadedImage = try await Self.decode(from: url)
-    try Task.checkCancellation()
-
-    cache[url] = loadedImage
-    cache.move(keys: [url], to: 0) // Move newly loaded image to the front
-    evictLeastRecentlyUsed()
-
-    return loadedImage
-  }
-
-  private nonisolated static func decode(from url: URL) async throws -> LoadedImage {
-    try Task.checkCancellation()
-
-    let loadedImage: LoadedImage? = if Self.getUTType(for: url) == .svg {
-      loadSVG(from: url)
-    } else {
-      loadBitmap(from: url)
+    if let existingTask = imageLoadTasks[url] {
+      return try await existingTask.value
     }
 
-    guard let loadedImage else {
-      throw ImageLoadingError.failedToLoad(url)
+    let task = Task.detached(priority: .userInitiated) { () throws -> ImageContainer in
+      try Task.checkCancellation()
+      let imageContainer: ImageContainer? = if Self.getUTType(for: url) == .svg {
+        Self.loadSVG(from: url)
+      } else {
+        Self.loadBitmap(from: url)
+      }
+
+      guard let imageContainer else {
+        throw ImageLoadingError.failedToLoad(url)
+      }
+
+      try Task.checkCancellation()
+      return imageContainer
     }
+    imageLoadTasks[url] = task
 
-    try Task.checkCancellation()
-
-    return loadedImage
+    do {
+      let imageContainer = try await task.value
+      imageLoadTasks[url] = nil
+      imageCache.setObject(imageContainer, forKey: url as NSURL, cost: imageContainer.cacheCost)
+      return imageContainer
+    } catch {
+      imageLoadTasks[url] = nil
+      throw error
+    }
   }
 
-  private nonisolated static func loadSVG(from url: URL) -> LoadedImage? {
+  private nonisolated static func loadBitmap(from url: URL) -> ImageContainer? {
+    guard let nsImage = NSImage(contentsOf: url) else { return nil }
+    return ImageContainer(url: url, nsImage: nsImage)
+  }
+
+  private nonisolated static func loadSVG(from url: URL) -> ImageContainer? {
     guard let sourceImage = NSImage(contentsOf: url) else { return nil }
 
     let documentSize = (try? String(contentsOf: url, encoding: .utf8))
       .map(SVGDocumentSize.init(svgString:))
-    let pixelSize = documentSize?.bestSize
-      ?? sourceImage.size.validSize
-      ?? NSSize(width: 1, height: 1)
+    let pixelSize = documentSize?.bestSize ?? sourceImage.size.validSize
 
-    guard let image = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
+    guard let nsImage = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
       return nil
     }
 
-    return LoadedImage(image: image, sourceURL: url, pixelSize: pixelSize)
-  }
-
-  private nonisolated static func loadBitmap(from url: URL) -> LoadedImage? {
-    guard let image = NSImage(contentsOf: url) else { return nil }
-    return LoadedImage(image: image, sourceURL: url)
+    return ImageContainer(url: url, nsImage: nsImage, pixelSize: pixelSize)
   }
 
   private nonisolated static func rasterizedSVGImage(
@@ -379,23 +225,8 @@ actor ImageLoader {
     return image
   }
 
-  private func evictLeastRecentlyUsed() {
-    if cache.count > 10 {
-      cache.removeLast()
-    }
-  }
-
-  private func clearCache() {
-    cache.removeAll()
-  }
-}
-
-private nonisolated extension NSSize {
-  var validSize: NSSize? {
-    if width > 0, height > 0 {
-      self
-    } else {
-      nil
-    }
+  func clearCache() {
+    infoCache.removeAllObjects()
+    imageCache.removeAllObjects()
   }
 }

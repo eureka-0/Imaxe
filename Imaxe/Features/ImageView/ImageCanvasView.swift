@@ -8,12 +8,19 @@
 import AppKit
 
 final class ImageCanvasView: NSView {
-  var loadedImage: LoadedImage {
+  var imageContainer: ImageContainer {
     didSet {
-      if oldValue.image !== loadedImage.image {
+      if oldValue.nsImage !== imageContainer.nsImage {
         stopGIFAnimation()
         currentGIFFrame = 0
       }
+      updateCanvasSize()
+      needsDisplay = true
+    }
+  }
+
+  var imageInfo: ImageInfo {
+    didSet {
       updateCanvasSize()
       needsDisplay = true
     }
@@ -41,10 +48,11 @@ final class ImageCanvasView: NSView {
     true
   }
 
-  init(loadedImage: LoadedImage, scale: CGFloat) {
-    self.loadedImage = loadedImage
+  init(imageContainer: ImageContainer, imageInfo: ImageInfo, scale: CGFloat) {
+    self.imageContainer = imageContainer
+    self.imageInfo = imageInfo
     self.scale = scale
-    super.init(frame: NSRect(origin: .zero, size: loadedImage.pixelSize))
+    super.init(frame: NSRect())
     updateCanvasSize()
     setupObservation()
   }
@@ -97,18 +105,20 @@ final class ImageCanvasView: NSView {
   /// Updates the canvas size based on the current image actual size strategy and the loaded image's
   /// properties.
   private func updateCanvasSize() {
+    let pixelSize = imageContainer.pixelSize
+
     switch imageActualSizeStrategy {
     case .pixelSize:
-      let pointSize = window?.convertFromBacking(loadedImage.pixelSize) ?? loadedImage.pixelSize
+      let pointSize = window?.convertFromBacking(pixelSize) ?? pixelSize
       guard pointSize.width > 0, pointSize.height > 0, frame.size != pointSize else { return }
       frame.size = pointSize
     case .pointSize:
-      guard frame.size != loadedImage.pixelSize else { return }
-      frame.size = loadedImage.pixelSize
+      guard frame.size != pixelSize else { return }
+      frame.size = pixelSize
     case .printSize:
       let inchesSize = CGSize(
-        width: loadedImage.pixelSize.width / CGFloat(loadedImage.info.DPI.width),
-        height: loadedImage.pixelSize.height / CGFloat(loadedImage.info.DPI.height),
+        width: pixelSize.width / CGFloat(imageInfo.DPI.width),
+        height: pixelSize.height / CGFloat(imageInfo.DPI.height),
       )
       let ppi = window?.screen?.getPPI() ?? Constants.fallbackScreenPPI
       let screenPixelSize = CGSize(
@@ -156,9 +166,9 @@ final class ImageCanvasView: NSView {
   }
 
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
-    loadedImage.image.draw(
+    imageContainer.nsImage.draw(
       in: bounds,
-      from: NSRect(origin: .zero, size: loadedImage.pointSize),
+      from: NSRect(origin: .zero, size: imageContainer.nsImage.size),
       operation: .copy,
       fraction: 1.0,
       respectFlipped: true,
@@ -186,7 +196,7 @@ final class ImageCanvasView: NSView {
   }
 
   private var animatedGIFRepresentation: NSBitmapImageRep? {
-    loadedImage.image.representations
+    imageContainer.nsImage.representations
       .compactMap { $0 as? NSBitmapImageRep }
       .first { bitmapRep in
         let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue ?? 0

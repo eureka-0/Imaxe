@@ -33,7 +33,7 @@ struct ImageView: View {
   }
 
   private var displayedImageInfo: ImageInfo? {
-    imageSession.loadingImageInfo ?? imageSession.currentImage?.info
+    imageSession.currentImageInfo
   }
 
   private var fixedLoadedImageWindowSize: NSSize {
@@ -76,11 +76,12 @@ struct ImageView: View {
 
   @ViewBuilder
   private var imageContent: some View {
-    if imageSession.isLoading {
-      LoadingImageView()
-    } else if let currentImage = imageSession.currentImage {
+    if let currentImage = imageSession.currentImage,
+       let currentImageInfo = imageSession.currentImageInfo
+    {
       ImageScrollView(
-        loadedImage: currentImage,
+        imageContainer: currentImage,
+        imageInfo: currentImageInfo,
         loadedImageWindowSizeRequest: imageSession.applyLoadedImageWindowSizeRequest,
         loadedImageWindowSizeMode: loadedImageWindowSizeMode,
         fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
@@ -90,6 +91,8 @@ struct ImageView: View {
         scale: $imageSession.imageScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
+    } else if imageSession.isLoading {
+      LoadingImageView()
     } else {
       HomeView()
     }
@@ -250,11 +253,11 @@ struct ImageView: View {
       topBarIconLabel("Image Info", systemImage: "info.circle")
     }
     .popover(isPresented: $isImageInfoPresented, arrowEdge: .top) {
-      if let currentImage = imageSession.currentImage {
-        ImageInfoPanel(loadedImage: currentImage)
+      if let currentImageInfo = imageSession.currentImageInfo {
+        ImageInfoPanel(info: currentImageInfo)
       }
     }
-    .disabled(imageSession.isLoading)
+    .disabled(imageSession.currentImageInfo == nil)
     .help(Text("Show image info"))
   }
 
@@ -416,11 +419,7 @@ private struct ScalePickerPopover: View {
 }
 
 private struct ImageInfoPanel: View {
-  let loadedImage: LoadedImage
-
-  private var info: ImageInfo {
-    loadedImage.info
-  }
+  let info: ImageInfo
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -429,27 +428,19 @@ private struct ImageInfoPanel: View {
 
       VStack(alignment: .leading, spacing: 8) {
         ImageInfoRow(title: "File Name", value: info.fileName)
-        ImageInfoRow(title: "Location", value: info.sourceURL.deletingLastPathComponent().path)
-        ImageInfoRow(title: "Format", value: formatDescription)
+        ImageInfoRow(title: "Location", value: info.location)
+        ImageInfoRow(title: "Format", value: info.typeDescription)
         ImageInfoRow(title: "File Size", value: info.fileSizeDescription)
 
         Divider()
 
-        ImageInfoRow(title: "Pixel Width", value: String(info.pixelWidth))
-        ImageInfoRow(title: "Pixel Height", value: String(info.pixelHeight))
+        ImageInfoRow(title: "Pixel Width", value: String(info.pixelSize.width))
+        ImageInfoRow(title: "Pixel Height", value: String(info.pixelSize.height))
         ImageInfoRow(title: "Image DPI", value: info.DPIDescription)
       }
     }
     .padding(14)
     .frame(width: 360, alignment: .leading)
-  }
-
-  private var formatDescription: String {
-    if let fileType = loadedImage.info.type {
-      fileType.preferredFilenameExtension?.uppercased() ?? "Unknown"
-    } else {
-      "Unknown"
-    }
   }
 }
 

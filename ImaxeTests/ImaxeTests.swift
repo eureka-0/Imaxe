@@ -11,24 +11,27 @@ import Testing
 
 @MainActor
 struct ImaxeTests {
-  @Test func `bitmap loaded image uses pixel size`() {
+  @Test func `bitmap image container uses pixel size`() {
     let image = bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
 
-    let loadedImage = LoadedImage(image: image, sourceURL: url)
+    let imageContainer = ImageContainer(url: url, nsImage: image)
 
-    #expect(loadedImage.pixelSize == NSSize(width: 10, height: 20))
-    #expect(loadedImage.pointSize == NSSize(width: 10, height: 20))
-    #expect(loadedImage.info.pixelWidth == 10)
-    #expect(loadedImage.info.pixelHeight == 20)
+    #expect(imageContainer.pixelSize == NSSize(width: 10, height: 20))
+    #expect(imageContainer.nsImage.size == NSSize(width: 10, height: 20))
   }
 
   @Test func `canvas occupies image pixel size in backing pixels`() {
     let image = bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
-    let loadedImage = LoadedImage(image: image, sourceURL: url)
+    let imageContainer = ImageContainer(url: url, nsImage: image)
+    let imageInfo = ImageInfo(url: url)
 
-    let canvas = ImageCanvasView(loadedImage: loadedImage, scale: 1.0)
+    let canvas = ImageCanvasView(
+      imageContainer: imageContainer,
+      imageInfo: imageInfo,
+      scale: 1.0,
+    )
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),
       styleMask: [.titled],
@@ -40,22 +43,31 @@ struct ImaxeTests {
     // At 100% the canvas must occupy exactly the image's pixel size in backing pixels, regardless
     // of the screen's backing scale factor.
     let backingSize = canvas.convertToBacking(canvas.bounds.size)
-    #expect(backingSize.isApproximatelyEqual(to: loadedImage.pixelSize))
+    #expect(backingSize.isApproximatelyEqual(to: imageContainer.pixelSize))
+  }
+
+  @Test func `image info loads sample metadata without image decode`() async throws {
+    let url = sampleImageURL("sample_1280×853.png")
+
+    let info = try await ImageLoader.shared.loadInfo(from: url)
+
+    #expect(info.url == url)
+    #expect(info.fileName == "sample_1280×853.png")
+    #expect(info.pixelSize == IntSize(width: 1280, height: 853))
+    #expect(info.DPI == IntSize(width: 72, height: 72))
+    #expect(info.fileSize > 0)
   }
 
   @Test func `svg loaded image rasterizes to bitmap and uses view box size`() async throws {
-    let url = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appending(path: "SampleImages/sample_1280×853.svg")
+    let url = sampleImageURL("sample_1280×853.svg")
 
-    let loadedImage = try await ImageLoader.shared.load(from: url)
-    let bitmapRep = try #require(loadedImage.image.representations.first as? NSBitmapImageRep)
+    let imageInfo = try await ImageLoader.shared.loadInfo(from: url)
+    let imageContainer = try await ImageLoader.shared.loadImage(from: url)
+    let bitmapRep = try #require(imageContainer.nsImage.representations.first as? NSBitmapImageRep)
 
-    #expect(loadedImage.pixelSize == NSSize(width: 1280, height: 853))
-    #expect(loadedImage.info.pixelWidth == 1280)
-    #expect(loadedImage.info.pixelHeight == 853)
-    #expect(loadedImage.image.representations.count == 1)
+    #expect(imageInfo.pixelSize == IntSize(width: 1280, height: 853))
+    #expect(imageContainer.pixelSize == NSSize(width: 1280, height: 853))
+    #expect(imageContainer.nsImage.representations.count == 1)
     #expect(bitmapRep.pixelsWide == 1280)
     #expect(bitmapRep.pixelsHigh == 853)
   }
@@ -77,13 +89,31 @@ struct ImaxeTests {
     """
     try svg.write(to: url, atomically: true, encoding: .utf8)
 
-    let loadedImage = try await ImageLoader.shared.load(from: url)
-    let bitmapRep = try #require(loadedImage.image.representations.first as? NSBitmapImageRep)
+    let imageInfo = try await ImageLoader.shared.loadInfo(from: url)
+    let imageContainer = try await ImageLoader.shared.loadImage(from: url)
+    let bitmapRep = try #require(imageContainer.nsImage.representations.first as? NSBitmapImageRep)
 
-    #expect(loadedImage.pixelSize == NSSize(width: 4267, height: 4267))
-    #expect(loadedImage.image.representations.count == 1)
+    #expect(imageInfo.pixelSize == IntSize(width: 4267, height: 4267))
+    #expect(imageContainer.pixelSize == NSSize(width: 4267, height: 4267))
+    #expect(imageContainer.nsImage.representations.count == 1)
     #expect(bitmapRep.pixelsWide == 4267)
     #expect(bitmapRep.pixelsHigh == 4267)
+  }
+
+  @Test func `image loader returns cached image container for same url`() async throws {
+    let url = sampleImageURL("sample_1280×853.png")
+
+    let firstImage = try await ImageLoader.shared.loadImage(from: url)
+    let secondImage = try await ImageLoader.shared.loadImage(from: url)
+
+    #expect(firstImage === secondImage)
+  }
+
+  private func sampleImageURL(_ fileName: String) -> URL {
+    URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appending(path: "SampleImages/\(fileName)")
   }
 
   private func bitmapImage() -> NSImage {
