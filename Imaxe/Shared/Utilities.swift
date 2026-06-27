@@ -99,17 +99,16 @@ extension NSWindow {
     convertFromBacking(NSRect(origin: .zero, size: size)).size
   }
 
-  func centeredConstrainedFrame(forSize size: NSSize) -> NSRect {
-    let clampedSize = NSSize(
-      width: max(size.width, Constants.minimumWindowContentWidth),
-      height: max(size.height, Constants.minimumWindowContentHeight + titlebarHeight),
+  func centeredConstrainedFrame(_ windowSize: NSSize) -> NSRect {
+    let clampedWindowSize = NSSize(
+      width: max(windowSize.width, Constants.minimumWindowContentWidth),
+      height: max(windowSize.height, Constants.minimumWindowContentHeight + titlebarHeight),
     )
-    let frameSize = frameRect(forContentRect: NSRect(origin: .zero, size: clampedSize)).size
     let frame = NSRect(
-      x: frame.midX - frameSize.width / 2.0,
-      y: frame.midY - frameSize.height / 2.0,
-      width: frameSize.width,
-      height: frameSize.height,
+      x: frame.midX - clampedWindowSize.width / 2.0,
+      y: frame.midY - clampedWindowSize.height / 2.0,
+      width: clampedWindowSize.width,
+      height: clampedWindowSize.height,
     )
 
     if let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame {

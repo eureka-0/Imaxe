@@ -287,6 +287,7 @@ actor ImageLoader {
     try Task.checkCancellation()
 
     cache[url] = loadedImage
+    cache.move(keys: [url], to: 0) // Move newly loaded image to the front
     evictLeastRecentlyUsed()
 
     return loadedImage
@@ -332,8 +333,7 @@ actor ImageLoader {
   }
 
   private nonisolated static func rasterizedSVGImage(
-    from sourceImage: NSImage,
-    pixelSize: NSSize,
+    from sourceImage: NSImage, pixelSize: NSSize,
   ) -> NSImage? {
     let pixelsWide = max(1, Int(pixelSize.width.rounded(.up)))
     let pixelsHigh = max(1, Int(pixelSize.height.rounded(.up)))
@@ -381,7 +381,7 @@ actor ImageLoader {
 
   private func evictLeastRecentlyUsed() {
     if cache.count > 10 {
-      cache.removeFirst()
+      cache.removeLast()
     }
   }
 

@@ -213,17 +213,21 @@ final class ImageSession {
       guard let self, requestID == imageLoadRequestID, !Task.isCancelled else { return }
 
       defer {
-        isLoading = false
+        if requestID == imageLoadRequestID {
+          isLoading = false
+        }
       }
 
       do {
         let loadedImage = try await ImageLoader.shared.load(from: url)
+        guard requestID == imageLoadRequestID, !Task.isCancelled else { return }
+
         loadingImageInfo = nil
-        imageScale = 1.0
-        alwaysFitToWindow = false
         applyLoadedImageWindowSizeRequest += 1
         currentImage = loadedImage
       } catch {
+        guard requestID == imageLoadRequestID, !Task.isCancelled else { return }
+
         loadingImageInfo = nil
         currentImage = previousImage
         folderNavigator = previousFolderNavigator

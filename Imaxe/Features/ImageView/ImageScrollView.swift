@@ -413,7 +413,7 @@ struct ImageScrollView: NSViewRepresentable {
       applyWindowFrame(
         scrollView,
         window: sizingContext.window,
-        frame: sizingContext.window.centeredConstrainedFrame(forSize: targetImageDisplaySize),
+        frame: sizingContext.window.centeredConstrainedFrame(targetImageDisplaySize),
       )
       return true
     }
@@ -457,7 +457,7 @@ struct ImageScrollView: NSViewRepresentable {
           width: imageSize.width * targetScale,
           height: imageSize.height * targetScale,
         )
-        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: targetSize)
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(targetSize)
         return (frame: targetFrame, scale: targetScale)
 
       case .scaleToFitScreen:
@@ -466,7 +466,7 @@ struct ImageScrollView: NSViewRepresentable {
           width: imageSize.width * targetScale,
           height: imageSize.height * targetScale,
         )
-        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: targetSize)
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(targetSize)
         return (frame: targetFrame, scale: targetScale)
 
       case .fillScreen:
@@ -480,7 +480,7 @@ struct ImageScrollView: NSViewRepresentable {
       case .actualSize:
         let targetScale = CGFloat(1.0).clamped(to: Constants.imageScaleRange)
         let targetSize = NSSize(width: imageSize.width, height: imageSize.height)
-        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: targetSize)
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(targetSize)
         return (frame: targetFrame, scale: targetScale)
 
       case .fixedSize:
@@ -491,7 +491,7 @@ struct ImageScrollView: NSViewRepresentable {
           fixedViewportSize.height / imageSize.height,
         )
         .clamped(to: Constants.imageScaleRange)
-        let targetFrame = sizingContext.window.centeredConstrainedFrame(forSize: fixedViewportSize)
+        let targetFrame = sizingContext.window.centeredConstrainedFrame(fixedViewportSize)
         return (frame: targetFrame, scale: targetScale)
       }
     }

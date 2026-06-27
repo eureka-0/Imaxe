@@ -103,7 +103,7 @@ final class ImageCanvasView: NSView {
       guard pointSize.width > 0, pointSize.height > 0, frame.size != pointSize else { return }
       frame.size = pointSize
     case .pointSize:
-      guard frame.size != loadedImage.pointSize else { return }
+      guard frame.size != loadedImage.pixelSize else { return }
       frame.size = loadedImage.pixelSize
     case .printSize:
       let inchesSize = CGSize(

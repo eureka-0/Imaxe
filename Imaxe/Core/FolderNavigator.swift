@@ -38,14 +38,14 @@ struct FolderNavigator {
 
   var canNavigateToPrevious: Bool {
     if let currentIndex {
-      return currentIndex > 0 || enableLoopBrowsing
+      return currentIndex > 0 || (enableLoopBrowsing && imageURLs.count > 1)
     }
     return false
   }
 
   var canNavigateToNext: Bool {
     if let currentIndex {
-      return currentIndex < imageURLs.count - 1 || enableLoopBrowsing
+      return currentIndex < imageURLs.count - 1 || (enableLoopBrowsing && imageURLs.count > 1)
     }
     return false
   }
@@ -83,7 +83,7 @@ struct FolderNavigator {
   mutating func moveToPrevious() -> Bool {
     guard let currentIndex else { return false }
 
-    if currentIndex == 0, enableLoopBrowsing {
+    if currentIndex == 0, enableLoopBrowsing, imageURLs.count > 1 {
       currentImageURL = imageURLs.last ?? currentImageURL
       return true
     } else if currentIndex > 0 {
@@ -96,7 +96,7 @@ struct FolderNavigator {
   mutating func moveToNext() -> Bool {
     guard let currentIndex else { return false }
 
-    if currentIndex == imageURLs.count - 1, enableLoopBrowsing {
+    if currentIndex == imageURLs.count - 1, enableLoopBrowsing, imageURLs.count > 1 {
       currentImageURL = imageURLs.first ?? currentImageURL
       return true
     } else if currentIndex < imageURLs.count - 1 {
