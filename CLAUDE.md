@@ -1,94 +1,65 @@
 # CLAUDE.md
 
-## Project Context
+## Project Scope
 
-Imaxe is a native macOS image viewer focused on fast everyday browsing and light editing targeting macOS 14+. Prioritize:
+Imaxe is a native macOS image viewer for fast everyday browsing on macOS 14+. Prioritize fast image opening and switching, smooth zooming and panning, low memory use for large images, common image formats, and light editing only when explicitly requested.
 
-- Fast image opening and switching
-- Smooth zooming and panning
-- Low memory use for large images
-- Common image formats
-- Basic editing later: rotate, flip, crop, annotations, undo/redo, JPEG/PNG export
+Do not expand into RAW editing, professional color grading, layers, batch processing, cloud sync, or AI features unless explicitly requested.
 
-Do not expand scope into RAW editing, professional color grading, layer-based editing, batch processing, cloud sync, or AI features unless explicitly requested.
+## Current Structure
 
-## Architecture
+- `Imaxe/ImaxeApp.swift`: app entry point, hidden-titlebar `WindowGroup`, Settings scene, appearance application, window configuration, and commands.
+- `Imaxe/ContentView.swift`: owns `ImageSession`, handles file import, drag and drop, open URL events, alerts, focused scene value, and the `HomeView` / `ImageView` switch.
+- `Imaxe/Core/`: image domain types: `ImageContainer`, `ImageInfo`, `ImageLoader`, and `FolderNavigator`.
+- `Imaxe/Features/ImageView/`: viewer feature, including the SwiftUI host, top bar, observable viewing state, AppKit scroll / magnification bridge, image canvas, and alerts.
+- `Imaxe/Features/SettingsView/`: app settings models and settings UI.
+- `Imaxe/Features/HomeView.swift` and `HomeViewModel.swift`: empty state.
+- `Imaxe/Shared/`: commands, constants, and shared AppKit / SwiftUI utilities.
+- `Imaxe/Components/`: reusable SwiftUI/AppKit bridge components.
+- `ImaxeTests/`: Swift Testing unit tests.
+- `Scripts/`: scripts for testing and building the project.
 
-- `ImaxeApp.swift` — `WindowGroup`, hidden title bar, default size, window configurator, app commands
-- `ContentView.swift` — owns `ContentViewModel`, file importer, switches between `HomeView` and `ImageView`
-- `Features/HomeView.swift` — empty-state SwiftUI screen
-- `Features/Commands.swift` — menu commands via focused scene values
-- `Features/ImageView.swift` — core image viewing surface: SwiftUI host, `NSViewRepresentable` bridge, custom `NSScrollView`/`NSClipView`, fitting, zoom, pixel-backed image view
-- `Features/ImageView+Topbar.swift` — in-window SwiftUI top bar overlay and image/window actions
-- `Features/ImageViewModel.swift` — view state and AppKit-side request counters
-- `SampleImages/` — local manual verification images
-- `ImaxeTests/`, `ImaxeUITests/` — test targets
+## Architecture Rules
 
-Architecture rules:
-
-- SwiftUI for app shell, menu commands, overlays, status UI, settings, panels
-- AppKit via `NSViewRepresentable` for image canvas: rendering, zooming, scrolling, clamping, fitting, drag/mouse/trackpad
-- Image geometry stays in AppKit when it depends on `NSScrollView`, `NSClipView`, `NSWindow`, screen, backing scale, or layout timing
-- View models express user intent via state and request counters — don't guess AppKit geometry from pixels
-- `ImageView` is the SwiftUI/AppKit integration boundary
-- Top bar stays a SwiftUI overlay unless system titlebar integration is required; no `NSPanel` for in-window controls
-- `NSImage(contentsOf:)` is acceptable; don't replace without measurement
-- Use ImageIO/Core Graphics when explicit thumbnail/downsample, cache/decode timing, metadata, orientation, incremental loading, or export control is needed
-- Keep viewing state separate from future editing state; prefer non-destructive editing composed at export
-- Keep changes tightly scoped to the requested task
-
-## Image Canvas Guidance
-
-- `NSScrollView` owns magnification, scrolling, and viewport behavior
-- `NSClipView.constrainBoundsRect(_:)` owns centering small images and clamping large images at document bounds
-- Use image document bounds or pixel size as fit baselines — not the current scaled `documentView.frame.size`
-- `fitToWindow` — change magnification to fit image in current viewport
-- `fitWindowToImage` — resize window to displayed image size, constrained to screen, without changing magnification
-- Prefer `window.screen ?? NSScreen.main`, `window.constrainFrameRect(_:to:)`, `contentLayoutRect`, `frameRect(forContentRect:)`, backing-scale-aware rounding
-- Keep scroll elasticity disabled; always clamp in the custom clip view
-- After animated window resizing, re-clamp scroll bounds rather than changing zoom
-- For canvas changes, test: small image, wide image, tall image, large image, high zoom, screen-constrained window
+- Use SwiftUI for the app shell, settings, commands, overlays, alerts, and lightweight feature UI.
+- Use AppKit through `NSViewRepresentable` for the image canvas.
+- AppKit owns rendering, zooming, scrolling, clamping, fitting, drag / mouse / trackpad behavior, and window-size-sensitive geometry.
+- Keep image geometry in the AppKit canvas layer when it depends on `NSScrollView`, `NSClipView`, `NSWindow`, screen, backing scale, or layout timing.
+- Let `ImageSession` express user intent with state and request counters.
+- Do not make SwiftUI views guess AppKit layout geometry from image pixels alone.
+- Keep viewing state separate from future editing state.
+- Prefer non-destructive editing models and compose edits during export.
+- Use ImageIO / Core Graphics when a feature needs explicit control over thumbnail size, downsampling, cache / decode timing, metadata, orientation, incremental loading, or export.
+- Keep changes tightly scoped to the requested task.
 
 ## Tooling
 
-Prefer `xcode-tools` MCP server:
-
-- `DocumentationSearch` — current Apple developer docs
-- `BuildProject` — build the Xcode project
-- `XcodeRefreshCodeIssuesInFile` — quick Swift diagnostics
-- `ExecuteSnippet` — try temporary Swift code in project context
-
-Use `DocumentationSearch` for any Apple API, especially SwiftUI, AppKit, ImageIO, Core Graphics, Testing, and whenever these appear:
-
-- Liquid Glass
-- FoundationModels
-- New or changed SwiftUI representable APIs
+- Prefer tools from the `xcode-tools` MCP server when they fit the task.
+- Use `DocumentationSearch` for current Apple developer documentation.
+- Use `XcodeRefreshCodeIssuesInFile` for quick Swift diagnostics in a file.
+- Use `ExecuteSnippet` to try temporary Swift code in the context of a project file.
+- Use `BuildProject` for build-only validation when appropriate.
+- Use `DocumentationSearch` liberally for Apple APIs, especially SwiftUI, AppKit, ImageIO, Core Graphics, Testing, and unfamiliar APIs.
+- Always search Apple documentation first for Liquid Glass, FoundationModels, and new or changed SwiftUI representable APIs.
+- Do not use Xcode tools / MCP to run tests.
 
 ## Code Style
 
-- PascalCase for types; camelCase for properties and methods
-- `@State private var` for SwiftUI-local state; `let` for constants
-- Swift Observation (`@Observable`) for view models
-- SwiftUI views conform to `View` with `body`
-- 2-space indentation, clear method separation
-- Simple imports at top of file
-- Prefer strong types; avoid force unwrapping
-- `async`/`await`; avoid Combine unless clearly needed
-- Follow Swift 6 concurrency strictly; avoid `unsafe`/`unchecked` unless no safe alternative
-- Comments only for complex or non-obvious logic
-- No broad abstractions while the project is small; prefer direct, explicit types
+- Types use PascalCase.
+- Properties and methods use camelCase.
+- Use 2-space indentation, simple imports, and clear method separation.
+- Use Swift Observation (`@Observable`) for current view models / sessions.
+- Prefer strong types, `let` constants, and Swift concurrency with `async` / `await`.
+- Follow Swift 6 concurrency rules.
+- Avoid `unsafe`, `unchecked`, and force unwrapping unless there is no reasonable safe alternative.
+- Add comments only for complex or non-obvious logic.
+- Avoid broad abstractions while the project is small.
+- Prefer direct types that match the current feature boundary.
 
 ## Testing and Validation
 
-- Swift Testing framework for unit tests
-- Consider XCUI tests for UI changes not easily manually tested
-- Validate small Swift changes with `XcodeRefreshCodeIssuesInFile` first
-- Run `BuildProject` before considering implementation complete
-- Don't compile/run test targets unless explicitly asked; prefer single-file diagnostics + project build
-- For canvas changes, manually test with `SampleImages/`:
-  - image smaller than window
-  - wide image
-  - tall image
-  - large image
-  - zoomed image larger than screen
-- Check: Fit to Window, Fit Window to Image, trackpad scrolling at all four edges, window resizing, top bar interaction
+- Use the Swift Testing framework for unit tests.
+- Run tests with `Scripts/test.sh`. Do not use Xcode tools / MCP to run tests, because that can start LLDB.
+- For build-only validation, use `BuildProject` when appropriate.
+- Include small, wide, tall, large, animated, SVG, and high-zoom images in manual checks.
+- For viewer changes, check Fit to Window, Fit Window to Image, trackpad scrolling at all four edges, window resizing, top bar interaction, and settings that affect initial image/window size.
