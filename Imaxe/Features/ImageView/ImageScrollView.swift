@@ -15,16 +15,16 @@ struct ImageScrollView: NSViewRepresentable {
   let loadedImageWindowSizeMode: LoadedImageWindowSizeMode
   let fixedLoadedImageWindowSize: NSSize
   let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit
-  @Binding var scale: CGFloat
+  @Binding var zoomScale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
-  func onScaleChange(_ newScale: CGFloat) {
-    guard newScale.isFinite else { return }
+  func onZoomScaleChange(_ newZoomScale: CGFloat) {
+    guard newZoomScale.isFinite else { return }
 
-    let clampedScale = newScale.clamped(to: Constants.imageScaleRange)
+    let clampedZoomScale = newZoomScale.clamped(to: Constants.imageZoomScaleRange)
     DispatchQueue.main.async {
-      guard abs(scale - clampedScale) > Constants.scaleUpdateTolerance else { return }
-      scale = clampedScale
+      guard abs(zoomScale - clampedZoomScale) > Constants.zoomScaleUpdateTolerance else { return }
+      zoomScale = clampedZoomScale
     }
   }
 
@@ -37,7 +37,7 @@ struct ImageScrollView: NSViewRepresentable {
 
   func makeCoordinator() -> Coordinator {
     Coordinator(
-      onScaleChange: onScaleChange,
+      onZoomScaleChange: onZoomScaleChange,
       onAlwaysFitToWindowChange: onAlwaysFitToWindowChange,
     )
   }
@@ -45,11 +45,11 @@ struct ImageScrollView: NSViewRepresentable {
   func makeNSView(context: Context) -> NSScrollView {
     let scrollView = ImageNSScrollView()
     let centeringClipView = CenteringClipView()
-    let clampedScale = scale.clamped(to: Constants.imageScaleRange)
+    let clampedZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
     centeringClipView.documentView = ImageCanvasView(
       imageContainer: imageContainer,
       imageInfo: imageInfo,
-      scale: clampedScale,
+      zoomScale: clampedZoomScale,
     )
     scrollView.contentView = centeringClipView
 
@@ -62,10 +62,10 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.verticalScrollElasticity = .none
     scrollView.horizontalScrollElasticity = .none
     scrollView.allowsMagnification = true
-    scrollView.minMagnification = Constants.imageScaleRange.lowerBound
-    scrollView.maxMagnification = Constants.imageScaleRange.upperBound
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
     scrollView.usesPredominantAxisScrolling = false
-    scrollView.magnification = clampedScale
+    scrollView.magnification = clampedZoomScale
     context.coordinator.updateLoadedImageWindowSizeSettings(
       mode: loadedImageWindowSizeMode,
       fixedSize: fixedLoadedImageWindowSize,
@@ -96,7 +96,7 @@ struct ImageScrollView: NSViewRepresentable {
   }
 
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
-    context.coordinator.onScaleChange = onScaleChange
+    context.coordinator.onZoomScaleChange = onZoomScaleChange
     context.coordinator.onAlwaysFitToWindowChange = onAlwaysFitToWindowChange
     context.coordinator.updateLoadedImageWindowSizeSettings(
       mode: loadedImageWindowSizeMode,
@@ -106,7 +106,7 @@ struct ImageScrollView: NSViewRepresentable {
     context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
     context.coordinator.bind(to: viewportController)
     context.coordinator.observe(scrollView)
-    let clampedScale = scale.clamped(to: Constants.imageScaleRange)
+    let clampedZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
 
     if let imageView = scrollView.documentView as? ImageCanvasView {
       if imageView.imageContainer.nsImage !== imageContainer.nsImage {
@@ -116,12 +116,12 @@ struct ImageScrollView: NSViewRepresentable {
       if imageView.imageInfo != imageInfo {
         imageView.imageInfo = imageInfo
       }
-      imageView.scale = clampedScale
+      imageView.zoomScale = clampedZoomScale
     } else {
       scrollView.documentView = ImageCanvasView(
         imageContainer: imageContainer,
         imageInfo: imageInfo,
-        scale: clampedScale,
+        zoomScale: clampedZoomScale,
       )
     }
 
@@ -131,11 +131,11 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     if !context.coordinator.isLiveMagnifying,
-       !context.coordinator.isProgrammaticScaleAnimating,
+       !context.coordinator.isProgrammaticZoomAnimating,
        !context.coordinator.alwaysFitToWindow, !context.coordinator.hasPendingCommands,
-       abs(scrollView.magnification - clampedScale) > Constants.scaleUpdateTolerance
+       abs(scrollView.magnification - clampedZoomScale) > Constants.zoomScaleUpdateTolerance
     {
-      scrollView.magnification = clampedScale
+      scrollView.magnification = clampedZoomScale
     }
 
     if !context.coordinator.isLiveMagnifying {
@@ -216,7 +216,7 @@ struct ImageScrollView: NSViewRepresentable {
 
   /// A coordinator class that manages the state and behavior of the `ImageScrollView`.
   final class Coordinator: NSObject, ImageViewportCommandHandling {
-    var onScaleChange: (CGFloat) -> Void
+    var onZoomScaleChange: (CGFloat) -> Void
     var onAlwaysFitToWindowChange: (Bool) -> Void
     var alwaysFitToWindow = false
 
@@ -232,16 +232,16 @@ struct ImageScrollView: NSViewRepresentable {
     private var pendingUserAlwaysFitDisable = false
     private var suppressAlwaysFitForProgrammaticResize = false
     private var suppressedAlwaysFitViewportSize: NSSize?
-    private var animatedScaleTarget: CGFloat?
-    private var scaleAnimationGeneration = 0
+    private var animatedZoomTarget: CGFloat?
+    private var zoomAnimationGeneration = 0
     private weak var viewportController: ImageViewportController?
     private var observedScrollView: NSScrollView?
     private var magnificationObservation: NSKeyValueObservation?
     private var willStartLiveMagnifyObserver: NSObjectProtocol?
     private var didEndLiveMagnifyObserver: NSObjectProtocol?
 
-    var currentScale: CGFloat {
-      animatedScaleTarget ?? observedScrollView?.magnification ?? 1.0
+    var currentZoomScale: CGFloat {
+      animatedZoomTarget ?? observedScrollView?.magnification ?? 1.0
     }
 
     var hasPendingCommands: Bool {
@@ -250,8 +250,8 @@ struct ImageScrollView: NSViewRepresentable {
         || pendingFitWindowToImage
     }
 
-    var isProgrammaticScaleAnimating: Bool {
-      animatedScaleTarget != nil
+    var isProgrammaticZoomAnimating: Bool {
+      animatedZoomTarget != nil
     }
 
     private struct WindowSizingContext {
@@ -266,10 +266,10 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     init(
-      onScaleChange: @escaping (CGFloat) -> Void,
+      onZoomScaleChange: @escaping (CGFloat) -> Void,
       onAlwaysFitToWindowChange: @escaping (Bool) -> Void,
     ) {
-      self.onScaleChange = onScaleChange
+      self.onZoomScaleChange = onZoomScaleChange
       self.onAlwaysFitToWindowChange = onAlwaysFitToWindowChange
     }
 
@@ -327,7 +327,7 @@ struct ImageScrollView: NSViewRepresentable {
         imageIdentifier = newIdentifier
         pendingFitToWindow = false
         pendingFitWindowToImage = false
-        cancelProgrammaticScaleAnimation()
+        cancelProgrammaticZoomAnimation()
         queueLoadedImageWindowSize()
       }
     }
@@ -347,7 +347,7 @@ struct ImageScrollView: NSViewRepresentable {
       isLiveMagnifying = true
       pendingLiveMagnificationEnd = false
       pendingFitToWindow = false
-      cancelProgrammaticScaleAnimation()
+      cancelProgrammaticZoomAnimation()
       disableAlwaysFitToWindowForUserMagnification()
     }
 
@@ -361,7 +361,7 @@ struct ImageScrollView: NSViewRepresentable {
         isLiveMagnifying = false
         pendingLiveMagnificationEnd = false
         clampScrollBounds(scrollView)
-        onScaleChange(scrollView.magnification)
+        onZoomScaleChange(scrollView.magnification)
         performPendingCommands(scrollView)
       }
     }
@@ -387,13 +387,25 @@ struct ImageScrollView: NSViewRepresentable {
       case .fitWindowToImage:
         queueFitWindowToImage()
 
-      case let .setScale(newScale):
-        guard newScale.isFinite, !isLiveMagnifying else { return }
-        applyScale(newScale, to: scrollView, animated: true)
+      case let .setZoomScale(to: newZoomScale):
+        guard newZoomScale.isFinite, !isLiveMagnifying else { return }
+        applyZoomScale(newZoomScale, to: scrollView, animated: true)
 
-      case let .scale(by: factor):
-        guard factor.isFinite, factor > 0, !isLiveMagnifying else { return }
-        applyScale(currentScale * factor, to: scrollView, animated: true)
+      case .zoomIn:
+        guard !isLiveMagnifying else { return }
+        applyZoomScale(
+          currentZoomScale * Constants.imageZoomStepFactor,
+          to: scrollView,
+          animated: true,
+        )
+
+      case .zoomOut:
+        guard !isLiveMagnifying else { return }
+        applyZoomScale(
+          currentZoomScale * (1.0 / Constants.imageZoomStepFactor),
+          to: scrollView,
+          animated: true,
+        )
       }
 
       if !isLiveMagnifying {
@@ -430,10 +442,10 @@ struct ImageScrollView: NSViewRepresentable {
             imageSize.height > 0
       else { return false }
 
-      let fitScale = min(
+      let fitZoomScale = min(
         viewportSize.width / imageSize.width, viewportSize.height / imageSize.height,
       )
-      applyScale(fitScale, to: scrollView, animated: animated)
+      applyZoomScale(fitZoomScale, to: scrollView, animated: animated)
       return true
     }
 
@@ -444,8 +456,8 @@ struct ImageScrollView: NSViewRepresentable {
       else { return false }
 
       let targetImageDisplaySize = NSSize(
-        width: (documentView.bounds.width * currentScale).rounded(),
-        height: (documentView.bounds.height * currentScale).rounded(),
+        width: (documentView.bounds.width * currentZoomScale).rounded(),
+        height: (documentView.bounds.height * currentZoomScale).rounded(),
       )
       pendingFitWindowToImage = false
       suppressAlwaysFitForProgrammaticResize = true
@@ -464,7 +476,7 @@ struct ImageScrollView: NSViewRepresentable {
             let target = loadedImageWindowSizeTarget(in: sizingContext, scrollView: scrollView)
       else { return false }
 
-      applyScale(target.scale, to: scrollView, animated: false)
+      applyZoomScale(target.zoomScale, to: scrollView, animated: false)
       pendingLoadedImageWindowSize = false
       suppressAlwaysFitForProgrammaticResize = true
       suppressedAlwaysFitViewportSize = nil
@@ -478,60 +490,60 @@ struct ImageScrollView: NSViewRepresentable {
 
     private func loadedImageWindowSizeTarget(
       in sizingContext: WindowSizingContext, scrollView: NSScrollView,
-    ) -> (frame: NSRect, scale: CGFloat)? {
+    ) -> (frame: NSRect, zoomScale: CGFloat)? {
       let imageSize = sizingContext.imageSize
-      let fitScale = min(
+      let fitZoomScale = min(
         sizingContext.maxViewportSize.width / imageSize.width,
         sizingContext.maxViewportSize.height / imageSize.height,
       )
-      let fillScale = max(
+      let fillZoomScale = max(
         sizingContext.maxViewportSize.width / imageSize.width,
         sizingContext.maxViewportSize.height / imageSize.height,
       )
 
       switch loadedImageWindowSizeMode {
       case .actualSizeLimitedToScreen:
-        let targetScale = min(1.0, fitScale).clamped(to: Constants.imageScaleRange)
+        let targetZoomScale = min(1.0, fitZoomScale).clamped(to: Constants.imageZoomScaleRange)
         let targetSize = NSSize(
-          width: imageSize.width * targetScale,
-          height: imageSize.height * targetScale,
+          width: imageSize.width * targetZoomScale,
+          height: imageSize.height * targetZoomScale,
         )
         let targetFrame = sizingContext.window.centeredConstrainedFrame(targetSize)
-        return (frame: targetFrame, scale: targetScale)
+        return (frame: targetFrame, zoomScale: targetZoomScale)
 
-      case .scaleToFitScreen:
-        let targetScale = fitScale.clamped(to: Constants.imageScaleRange)
+      case .zoomToFitScreen:
+        let targetZoomScale = fitZoomScale.clamped(to: Constants.imageZoomScaleRange)
         let targetSize = NSSize(
-          width: imageSize.width * targetScale,
-          height: imageSize.height * targetScale,
+          width: imageSize.width * targetZoomScale,
+          height: imageSize.height * targetZoomScale,
         )
         let targetFrame = sizingContext.window.centeredConstrainedFrame(targetSize)
-        return (frame: targetFrame, scale: targetScale)
+        return (frame: targetFrame, zoomScale: targetZoomScale)
 
       case .fillScreen:
-        let targetScale = fillScale.clamped(to: Constants.imageScaleRange)
+        let targetZoomScale = fillZoomScale.clamped(to: Constants.imageZoomScaleRange)
         let frame = sizingContext.window.constrainFrameRect(
           sizingContext.visibleFrame,
           to: sizingContext.screen,
         )
-        return (frame: frame, scale: targetScale)
+        return (frame: frame, zoomScale: targetZoomScale)
 
       case .actualSize:
-        let targetScale = CGFloat(1.0).clamped(to: Constants.imageScaleRange)
+        let targetZoomScale = CGFloat(1.0).clamped(to: Constants.imageZoomScaleRange)
         let targetSize = NSSize(width: imageSize.width, height: imageSize.height)
         let targetFrame = sizingContext.window.centeredConstrainedFrame(targetSize)
-        return (frame: targetFrame, scale: targetScale)
+        return (frame: targetFrame, zoomScale: targetZoomScale)
 
       case .fixedSize:
         guard let fixedViewportSize = fixedViewportSize(in: scrollView) else { return nil }
 
-        let targetScale = min(
+        let targetZoomScale = min(
           fixedViewportSize.width / imageSize.width,
           fixedViewportSize.height / imageSize.height,
         )
-        .clamped(to: Constants.imageScaleRange)
+        .clamped(to: Constants.imageZoomScaleRange)
         let targetFrame = sizingContext.window.centeredConstrainedFrame(fixedViewportSize)
-        return (frame: targetFrame, scale: targetScale)
+        return (frame: targetFrame, zoomScale: targetZoomScale)
       }
     }
 
@@ -555,43 +567,44 @@ struct ImageScrollView: NSViewRepresentable {
       }
     }
 
-    private func applyScale(_ scale: CGFloat, to scrollView: NSScrollView, animated: Bool) {
+    private func applyZoomScale(_ zoomScale: CGFloat, to scrollView: NSScrollView, animated: Bool) {
       guard let documentView = scrollView.documentView else { return }
 
-      let targetScale = scale.clamped(to: Constants.imageScaleRange)
+      let targetZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
       let imageSize = documentView.bounds.size
       let center = NSPoint(x: imageSize.width / 2.0, y: imageSize.height / 2.0)
-      let scaleDelta = abs(currentScale - targetScale)
-      let replacesAnimatedTarget = animatedScaleTarget.map {
-        abs($0 - targetScale) > Constants.scaleUpdateTolerance
+      let zoomScaleDelta = abs(currentZoomScale - targetZoomScale)
+      let replacesAnimatedTarget = animatedZoomTarget.map {
+        abs($0 - targetZoomScale) > Constants.zoomScaleUpdateTolerance
       } ?? false
 
-      guard scaleDelta > Constants.scaleUpdateTolerance || replacesAnimatedTarget else { return }
+      guard zoomScaleDelta > Constants.zoomScaleUpdateTolerance || replacesAnimatedTarget
+      else { return }
 
       if animated {
-        scaleAnimationGeneration += 1
-        let animationGeneration = scaleAnimationGeneration
-        animatedScaleTarget = targetScale
-        onScaleChange(targetScale)
+        zoomAnimationGeneration += 1
+        let animationGeneration = zoomAnimationGeneration
+        animatedZoomTarget = targetZoomScale
+        onZoomScaleChange(targetZoomScale)
         NSAnimationContext.runAnimationGroup { context in
           context.duration = 0.3
           context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-          scrollView.animator().setMagnification(targetScale, centeredAt: center)
+          scrollView.animator().setMagnification(targetZoomScale, centeredAt: center)
         } completionHandler: { [weak self, weak scrollView] in
           Task { @MainActor [weak self, weak scrollView] in
             guard let self, let scrollView else { return }
-            guard scaleAnimationGeneration == animationGeneration else { return }
+            guard zoomAnimationGeneration == animationGeneration else { return }
 
-            animatedScaleTarget = nil
+            animatedZoomTarget = nil
             clampScrollBounds(scrollView)
-            onScaleChange(scrollView.magnification)
+            onZoomScaleChange(scrollView.magnification)
           }
         }
       } else {
-        cancelProgrammaticScaleAnimation()
-        scrollView.setMagnification(targetScale, centeredAt: center)
+        cancelProgrammaticZoomAnimation()
+        scrollView.setMagnification(targetZoomScale, centeredAt: center)
         clampScrollBounds(scrollView)
-        onScaleChange(scrollView.magnification)
+        onZoomScaleChange(scrollView.magnification)
       }
     }
 
@@ -661,7 +674,7 @@ struct ImageScrollView: NSViewRepresentable {
             scrollView.layoutSubtreeIfNeeded()
             clampScrollBounds(scrollView)
             suppressedAlwaysFitViewportSize = scrollView.contentSize
-            onScaleChange(scrollView.magnification)
+            onZoomScaleChange(scrollView.magnification)
           }
         }
       }
@@ -687,9 +700,9 @@ struct ImageScrollView: NSViewRepresentable {
       scrollView.reflectScrolledClipView(scrollView.contentView)
     }
 
-    private func cancelProgrammaticScaleAnimation() {
-      scaleAnimationGeneration += 1
-      animatedScaleTarget = nil
+    private func cancelProgrammaticZoomAnimation() {
+      zoomAnimationGeneration += 1
+      animatedZoomTarget = nil
     }
 
     private func queueLoadedImageWindowSize() {
@@ -713,9 +726,9 @@ struct ImageScrollView: NSViewRepresentable {
         .observe(\.magnification, options: [.new]) { [weak self] scrollView, _ in
           Task { @MainActor [weak self, weak scrollView] in
             guard let self, let scrollView else { return }
-            guard !isProgrammaticScaleAnimating else { return }
+            guard !isProgrammaticZoomAnimating else { return }
 
-            onScaleChange(scrollView.magnification)
+            onZoomScaleChange(scrollView.magnification)
           }
         }
 

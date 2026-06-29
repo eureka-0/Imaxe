@@ -14,7 +14,7 @@ final class ImageSession {
   private(set) var currentImageInfo: ImageInfo?
   var isImporterPresented = false
   private(set) var isLoading = false
-  var imageScale: CGFloat = 1.0
+  var zoomScale: CGFloat = 1.0
   private(set) var isWindowPinned = false
   var alwaysFitToWindow = true
   private(set) var showTopBar = false
@@ -114,21 +114,21 @@ final class ImageSession {
     viewportController.fitWindowToImage()
   }
 
-  func setScale(_ newScale: CGFloat) {
-    guard newScale.isFinite else { return }
+  func setZoomScale(_ newZoomScale: CGFloat) {
+    guard newZoomScale.isFinite else { return }
 
     alwaysFitToWindow = false
-    viewportController.setScale(newScale)
+    viewportController.setZoomScale(newZoomScale)
   }
 
   func zoomIn() {
     alwaysFitToWindow = false
-    viewportController.scale(by: Constants.imageZoomStep)
+    viewportController.zoomIn()
   }
 
   func zoomOut() {
     alwaysFitToWindow = false
-    viewportController.scale(by: 1.0 / Constants.imageZoomStep)
+    viewportController.zoomOut()
   }
 
   func openImageFromPasteboard() {

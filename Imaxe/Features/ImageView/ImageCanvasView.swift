@@ -26,9 +26,9 @@ final class ImageCanvasView: NSView {
     }
   }
 
-  var scale: CGFloat {
+  var zoomScale: CGFloat {
     didSet {
-      if oldValue != scale, (oldValue - 1) * (scale - 1) <= 0 {
+      if oldValue != zoomScale, (oldValue - 1) * (zoomScale - 1) <= 0 {
         needsDisplay = true
       }
     }
@@ -48,10 +48,10 @@ final class ImageCanvasView: NSView {
     true
   }
 
-  init(imageContainer: ImageContainer, imageInfo: ImageInfo, scale: CGFloat) {
+  init(imageContainer: ImageContainer, imageInfo: ImageInfo, zoomScale: CGFloat) {
     self.imageContainer = imageContainer
     self.imageInfo = imageInfo
-    self.scale = scale
+    self.zoomScale = zoomScale
     super.init(frame: NSRect())
     updateCanvasSize()
     setupObservation()
@@ -158,11 +158,11 @@ final class ImageCanvasView: NSView {
   }
 
   private var imageInterpolation: NSImageInterpolation {
-    scale > 1.0 ? .none : .high
+    zoomScale > 1.0 ? .none : .high
   }
 
   private var cgInterpolationQuality: CGInterpolationQuality {
-    scale > 1.0 ? .none : .high
+    zoomScale > 1.0 ? .none : .high
   }
 
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {

@@ -10,8 +10,8 @@ import Foundation
 enum ImageViewportCommand {
   case fitToWindow
   case fitWindowToImage
-  case setScale(to: CGFloat)
-  case scale(by: CGFloat)
+  case setZoomScale(to: CGFloat)
+  case zoomIn, zoomOut
 }
 
 protocol ImageViewportCommandHandling: AnyObject {
@@ -29,11 +29,15 @@ final class ImageViewportController {
     handler?.handle(.fitWindowToImage)
   }
 
-  func setScale(_ scale: CGFloat) {
-    handler?.handle(.setScale(to: scale))
+  func setZoomScale(_ zoomScale: CGFloat) {
+    handler?.handle(.setZoomScale(to: zoomScale))
   }
 
-  func scale(by factor: CGFloat) {
-    handler?.handle(.scale(by: factor))
+  func zoomIn() {
+    handler?.handle(.zoomIn)
+  }
+
+  func zoomOut() {
+    handler?.handle(.zoomOut)
   }
 }

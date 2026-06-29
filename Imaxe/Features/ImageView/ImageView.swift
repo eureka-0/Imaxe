@@ -13,8 +13,8 @@ struct ImageView: View {
 
   @State private var isTopBarHovering = false
   @State private var isImageInfoPresented = false
-  @State private var isScalePickerPresented = false
-  @State private var customScaleText = ""
+  @State private var isZoomPickerPresented = false
+  @State private var customZoomScaleText = ""
 
   @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue)
   private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
@@ -29,7 +29,7 @@ struct ImageView: View {
   private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
 
   private var isPopoverPresented: Bool {
-    isImageInfoPresented || isScalePickerPresented
+    isImageInfoPresented || isZoomPickerPresented
   }
 
   private var displayedImageInfo: ImageInfo? {
@@ -86,7 +86,7 @@ struct ImageView: View {
         loadedImageWindowSizeMode: loadedImageWindowSizeMode,
         fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
         fixedLoadedImageWindowSizeUnit: fixedLoadedImageWindowSizeUnit,
-        scale: $imageSession.imageScale,
+        zoomScale: $imageSession.zoomScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
     } else if imageSession.isLoading {
@@ -190,47 +190,43 @@ struct ImageView: View {
       Button(action: imageSession.zoomOut) {
         topBarIconLabel("Zoom Out", systemImage: "minus.magnifyingglass")
       }
-      .disabled(imageSession.isLoading || imageSession.imageScale <= Constants.imageScaleRange
+      .disabled(imageSession.isLoading || imageSession.zoomScale <= Constants.imageZoomScaleRange
         .lowerBound)
       .help(Text("Zoom out"))
 
-      scaleButton
+      Button {
+        customZoomScaleText = zoomInputText(for: imageSession.zoomScale)
+        isZoomPickerPresented.toggle()
+      } label: {
+        Text(zoomDescription(for: imageSession.zoomScale))
+          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .monospacedDigit()
+          .lineLimit(1)
+          .frame(width: Constants.topBarZoomButtonWidth, height: Constants.topBarButtonHeight)
+      }
+      .popover(isPresented: $isZoomPickerPresented, arrowEdge: .top) {
+        ZoomScalePickerPopover(
+          currentZoomScale: imageSession.zoomScale,
+          customZoomScaleText: $customZoomScaleText,
+          onSelectZoomScale: { zoomScale in
+            imageSession.setZoomScale(zoomScale)
+            customZoomScaleText = zoomInputText(for: zoomScale)
+            isZoomPickerPresented = false
+          },
+          onApplyCustomZoomScale: applyCustomZoom,
+        )
+      }
+      .disabled(imageSession.isLoading)
+      .help(Text("Choose zoom level"))
 
       Button(action: imageSession.zoomIn) {
         topBarIconLabel("Zoom In", systemImage: "plus.magnifyingglass")
       }
-      .disabled(imageSession.isLoading || imageSession.imageScale >= Constants.imageScaleRange
+      .disabled(imageSession.isLoading || imageSession.zoomScale >= Constants.imageZoomScaleRange
         .upperBound)
       .help(Text("Zoom in"))
     }
     .topBarControlGroup()
-  }
-
-  private var scaleButton: some View {
-    Button {
-      customScaleText = scaleInputText(for: imageSession.imageScale)
-      isScalePickerPresented.toggle()
-    } label: {
-      Text(scaleDescription(for: imageSession.imageScale))
-        .font(.system(size: 12, weight: .medium, design: .rounded))
-        .monospacedDigit()
-        .lineLimit(1)
-        .frame(width: Constants.topBarScaleButtonWidth, height: Constants.topBarButtonHeight)
-    }
-    .popover(isPresented: $isScalePickerPresented, arrowEdge: .top) {
-      ScalePickerPopover(
-        currentScale: imageSession.imageScale,
-        customScaleText: $customScaleText,
-        onSelectScale: { scale in
-          imageSession.setScale(scale)
-          customScaleText = scaleInputText(for: scale)
-          isScalePickerPresented = false
-        },
-        onApplyCustomScale: applyCustomScale,
-      )
-    }
-    .disabled(imageSession.isLoading)
-    .help(Text("Choose image scale"))
   }
 
   private var fitWindowToImageButton: some View {
@@ -272,12 +268,12 @@ struct ImageView: View {
       .frame(width: Constants.topBarIconButtonWidth, height: Constants.topBarButtonHeight)
   }
 
-  private func applyCustomScale() {
-    guard let scale = scaleValue(from: customScaleText) else { return }
+  private func applyCustomZoom() {
+    guard let zoomScale = zoomScaleValue(from: customZoomScaleText) else { return }
 
-    imageSession.setScale(scale)
-    customScaleText = scaleInputText(for: scale)
-    isScalePickerPresented = false
+    imageSession.setZoomScale(zoomScale)
+    customZoomScaleText = zoomInputText(for: zoomScale)
+    isZoomPickerPresented = false
   }
 
   private func updateTopBarVisibility(in window: NSWindow? = nil) {
@@ -339,14 +335,14 @@ private struct TopBarButtonStyle: ButtonStyle {
   }
 }
 
-private struct ScalePickerPopover: View {
-  let currentScale: CGFloat
-  @Binding var customScaleText: String
-  let onSelectScale: (CGFloat) -> Void
-  let onApplyCustomScale: () -> Void
+private struct ZoomScalePickerPopover: View {
+  let currentZoomScale: CGFloat
+  @Binding var customZoomScaleText: String
+  let onSelectZoomScale: (CGFloat) -> Void
+  let onApplyCustomZoomScale: () -> Void
 
-  var isCustomScaleValid: Bool {
-    scaleValue(from: customScaleText) != nil
+  var isCustomZoomScaleValid: Bool {
+    zoomScaleValue(from: customZoomScaleText) != nil
   }
 
   private let columns = [
@@ -355,46 +351,46 @@ private struct ScalePickerPopover: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Scale")
+      Text("Zoom")
         .font(.headline)
 
       LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-        ForEach(Constants.commonScales, id: \.self) { scale in
-          scalePresetButton(for: scale)
+        ForEach(Constants.commonZoomLevels, id: \.self) { zoomScale in
+          zoomPresetButton(for: zoomScale)
         }
       }
 
       Divider()
 
       HStack(spacing: 5) {
-        TextField("100", text: $customScaleText)
+        TextField("100", text: $customZoomScaleText)
           .font(.system(size: 12, weight: .medium, design: .rounded))
           .monospacedDigit()
           .textFieldStyle(.roundedBorder)
           .frame(width: 48)
-          .onSubmit(onApplyCustomScale)
+          .onSubmit(onApplyCustomZoomScale)
 
         Text("%")
           .foregroundStyle(.secondary)
 
         Spacer(minLength: 0)
 
-        Button("Apply", action: onApplyCustomScale)
+        Button("Apply", action: onApplyCustomZoomScale)
           .buttonStyle(.bordered)
-          .disabled(!isCustomScaleValid)
+          .disabled(!isCustomZoomScaleValid)
       }
     }
     .padding(14)
     .frame(width: 162)
   }
 
-  private func scalePresetButton(for scale: CGFloat) -> some View {
-    let isSelected = abs(currentScale - scale) < 0.001
+  private func zoomPresetButton(for zoomScale: CGFloat) -> some View {
+    let isSelected = abs(currentZoomScale - zoomScale) < 0.001
 
     return Button {
-      onSelectScale(scale)
+      onSelectZoomScale(zoomScale)
     } label: {
-      Text(scaleDescription(for: scale))
+      Text(zoomDescription(for: zoomScale))
         .font(.system(size: 12, weight: .medium, design: .rounded))
         .monospacedDigit()
         .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
@@ -481,18 +477,18 @@ private extension View {
   }
 }
 
-private func scaleDescription(for scale: CGFloat) -> String {
-  "\(Int((scale * 100).rounded()))%"
+private func zoomDescription(for zoomScale: CGFloat) -> String {
+  "\(Int((zoomScale * 100).rounded()))%"
 }
 
-private func scaleInputText(for scale: CGFloat) -> String {
-  "\(Int((scale * 100).rounded()))"
+private func zoomInputText(for zoomScale: CGFloat) -> String {
+  "\(Int((zoomScale * 100).rounded()))"
 }
 
-private func scaleValue(from input: String) -> CGFloat? {
+private func zoomScaleValue(from input: String) -> CGFloat? {
   let trimmedInput = input.trimmingCharacters(in: .whitespacesAndNewlines)
   let percentText = trimmedInput.hasSuffix("%") ? String(trimmedInput.dropLast()) : trimmedInput
   guard let percent = Double(percentText), percent.isFinite, percent > 0 else { return nil }
 
-  return CGFloat(percent / 100.0).clamped(to: Constants.imageScaleRange)
+  return CGFloat(percent / 100.0).clamped(to: Constants.imageZoomScaleRange)
 }

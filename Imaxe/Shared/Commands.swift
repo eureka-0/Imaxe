@@ -75,7 +75,7 @@ struct ViewCommands: Commands {
       .disabled(imageSession?.currentImage == nil)
 
       Button("Actual Size") {
-        imageSession?.setScale(1.0)
+        imageSession?.setZoomScale(1.0)
       }
       .keyboardShortcut("1", modifiers: .command)
       .disabled(imageSession?.currentImage == nil)

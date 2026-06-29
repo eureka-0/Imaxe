@@ -30,7 +30,7 @@ struct ImaxeTests {
     let canvas = ImageCanvasView(
       imageContainer: imageContainer,
       imageInfo: imageInfo,
-      scale: 1.0,
+      zoomScale: 1.0,
     )
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),

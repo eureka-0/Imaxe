@@ -64,7 +64,7 @@ enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
 }
 
 enum LoadedImageWindowSizeMode: String, CaseIterable, Identifiable {
-  case actualSizeLimitedToScreen, scaleToFitScreen, fillScreen, actualSize, fixedSize
+  case actualSizeLimitedToScreen, zoomToFitScreen, fillScreen, actualSize, fixedSize
 
   var id: String {
     rawValue
@@ -73,7 +73,7 @@ enum LoadedImageWindowSizeMode: String, CaseIterable, Identifiable {
   var description: LocalizedStringKey {
     switch self {
     case .actualSizeLimitedToScreen: "Actual size (limited to screen)"
-    case .scaleToFitScreen: "Scale to fit screen"
+    case .zoomToFitScreen: "Fit to screen"
     case .fillScreen: "Fill screen"
     case .actualSize: "Actual size"
     case .fixedSize: "Fixed size"
