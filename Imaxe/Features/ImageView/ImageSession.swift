@@ -15,9 +15,6 @@ final class ImageSession {
   var isImporterPresented = false
   private(set) var isLoading = false
   var imageScale: CGFloat = 1.0
-  private(set) var fitToWindowRequest = 0
-  private(set) var fitWindowToImageRequest = 0
-  private(set) var applyLoadedImageWindowSizeRequest = 0
   private(set) var isWindowPinned = false
   var alwaysFitToWindow = true
   private(set) var showTopBar = false
@@ -39,9 +36,10 @@ final class ImageSession {
 
   var alert: ImageAlert?
   @ObservationIgnored private weak var owningWindow: NSWindow?
+  @ObservationIgnored let viewportController = ImageViewportController()
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
-  @ObservationIgnored private var imageLoadRequestID = 0
+  @ObservationIgnored private var activeImageLoad = ImageLoadOperation()
   @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
 
   init(imageContainer: ImageContainer? = nil) {
@@ -108,22 +106,12 @@ final class ImageSession {
   }
 
   func fitToWindow() {
-    DispatchQueue.main.async {
-      self.alwaysFitToWindow = true
-      self.fitToWindowRequest += 1
-    }
+    alwaysFitToWindow = true
+    viewportController.fitToWindow()
   }
 
   func fitWindowToImage() {
-    DispatchQueue.main.async {
-      self.fitWindowToImageRequest += 1
-    }
-  }
-
-  func applyLoadedImageWindowSize() {
-    DispatchQueue.main.async {
-      self.applyLoadedImageWindowSizeRequest += 1
-    }
+    viewportController.fitWindowToImage()
   }
 
   func setScale(_ newScale: CGFloat) {
@@ -216,8 +204,8 @@ final class ImageSession {
   func loadImage(from url: URL, failureTitle: String? = nil) {
     imageLoadTask?.cancel()
     imageFileWatcher = nil
-    imageLoadRequestID += 1
-    let requestID = imageLoadRequestID
+    let imageLoad = ImageLoadOperation()
+    activeImageLoad = imageLoad
     let previousImage = currentImage
     let previousImageInfo = currentImageInfo
     let previousFolderNavigator = folderNavigator
@@ -228,10 +216,10 @@ final class ImageSession {
     folderNavigator = FolderNavigator(for: url, enableLoopBrowsing: enableLoopBrowsing)
 
     imageLoadTask = Task { @MainActor [weak self] in
-      guard let self, requestID == imageLoadRequestID, !Task.isCancelled else { return }
+      guard let self, imageLoad === activeImageLoad, !Task.isCancelled else { return }
 
       defer {
-        if requestID == imageLoadRequestID {
+        if imageLoad === activeImageLoad {
           isLoading = false
         }
       }
@@ -245,7 +233,7 @@ final class ImageSession {
         }
 
         for await event in group {
-          guard requestID == imageLoadRequestID, !Task.isCancelled else {
+          guard imageLoad === activeImageLoad, !Task.isCancelled else {
             group.cancelAll()
             return
           }
@@ -261,7 +249,6 @@ final class ImageSession {
             if currentImageInfo == nil {
               currentImageInfo = try? await ImageLoader.shared.loadInfo(from: url)
             }
-            applyLoadedImageWindowSizeRequest += 1
             currentImage = imageContainer
             updateImageFileWatcher()
 
@@ -286,6 +273,8 @@ final class ImageSession {
     case info(Result<ImageInfo, Error>)
     case image(Result<ImageContainer, Error>)
   }
+
+  private final class ImageLoadOperation {}
 
   private func updateImageFileWatcher() {
     imageFileWatcher = nil

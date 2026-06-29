@@ -82,12 +82,10 @@ struct ImageView: View {
       ImageScrollView(
         imageContainer: currentImage,
         imageInfo: currentImageInfo,
-        loadedImageWindowSizeRequest: imageSession.applyLoadedImageWindowSizeRequest,
+        viewportController: imageSession.viewportController,
         loadedImageWindowSizeMode: loadedImageWindowSizeMode,
         fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
         fixedLoadedImageWindowSizeUnit: fixedLoadedImageWindowSizeUnit,
-        fitToWindowRequest: imageSession.fitToWindowRequest,
-        fitWindowToImageRequest: imageSession.fitWindowToImageRequest,
         scale: $imageSession.imageScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
