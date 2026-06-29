@@ -109,6 +109,22 @@ struct ImaxeTests {
     #expect(firstImage === secondImage)
   }
 
+  @Test func `image loader cancellation does not poison later loads`() async throws {
+    let url = sampleImageURL("sample_1280×853.png")
+    let requestID = ImageLoader.LoadRequestID()
+    let loadTask = Task {
+      try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
+    }
+
+    loadTask.cancel()
+    await ImageLoader.shared.cancelLoads(for: requestID)
+    _ = try? await loadTask.value
+
+    let image = try await ImageLoader.shared.loadImage(from: url)
+
+    #expect(image.pixelSize == NSSize(width: 1280, height: 853))
+  }
+
   @Test func `image loader reloads changed file at same url`() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-changing-image-\(UUID().uuidString).png")
@@ -131,6 +147,23 @@ struct ImaxeTests {
     #expect(firstInfo.pixelSize == IntSize(width: 10, height: 20))
     #expect(secondImage.pixelSize == NSSize(width: 12, height: 24))
     #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
+  }
+
+  @Test func `folder navigator starts with current image and can load directory asynchronously`() async throws {
+    let directory = URL.temporaryDirectory
+      .appending(path: "imaxe-folder-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+    let firstURL = directory.appending(path: "b.png")
+    let secondURL = directory.appending(path: "a.png")
+    try pngData(width: 10, height: 20).write(to: firstURL)
+    try pngData(width: 12, height: 24).write(to: secondURL)
+
+    let navigator = FolderNavigator(for: firstURL, enableLoopBrowsing: false)
+    let imageURLs = try #require(await FolderNavigator.imageURLs(for: firstURL))
+
+    #expect(navigator.imageURLs == [firstURL])
+    #expect(imageURLs.map(\.lastPathComponent) == ["a.png", "b.png"])
   }
 
   @Test func `image file watcher reports stable file change`() async throws {

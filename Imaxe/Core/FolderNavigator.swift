@@ -7,11 +7,11 @@
 
 import Foundation
 
-struct FolderNavigator {
+nonisolated struct FolderNavigator {
   var currentImageURL: URL {
     didSet {
       if !imageURLs.contains(currentImageURL) {
-        reload()
+        imageURLs = [currentImageURL]
       }
     }
   }
@@ -50,11 +50,10 @@ struct FolderNavigator {
     return false
   }
 
-  init(for url: URL, enableLoopBrowsing: Bool) {
+  init(for url: URL, enableLoopBrowsing: Bool, imageURLs: [URL]? = nil) {
     currentImageURL = url
     self.enableLoopBrowsing = enableLoopBrowsing
-    imageURLs = []
-    reload()
+    self.imageURLs = imageURLs ?? [url]
   }
 
   static func isRegularFile(_ url: URL) -> Bool {
@@ -62,16 +61,34 @@ struct FolderNavigator {
   }
 
   mutating func reload() {
+    imageURLs = Self.imageURLs(in: rootURL, fallbackURL: currentImageURL)
+  }
+
+  mutating func replaceImageURLs(_ imageURLs: [URL]) {
+    self.imageURLs = imageURLs
+  }
+
+  static func imageURLs(for url: URL) async -> [URL]? {
+    let rootURL = url.deletingLastPathComponent()
+
+    return try? await Task.detached(priority: .userInitiated) {
+      try Task.checkCancellation()
+      let imageURLs = Self.imageURLs(in: rootURL, fallbackURL: url)
+      try Task.checkCancellation()
+      return imageURLs
+    }.value
+  }
+
+  private static func imageURLs(in rootURL: URL, fallbackURL: URL) -> [URL] {
     guard let contents = try? FileManager.default.contentsOfDirectory(
       at: rootURL,
       includingPropertiesForKeys: [.isRegularFileKey],
       options: [.skipsHiddenFiles],
     ) else {
-      imageURLs = [currentImageURL]
-      return
+      return [fallbackURL]
     }
 
-    imageURLs = contents
+    return contents
       .filter { Self.isRegularFile($0) && ImageLoader.isSupportedImage($0) }
       .sorted { first, second in
         let fn1 = first.lastPathComponent

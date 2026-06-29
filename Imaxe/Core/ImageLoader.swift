@@ -48,13 +48,31 @@ actor ImageLoader {
   }
 
   private struct ImageInfoLoadTask {
+    let id: UUID
     let fileSignature: ImageFileSignature
     let task: Task<ImageInfo, Error>
+    var requestIDs: Set<LoadRequestID>
+    var uncancellableWaiterCount: Int
+
+    var hasWaiters: Bool {
+      !requestIDs.isEmpty || uncancellableWaiterCount > 0
+    }
   }
 
   private struct ImageContainerLoadTask {
+    let id: UUID
     let fileSignature: ImageFileSignature
     let task: Task<ImageContainer, Error>
+    var requestIDs: Set<LoadRequestID>
+    var uncancellableWaiterCount: Int
+
+    var hasWaiters: Bool {
+      !requestIDs.isEmpty || uncancellableWaiterCount > 0
+    }
+  }
+
+  nonisolated struct LoadRequestID: Hashable, Sendable {
+    private let value = UUID()
   }
 
   nonisolated struct ImageFileSignature: Equatable {
@@ -122,7 +140,7 @@ actor ImageLoader {
     return supportedImageTypes.contains { fileType.conforms(to: $0) }
   }
 
-  func loadInfo(from url: URL) async throws -> ImageInfo {
+  func loadInfo(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageInfo {
     guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
@@ -142,38 +160,49 @@ actor ImageLoader {
 
     if let existingTask = infoLoadTasks[url] {
       if existingTask.fileSignature == fileSignature {
-        return try await existingTask.task.value
+        registerInfoWaiter(requestID, for: url)
+        let info = try await value(of: existingTask.task, requestID: requestID)
+        try Task.checkCancellation()
+        cacheInfo(info, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
+        return info
       }
 
       existingTask.task.cancel()
       infoLoadTasks[url] = nil
     }
 
+    let loadTaskID = UUID()
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageInfo in
       try Task.checkCancellation()
       let info = ImageInfo(url: url)
       try Task.checkCancellation()
       return info
     }
-    infoLoadTasks[url] = ImageInfoLoadTask(fileSignature: fileSignature, task: task)
+    infoLoadTasks[url] = ImageInfoLoadTask(
+      id: loadTaskID,
+      fileSignature: fileSignature,
+      task: task,
+      requestIDs: requestID.map { [$0] } ?? [],
+      uncancellableWaiterCount: requestID == nil ? 1 : 0,
+    )
 
     do {
-      let info = try await task.value
-      infoLoadTasks[url] = nil
-      if ImageFileSignature(url: url) == fileSignature {
-        infoCache.setObject(
-          ImageInfoBox(info: info, fileSignature: fileSignature),
-          forKey: cacheKey,
-        )
+      let info = try await value(of: task, requestID: requestID)
+      if infoLoadTasks[url]?.id == loadTaskID {
+        infoLoadTasks[url] = nil
       }
+      try Task.checkCancellation()
+      cacheInfo(info, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
       return info
     } catch {
-      infoLoadTasks[url] = nil
+      if shouldRemoveInfoTask(at: url, id: loadTaskID, after: error) {
+        infoLoadTasks[url] = nil
+      }
       throw error
     }
   }
 
-  func loadImage(from url: URL) async throws -> ImageContainer {
+  func loadImage(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageContainer {
     guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
@@ -193,13 +222,18 @@ actor ImageLoader {
 
     if let existingTask = imageLoadTasks[url] {
       if existingTask.fileSignature == fileSignature {
-        return try await existingTask.task.value
+        registerImageWaiter(requestID, for: url)
+        let imageContainer = try await value(of: existingTask.task, requestID: requestID)
+        try Task.checkCancellation()
+        cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
+        return imageContainer
       }
 
       existingTask.task.cancel()
       imageLoadTasks[url] = nil
     }
 
+    let loadTaskID = UUID()
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageContainer in
       try Task.checkCancellation()
       let imageContainer: ImageContainer? = if Self.getUTType(for: url) == .svg {
@@ -215,22 +249,132 @@ actor ImageLoader {
       try Task.checkCancellation()
       return imageContainer
     }
-    imageLoadTasks[url] = ImageContainerLoadTask(fileSignature: fileSignature, task: task)
+    imageLoadTasks[url] = ImageContainerLoadTask(
+      id: loadTaskID,
+      fileSignature: fileSignature,
+      task: task,
+      requestIDs: requestID.map { [$0] } ?? [],
+      uncancellableWaiterCount: requestID == nil ? 1 : 0,
+    )
 
     do {
-      let imageContainer = try await task.value
-      imageLoadTasks[url] = nil
-      if ImageFileSignature(url: url) == fileSignature {
-        imageCache.setObject(
-          ImageContainerBox(imageContainer: imageContainer, fileSignature: fileSignature),
-          forKey: cacheKey,
-          cost: imageContainer.cacheCost,
-        )
+      let imageContainer = try await value(of: task, requestID: requestID)
+      if imageLoadTasks[url]?.id == loadTaskID {
+        imageLoadTasks[url] = nil
       }
+      try Task.checkCancellation()
+      cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
       return imageContainer
     } catch {
-      imageLoadTasks[url] = nil
+      if shouldRemoveImageTask(at: url, id: loadTaskID, after: error) {
+        imageLoadTasks[url] = nil
+      }
       throw error
+    }
+  }
+
+  func cancelLoads(for requestID: LoadRequestID) {
+    for (url, var loadTask) in infoLoadTasks where loadTask.requestIDs.contains(requestID) {
+      loadTask.requestIDs.remove(requestID)
+      if loadTask.requestIDs.isEmpty, loadTask.uncancellableWaiterCount == 0 {
+        loadTask.task.cancel()
+        infoLoadTasks[url] = nil
+      } else {
+        infoLoadTasks[url] = loadTask
+      }
+    }
+
+    for (url, var loadTask) in imageLoadTasks where loadTask.requestIDs.contains(requestID) {
+      loadTask.requestIDs.remove(requestID)
+      if loadTask.requestIDs.isEmpty, loadTask.uncancellableWaiterCount == 0 {
+        loadTask.task.cancel()
+        imageLoadTasks[url] = nil
+      } else {
+        imageLoadTasks[url] = loadTask
+      }
+    }
+  }
+
+  private func registerInfoWaiter(_ requestID: LoadRequestID?, for url: URL) {
+    guard var loadTask = infoLoadTasks[url] else { return }
+
+    if let requestID {
+      loadTask.requestIDs.insert(requestID)
+    } else {
+      loadTask.uncancellableWaiterCount += 1
+    }
+    infoLoadTasks[url] = loadTask
+  }
+
+  private func registerImageWaiter(_ requestID: LoadRequestID?, for url: URL) {
+    guard var loadTask = imageLoadTasks[url] else { return }
+
+    if let requestID {
+      loadTask.requestIDs.insert(requestID)
+    } else {
+      loadTask.uncancellableWaiterCount += 1
+    }
+    imageLoadTasks[url] = loadTask
+  }
+
+  private func cacheInfo(
+    _ info: ImageInfo,
+    for url: URL,
+    cacheKey: NSURL,
+    fileSignature: ImageFileSignature,
+  ) {
+    if ImageFileSignature(url: url) == fileSignature {
+      infoCache.setObject(
+        ImageInfoBox(info: info, fileSignature: fileSignature),
+        forKey: cacheKey,
+      )
+    }
+  }
+
+  private func cacheImage(
+    _ imageContainer: ImageContainer,
+    for url: URL,
+    cacheKey: NSURL,
+    fileSignature: ImageFileSignature,
+  ) {
+    if ImageFileSignature(url: url) == fileSignature {
+      imageCache.setObject(
+        ImageContainerBox(imageContainer: imageContainer, fileSignature: fileSignature),
+        forKey: cacheKey,
+        cost: imageContainer.cacheCost,
+      )
+    }
+  }
+
+  private func shouldRemoveInfoTask(at url: URL, id: UUID, after error: Error) -> Bool {
+    guard let loadTask = infoLoadTasks[url], loadTask.id == id else {
+      return false
+    }
+
+    return !isCurrentTaskCancellation(error) || !loadTask.hasWaiters
+  }
+
+  private func shouldRemoveImageTask(at url: URL, id: UUID, after error: Error) -> Bool {
+    guard let loadTask = imageLoadTasks[url], loadTask.id == id else {
+      return false
+    }
+
+    return !isCurrentTaskCancellation(error) || !loadTask.hasWaiters
+  }
+
+  private func isCurrentTaskCancellation(_ error: Error) -> Bool {
+    Task.isCancelled && error is CancellationError
+  }
+
+  private func value<T>(of task: Task<T, Error>, requestID: LoadRequestID?) async throws -> T {
+    try await withTaskCancellationHandler {
+      try await task.value
+    } onCancel: {
+      guard let requestID else { return }
+
+      Task {
+        await self.cancelLoads(for: requestID)
+      }
     }
   }
 

@@ -39,6 +39,7 @@ final class ImageSession {
   @ObservationIgnored let viewportController = ImageViewportController()
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
+  @ObservationIgnored private var folderLoadTask: Task<Void, Never>?
   @ObservationIgnored private var activeImageLoad = ImageLoadOperation()
   @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
 
@@ -56,6 +57,11 @@ final class ImageSession {
   deinit {
     topBarHideTask?.cancel()
     imageLoadTask?.cancel()
+    folderLoadTask?.cancel()
+    let requestID = activeImageLoad.requestID
+    Task {
+      await ImageLoader.shared.cancelLoads(for: requestID)
+    }
     imageFileWatcher = nil
   }
 
@@ -204,18 +210,23 @@ final class ImageSession {
   }
 
   func loadImage(from url: URL, failureTitle: String? = nil) {
-    imageLoadTask?.cancel()
-    imageFileWatcher = nil
-    let imageLoad = ImageLoadOperation()
-    activeImageLoad = imageLoad
     let previousImage = currentImage
     let previousImageInfo = currentImageInfo
     let previousFolderNavigator = folderNavigator
+    cancelCurrentImageLoad()
+    imageFileWatcher = nil
+    let imageLoad = ImageLoadOperation()
+    activeImageLoad = imageLoad
 
     isLoading = true
     currentImage = nil
     currentImageInfo = nil
-    folderNavigator = FolderNavigator(for: url, enableLoopBrowsing: enableLoopBrowsing)
+    folderNavigator = FolderNavigator(
+      for: url,
+      enableLoopBrowsing: enableLoopBrowsing,
+      imageURLs: initialImageURLs(from: previousFolderNavigator, for: url),
+    )
+    loadFolderNavigator(for: url, imageLoad: imageLoad)
 
     imageLoadTask = Task { @MainActor [weak self] in
       guard let self, imageLoad === activeImageLoad, !Task.isCancelled else { return }
@@ -228,10 +239,10 @@ final class ImageSession {
 
       await withTaskGroup(of: ImageLoadEvent.self) { group in
         group.addTask {
-          await .info(Self.loadInfoResult(from: url))
+          await .info(Self.loadInfoResult(from: url, requestID: imageLoad.requestID))
         }
         group.addTask {
-          await .image(Self.loadImageResult(from: url))
+          await .image(Self.loadImageResult(from: url, requestID: imageLoad.requestID))
         }
 
         for await event in group {
@@ -249,13 +260,17 @@ final class ImageSession {
 
           case let .image(.success(imageContainer)):
             if currentImageInfo == nil {
-              currentImageInfo = try? await ImageLoader.shared.loadInfo(from: url)
+              currentImageInfo = try? await ImageLoader.shared.loadInfo(
+                from: url,
+                requestID: imageLoad.requestID,
+              )
             }
             currentImage = imageContainer
             updateImageFileWatcher()
 
           case let .image(.failure(error)):
             group.cancelAll()
+            folderLoadTask?.cancel()
             currentImage = previousImage
             currentImageInfo = previousImageInfo
             folderNavigator = previousFolderNavigator
@@ -276,7 +291,43 @@ final class ImageSession {
     case image(Result<ImageContainer, Error>)
   }
 
-  private final class ImageLoadOperation {}
+  private final class ImageLoadOperation {
+    let requestID = ImageLoader.LoadRequestID()
+  }
+
+  private func cancelCurrentImageLoad() {
+    imageLoadTask?.cancel()
+    folderLoadTask?.cancel()
+    let requestID = activeImageLoad.requestID
+    Task {
+      await ImageLoader.shared.cancelLoads(for: requestID)
+    }
+  }
+
+  private func initialImageURLs(
+    from previousFolderNavigator: FolderNavigator?,
+    for url: URL,
+  ) -> [URL]? {
+    guard previousFolderNavigator?.rootURL == url.deletingLastPathComponent() else {
+      return nil
+    }
+
+    return previousFolderNavigator?.imageURLs
+  }
+
+  private func loadFolderNavigator(for url: URL, imageLoad: ImageLoadOperation) {
+    folderLoadTask = Task { @MainActor [weak self] in
+      guard let self else { return }
+
+      guard let imageURLs = await FolderNavigator.imageURLs(for: url),
+            imageLoad === activeImageLoad,
+            folderNavigator?.currentImageURL == url,
+            !Task.isCancelled
+      else { return }
+
+      folderNavigator?.replaceImageURLs(imageURLs)
+    }
+  }
 
   private func updateImageFileWatcher() {
     imageFileWatcher = nil
@@ -295,9 +346,12 @@ final class ImageSession {
     }
   }
 
-  private nonisolated static func loadInfoResult(from url: URL) async -> Result<ImageInfo, Error> {
+  private nonisolated static func loadInfoResult(
+    from url: URL,
+    requestID: ImageLoader.LoadRequestID,
+  ) async -> Result<ImageInfo, Error> {
     do {
-      return try await .success(ImageLoader.shared.loadInfo(from: url))
+      return try await .success(ImageLoader.shared.loadInfo(from: url, requestID: requestID))
     } catch {
       return .failure(error)
     }
@@ -305,9 +359,10 @@ final class ImageSession {
 
   private nonisolated static func loadImageResult(
     from url: URL,
+    requestID: ImageLoader.LoadRequestID,
   ) async -> Result<ImageContainer, Error> {
     do {
-      return try await .success(ImageLoader.shared.loadImage(from: url))
+      return try await .success(ImageLoader.shared.loadImage(from: url, requestID: requestID))
     } catch {
       return .failure(error)
     }
