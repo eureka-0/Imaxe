@@ -12,8 +12,8 @@
 	"argv": [
 		"/opt/homebrew/bin/xcode-build-server"
 	],
-	"workspace": "/Users/lxlong/Desktop/code/Swift/Imagxe/Imagxe.xcodeproj/project.xcworkspace",
-	"build_root": "/Users/lxlong/Library/Developer/Xcode/DerivedData/Imagxe-asxjkndlwqoijbalrcjvuozkolhd",
-	"scheme": "Imagxe",
+	"workspace": "/Users/lxlong/Desktop/code/Swift/Imaxe/Imaxe.xcodeproj/project.xcworkspace",
+	"build_root": "/Users/lxlong/Library/Developer/Xcode/DerivedData/Imaxe-flvggjzvmkrgmqhiahjnqyowbsub",
+	"scheme": "Imaxe",
 	"kind": "xcode"
 }

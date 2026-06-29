@@ -1,0 +1,71 @@
+{
+  "fill" : {
+    "solid" : "extended-gray:1.00000,1.00000"
+  },
+  "groups" : [
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "image-name" : "iDot.svg",
+          "name" : "iDot",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -237.11709713036066,
+              -272
+            ]
+          }
+        },
+        {
+          "image-name" : "iVerticalLine.svg",
+          "name" : "iVerticalLine",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              -237.11709713036066,
+              96
+            ]
+          }
+        }
+      ],
+      "name" : "i Shape",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "hidden" : false,
+      "layers" : [
+        {
+          "image-name" : "DBody.svg",
+          "name" : "DBody",
+          "position" : {
+            "scale" : 1,
+            "translation-in-points" : [
+              167.45165170069777,
+              0
+            ]
+          }
+        }
+      ],
+      "name" : "D Shape",
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "squares" : "shared"
+  }
+}
