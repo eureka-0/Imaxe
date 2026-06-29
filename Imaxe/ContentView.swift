@@ -54,7 +54,7 @@ struct ContentView: View {
     }
     .fileImporter(
       isPresented: $imageSession.isImporterPresented,
-      allowedContentTypes: [.image],
+      allowedContentTypes: ImageLoader.supportedImageTypes,
       onCompletion: imageSession.onOpenImage,
     )
     .alert(item: $imageSession.alert) { alert in

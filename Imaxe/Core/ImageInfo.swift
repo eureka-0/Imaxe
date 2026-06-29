@@ -86,15 +86,15 @@ nonisolated struct ImageInfo: Hashable {
     let dpiWidth = intValue(for: kCGImagePropertyDPIWidth, in: properties)
     let dpiHeight = intValue(for: kCGImagePropertyDPIHeight, in: properties)
 
-    if let dpiWidth, let dpiHeight {
+    if let dpiWidth, let dpiHeight, dpiWidth > 0, dpiHeight > 0 {
       return IntSize(width: dpiWidth, height: dpiHeight)
     }
 
-    if let dpiWidth {
+    if let dpiWidth, dpiWidth > 0 {
       return IntSize(width: dpiWidth, height: dpiWidth)
     }
 
-    if let dpiHeight {
+    if let dpiHeight, dpiHeight > 0 {
       return IntSize(width: dpiHeight, height: dpiHeight)
     }
 
@@ -219,6 +219,11 @@ nonisolated struct SVGDocumentSize {
     let numberPrefix = trimmedValue.prefix { character in
       character.isNumber || character == "." || character == "-" || character == "+"
     }
+    let unitSuffix = trimmedValue.dropFirst(numberPrefix.count)
+      .trimmingCharacters(in: .whitespacesAndNewlines)
+
+    guard unitSuffix.isEmpty || unitSuffix == "px" else { return nil }
+
     guard let number = Double(numberPrefix) else { return nil }
 
     return number > 0 ? CGFloat(number) : nil
