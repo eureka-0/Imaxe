@@ -574,7 +574,7 @@ struct ImageScrollView: NSViewRepresentable {
         animatedScaleTarget = targetScale
         onScaleChange(targetScale)
         NSAnimationContext.runAnimationGroup { context in
-          context.duration = 0.25
+          context.duration = 0.3
           context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
           scrollView.animator().setMagnification(targetScale, centeredAt: center)
         } completionHandler: { [weak self, weak scrollView] in
@@ -642,33 +642,6 @@ struct ImageScrollView: NSViewRepresentable {
       )
     }
 
-    private func scaleToEliminateBlankSpaceIfNeeded(_ scrollView: NSScrollView) {
-      guard let documentView = scrollView.documentView else { return }
-
-      let viewportSize = scrollView.contentSize
-      let imageSize = documentView.bounds.size
-
-      guard viewportSize.width > 0,
-            viewportSize.height > 0,
-            imageSize.width > 0,
-            imageSize.height > 0
-      else { return }
-
-      let widthDelta = viewportSize.width - imageSize.width
-      let heightDelta = viewportSize.height - imageSize.height
-      let fitScale: CGFloat? = if widthDelta > 0, widthDelta < 1.0 {
-        viewportSize.width / imageSize.width
-      } else if heightDelta > 0, heightDelta < 1.0 {
-        viewportSize.height / imageSize.height
-      } else {
-        nil
-      }
-
-      guard let fitScale else { return }
-
-      applyScale(fitScale, to: scrollView, animated: false)
-    }
-
     private func applyWindowFrame(
       _ scrollView: NSScrollView,
       window: NSWindow,
@@ -685,7 +658,6 @@ struct ImageScrollView: NSViewRepresentable {
           Task { @MainActor [weak self, weak scrollView] in
             guard let self, let scrollView else { return }
 
-            scaleToEliminateBlankSpaceIfNeeded(scrollView)
             scrollView.layoutSubtreeIfNeeded()
             clampScrollBounds(scrollView)
             suppressedAlwaysFitViewportSize = scrollView.contentSize
