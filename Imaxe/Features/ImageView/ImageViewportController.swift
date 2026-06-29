@@ -5,9 +5,13 @@
 //  Created by Codex on 2026/6/28.
 //
 
+import Foundation
+
 enum ImageViewportCommand {
   case fitToWindow
   case fitWindowToImage
+  case setScale(to: CGFloat)
+  case scale(by: CGFloat)
 }
 
 protocol ImageViewportCommandHandling: AnyObject {
@@ -23,5 +27,13 @@ final class ImageViewportController {
 
   func fitWindowToImage() {
     handler?.handle(.fitWindowToImage)
+  }
+
+  func setScale(_ scale: CGFloat) {
+    handler?.handle(.setScale(to: scale))
+  }
+
+  func scale(by factor: CGFloat) {
+    handler?.handle(.scale(by: factor))
   }
 }

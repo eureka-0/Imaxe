@@ -23,6 +23,8 @@ struct ImaxeApp: App {
         )
         .configureWindow { window in
           window.isMovableByWindowBackground = true
+          window.titleVisibility = .hidden
+          window.titlebarAppearsTransparent = true
         }
     }
     .windowStyle(.hiddenTitleBar)

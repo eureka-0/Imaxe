@@ -118,15 +118,17 @@ final class ImageSession {
     guard newScale.isFinite else { return }
 
     alwaysFitToWindow = false
-    imageScale = newScale.clamped(to: Constants.imageScaleRange)
+    viewportController.setScale(newScale)
   }
 
   func zoomIn() {
-    setScale(imageScale * Constants.imageZoomStep)
+    alwaysFitToWindow = false
+    viewportController.scale(by: Constants.imageZoomStep)
   }
 
   func zoomOut() {
-    setScale(imageScale / Constants.imageZoomStep)
+    alwaysFitToWindow = false
+    viewportController.scale(by: 1.0 / Constants.imageZoomStep)
   }
 
   func openImageFromPasteboard() {
