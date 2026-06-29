@@ -26,32 +26,27 @@ final class ImageCanvasView: NSView {
     }
   }
 
-  var zoomScale: CGFloat {
-    didSet {
-      if oldValue != zoomScale, (oldValue - 1) * (zoomScale - 1) <= 0 {
-        needsDisplay = true
-      }
-    }
-  }
-
   private var lastBackingScale: CGFloat = 2.0
   private var gifTimer: Timer?
   private var gifBitmapRep: NSBitmapImageRep?
   private var currentGIFFrame = 0
-  private var userDefaultsObservation: NSKeyValueObservation?
+  private var userDefaultsObservers: [NSKeyValueObservation] = []
 
   private var imageActualSizeStrategy: ImageActualSizeStrategy {
     UserDefaults.standard.imageActualSizeStrategyValue
+  }
+
+  private var imageInterpolationStrategy: ImageInterpolationStrategy {
+    UserDefaults.standard.imageInterpolationStrategyValue
   }
 
   override var isFlipped: Bool {
     true
   }
 
-  init(imageContainer: ImageContainer, imageInfo: ImageInfo, zoomScale: CGFloat) {
+  init(imageContainer: ImageContainer, imageInfo: ImageInfo) {
     self.imageContainer = imageContainer
     self.imageInfo = imageInfo
-    self.zoomScale = zoomScale
     super.init(frame: NSRect())
     updateCanvasSize()
     setupObservation()
@@ -63,7 +58,7 @@ final class ImageCanvasView: NSView {
   }
 
   private func setupObservation() {
-    userDefaultsObservation = UserDefaults.standard.observe(
+    let actualSizeObservation = UserDefaults.standard.observe(
       \.imageActualSizeStrategy, options: [.initial, .new],
     ) { [weak self] _, _ in
       guard let self else { return }
@@ -73,10 +68,22 @@ final class ImageCanvasView: NSView {
         self.needsDisplay = true
       }
     }
+
+    let interpolationObservation = UserDefaults.standard.observe(
+      \.imageInterpolationStrategy, options: [.initial, .new],
+    ) { [weak self] _, _ in
+      guard let self else { return }
+
+      DispatchQueue.main.async {
+        self.needsDisplay = true
+      }
+    }
+
+    userDefaultsObservers = [actualSizeObservation, interpolationObservation]
   }
 
   deinit {
-    userDefaultsObservation?.invalidate()
+    userDefaultsObservers.forEach { $0.invalidate() }
     MainActor.assumeIsolated {
       gifTimer?.invalidate()
     }
@@ -131,6 +138,24 @@ final class ImageCanvasView: NSView {
     }
   }
 
+  private var imageInterpolation: NSImageInterpolation {
+    switch imageInterpolationStrategy {
+    case .none: .none
+    case .low: .low
+    case .medium: .medium
+    case .high: .high
+    }
+  }
+
+  private var cgInterpolationQuality: CGInterpolationQuality {
+    switch imageInterpolationStrategy {
+    case .none: .none
+    case .low: .low
+    case .medium: .medium
+    case .high: .high
+    }
+  }
+
   override func draw(_ dirtyRect: NSRect) {
     NSColor.clear.setFill()
     dirtyRect.fill()
@@ -157,14 +182,6 @@ final class ImageCanvasView: NSView {
     currentContext.imageInterpolation = previousInterpolation
   }
 
-  private var imageInterpolation: NSImageInterpolation {
-    zoomScale > 1.0 ? .none : .high
-  }
-
-  private var cgInterpolationQuality: CGInterpolationQuality {
-    zoomScale > 1.0 ? .none : .high
-  }
-
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
     imageContainer.nsImage.draw(
       in: bounds,
@@ -179,13 +196,13 @@ final class ImageCanvasView: NSView {
   private func startGIFAnimationIfNeeded() {
     guard window != nil, gifTimer == nil else { return }
 
-    guard let bitmapRep = animatedGIFRepresentation else {
+    guard let bitmapRep = imageContainer.nsImage.animatedGIFRepresentation else {
       stopGIFAnimation()
       return
     }
 
     gifBitmapRep = bitmapRep
-    currentGIFFrame = (bitmapRep.value(forProperty: .currentFrame) as? NSNumber)?.intValue ?? 0
+    currentGIFFrame = bitmapRep.currentGIFFrame ?? 0
     scheduleNextGIFFrame(for: bitmapRep)
   }
 
@@ -195,33 +212,17 @@ final class ImageCanvasView: NSView {
     gifBitmapRep = nil
   }
 
-  private var animatedGIFRepresentation: NSBitmapImageRep? {
-    imageContainer.nsImage.representations
-      .compactMap { $0 as? NSBitmapImageRep }
-      .first { bitmapRep in
-        let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue ?? 0
-        return frameCount > 1
-      }
-  }
-
   private func scheduleNextGIFFrame(for bitmapRep: NSBitmapImageRep) {
-    guard let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue,
+    guard let frameCount = bitmapRep.gifFrameCount,
           frameCount > 1
     else {
       stopGIFAnimation()
       return
     }
 
-    let duration = (bitmapRep.value(forProperty: .currentFrameDuration) as? NSNumber)?.doubleValue
-    let frameDuration = if let duration, duration > 0 {
-      duration
-    } else {
-      0.1
-    }
-
     gifTimer?.invalidate()
     let timer = Timer(
-      timeInterval: frameDuration,
+      timeInterval: bitmapRep.currentGIFFrameDuration(),
       target: self,
       selector: #selector(advanceGIFFrame(_:)),
       userInfo: nil,
@@ -234,7 +235,7 @@ final class ImageCanvasView: NSView {
 
   @objc private func advanceGIFFrame(_: Timer) {
     guard let bitmapRep = gifBitmapRep else { return }
-    guard let frameCount = (bitmapRep.value(forProperty: .frameCount) as? NSNumber)?.intValue,
+    guard let frameCount = bitmapRep.gifFrameCount,
           frameCount > 1
     else {
       stopGIFAnimation()

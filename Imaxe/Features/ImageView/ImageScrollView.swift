@@ -49,7 +49,6 @@ struct ImageScrollView: NSViewRepresentable {
     centeringClipView.documentView = ImageCanvasView(
       imageContainer: imageContainer,
       imageInfo: imageInfo,
-      zoomScale: clampedZoomScale,
     )
     scrollView.contentView = centeringClipView
 
@@ -116,12 +115,10 @@ struct ImageScrollView: NSViewRepresentable {
       if imageView.imageInfo != imageInfo {
         imageView.imageInfo = imageInfo
       }
-      imageView.zoomScale = clampedZoomScale
     } else {
       scrollView.documentView = ImageCanvasView(
         imageContainer: imageContainer,
         imageInfo: imageInfo,
-        zoomScale: clampedZoomScale,
       )
     }
 

@@ -42,6 +42,25 @@ extension Comparable {
   }
 }
 
+extension NSBitmapImageRep {
+  var gifFrameCount: Int? {
+    (value(forProperty: .frameCount) as? NSNumber)?.intValue
+  }
+
+  var currentGIFFrame: Int? {
+    (value(forProperty: .currentFrame) as? NSNumber)?.intValue
+  }
+
+  func currentGIFFrameDuration(fallback: Double = 0.1) -> Double {
+    let duration = (value(forProperty: .currentFrameDuration) as? NSNumber)?.doubleValue
+    if let duration, duration > 0 {
+      return duration
+    } else {
+      return fallback
+    }
+  }
+}
+
 extension NSImage {
   nonisolated var pixelSize: NSSize {
     var pixelSize = NSSize.zero
@@ -63,6 +82,15 @@ extension NSImage {
     }
 
     return pixelSize
+  }
+
+  var animatedGIFRepresentation: NSBitmapImageRep? {
+    representations
+      .compactMap { $0 as? NSBitmapImageRep }
+      .first { bitmapRep in
+        let frameCount = bitmapRep.gifFrameCount ?? 0
+        return frameCount > 1
+      }
   }
 }
 
@@ -228,8 +256,17 @@ extension UserDefaults {
     string(forKey: AppSettings.Keys.imageActualSizeStrategy.rawValue)
   }
 
+  @objc dynamic var imageInterpolationStrategy: String? {
+    string(forKey: AppSettings.Keys.imageInterpolationStrategy.rawValue)
+  }
+
   var imageActualSizeStrategyValue: ImageActualSizeStrategy {
     imageActualSizeStrategy.flatMap { ImageActualSizeStrategy(rawValue: $0) }
       ?? AppSettings.Defaults.imageActualSizeStrategy
+  }
+
+  var imageInterpolationStrategyValue: ImageInterpolationStrategy {
+    imageInterpolationStrategy.flatMap { ImageInterpolationStrategy(rawValue: $0) }
+      ?? AppSettings.Defaults.imageInterpolationStrategy
   }
 }

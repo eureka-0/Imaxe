@@ -107,6 +107,9 @@ struct ImageSettingsView: View {
   @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
   private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
 
+  @AppStorage(AppSettings.Keys.imageInterpolationStrategy.rawValue)
+  private var imageInterpolationStrategy = AppSettings.Defaults.imageInterpolationStrategy
+
   @FocusState private var widthInputFocused: Bool
   @FocusState private var heightInputFocused: Bool
 
@@ -141,6 +144,19 @@ struct ImageSettingsView: View {
             fixedLoadedImageWindowSizeField
           }
         }
+        .gridCellAnchor(.leading)
+      }
+
+      GridRow {
+        Text("Image interpolation:")
+
+        Picker("", selection: $imageInterpolationStrategy) {
+          ForEach(ImageInterpolationStrategy.allCases) {
+            Text($0.description).tag($0)
+          }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
         .gridCellAnchor(.leading)
       }
     }

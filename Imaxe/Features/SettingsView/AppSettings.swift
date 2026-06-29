@@ -8,6 +8,47 @@
 import Foundation
 import SwiftUI
 
+enum AppSettings {
+  enum Keys: String, CaseIterable, Identifiable {
+    case appearance
+    case topBarHideDelay
+    case enableLoopBrowsing
+    case actionOnImageFileChange
+
+    case imageActualSizeStrategy
+    case loadedImageWindowSizeMode
+    case fixedLoadedImageWindowWidth
+    case fixedLoadedImageWindowHeight
+    case fixedLoadedImageWindowSizeUnit
+    case imageInterpolationStrategy
+
+    var id: String {
+      rawValue
+    }
+  }
+
+  enum Defaults {
+    static let appearance: Appearance = .system
+    static let topBarHideDelay = 1.5
+    static let enableLoopBrowsing = true
+    static let actionOnImageFileChange: ActionOnImageFileChange = .reload
+
+    static let imageActualSizeStrategy: ImageActualSizeStrategy = .pixelSize
+    static let loadedImageWindowSizeMode: LoadedImageWindowSizeMode = .actualSizeLimitedToScreen
+    static let fixedLoadedImageWindowWidth = 680.0
+    static let fixedLoadedImageWindowHeight = 520.0
+    static let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit = .points
+    static let imageInterpolationStrategy: ImageInterpolationStrategy = .high
+
+    static var fixedLoadedImageWindowSize: NSSize {
+      NSSize(
+        width: fixedLoadedImageWindowWidth,
+        height: fixedLoadedImageWindowHeight,
+      )
+    }
+  }
+}
+
 enum Appearance: String, CaseIterable, Identifiable {
   case system, light, dark
 
@@ -96,41 +137,19 @@ enum LoadedImageWindowSizeUnit: String, CaseIterable, Identifiable {
   }
 }
 
-enum AppSettings {
-  enum Keys: String, CaseIterable, Identifiable {
-    case appearance
-    case topBarHideDelay
-    case enableLoopBrowsing
-    case actionOnImageFileChange
+enum ImageInterpolationStrategy: String, CaseIterable, Identifiable {
+  case none, low, medium, high
 
-    case imageActualSizeStrategy
-    case loadedImageWindowSizeMode
-    case fixedLoadedImageWindowWidth
-    case fixedLoadedImageWindowHeight
-    case fixedLoadedImageWindowSizeUnit
-
-    var id: String {
-      rawValue
-    }
+  var id: String {
+    rawValue
   }
 
-  enum Defaults {
-    static let appearance: Appearance = .system
-    static let topBarHideDelay = 1.5
-    static let enableLoopBrowsing = true
-    static let actionOnImageFileChange: ActionOnImageFileChange = .reload
-
-    static let imageActualSizeStrategy: ImageActualSizeStrategy = .pixelSize
-    static let loadedImageWindowSizeMode: LoadedImageWindowSizeMode = .actualSizeLimitedToScreen
-    static let fixedLoadedImageWindowWidth = 680.0
-    static let fixedLoadedImageWindowHeight = 520.0
-    static let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit = .points
-
-    static var fixedLoadedImageWindowSize: NSSize {
-      NSSize(
-        width: fixedLoadedImageWindowWidth,
-        height: fixedLoadedImageWindowHeight,
-      )
+  var description: LocalizedStringKey {
+    switch self {
+    case .none: "None"
+    case .low: "Low"
+    case .medium: "Medium"
+    case .high: "High"
     }
   }
 }
