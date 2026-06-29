@@ -26,6 +26,9 @@ struct GeneralSettingsView: View {
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance = AppSettings.Defaults.appearance
 
+  @AppStorage(AppSettings.Keys.backgroundColor.rawValue)
+  private var backgroundColor = AppSettings.Defaults.backgroundColor
+
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
   private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
 
@@ -47,6 +50,29 @@ struct GeneralSettingsView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .gridCellAnchor(.leading)
+      }
+
+      GridRow {
+        Text("Background color:")
+
+        HStack(spacing: 5) {
+          ColorPicker("", selection: Binding(
+            get: { backgroundColor.color },
+            set: { newColor in
+              backgroundColor = BackgroundColor(rawValue: newColor.hex)
+            },
+          ))
+          .labelsHidden()
+
+          if backgroundColor != AppSettings.Defaults.backgroundColor {
+            Button("Reset", systemImage: "arrow.counterclockwise") {
+              backgroundColor = AppSettings.Defaults.backgroundColor
+            }
+            .buttonStyle(.borderless)
+            .labelStyle(.iconOnly)
+          }
+        }
         .gridCellAnchor(.leading)
       }
 

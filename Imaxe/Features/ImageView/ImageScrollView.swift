@@ -18,6 +18,9 @@ struct ImageScrollView: NSViewRepresentable {
   @Binding var zoomScale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
+  @AppStorage(AppSettings.Keys.backgroundColor.rawValue)
+  private var backgroundColor = AppSettings.Defaults.backgroundColor
+
   func onZoomScaleChange(_ newZoomScale: CGFloat) {
     guard newZoomScale.isFinite else { return }
 
@@ -55,7 +58,8 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.automaticallyAdjustsContentInsets = false
     scrollView.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
 
-    scrollView.drawsBackground = false
+    scrollView.drawsBackground = true
+    scrollView.backgroundColor = backgroundColor.nsColor
     scrollView.hasHorizontalScroller = false
     scrollView.hasVerticalScroller = false
     scrollView.verticalScrollElasticity = .none
@@ -95,6 +99,7 @@ struct ImageScrollView: NSViewRepresentable {
   }
 
   func updateNSView(_ scrollView: NSScrollView, context: Context) {
+    scrollView.backgroundColor = backgroundColor.nsColor
     context.coordinator.onZoomScaleChange = onZoomScaleChange
     context.coordinator.onAlwaysFitToWindowChange = onAlwaysFitToWindowChange
     context.coordinator.updateLoadedImageWindowSizeSettings(
@@ -177,6 +182,10 @@ struct ImageScrollView: NSViewRepresentable {
       guard receivedMagnifyEvent else { return }
       receivedMagnifyEvent = false
       onLiveMagnificationEnd?()
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+      window?.performDrag(with: event)
     }
   }
 

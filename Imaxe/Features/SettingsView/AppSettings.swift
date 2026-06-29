@@ -11,6 +11,7 @@ import SwiftUI
 enum AppSettings {
   enum Keys: String, CaseIterable, Identifiable {
     case appearance
+    case backgroundColor
     case topBarHideDelay
     case enableLoopBrowsing
     case actionOnImageFileChange
@@ -29,6 +30,7 @@ enum AppSettings {
 
   enum Defaults {
     static let appearance: Appearance = .system
+    static let backgroundColor = BackgroundColor()
     static let topBarHideDelay = 1.5
     static let enableLoopBrowsing = true
     static let actionOnImageFileChange: ActionOnImageFileChange = .reload
@@ -70,6 +72,26 @@ enum Appearance: String, CaseIterable, Identifiable {
     case .light: .light
     case .dark: .dark
     }
+  }
+}
+
+struct BackgroundColor: Codable, Equatable, RawRepresentable {
+  let hex: String
+
+  init(rawValue: String = "") {
+    hex = rawValue
+  }
+
+  var rawValue: String {
+    hex
+  }
+
+  var color: Color {
+    hex.count == 0 ? .clear : Color(hex: hex)
+  }
+
+  var nsColor: NSColor {
+    hex.count == 0 ? .clear : NSColor(hex: hex)
   }
 }
 

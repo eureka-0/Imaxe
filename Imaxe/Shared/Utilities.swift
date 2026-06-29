@@ -9,6 +9,46 @@ import AppKit
 import OSLog
 import SwiftUI
 
+private func rgbaByte(_ component: CGFloat) -> Int {
+  Int((component.clamped(to: 0 ... 1) * 255).rounded())
+}
+
+private func hexStringFromRGBA(
+  red: CGFloat,
+  green: CGFloat,
+  blue: CGFloat,
+  alpha: CGFloat,
+) -> String {
+  String(
+    format: "#%02X%02X%02X%02X",
+    rgbaByte(red),
+    rgbaByte(green),
+    rgbaByte(blue),
+    rgbaByte(alpha),
+  )
+}
+
+private func rgbaValueFromHex(_ hex: String) -> (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) {
+  var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
+  hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "").uppercased()
+  if hexSanitized.count == 6 {
+    hexSanitized += "FF"
+  }
+  if hexSanitized.count != 8 {
+    return (0, 0, 0, 0)
+  }
+
+  var rgba: UInt64 = 0
+  Scanner(string: hexSanitized).scanHexInt64(&rgba)
+
+  let r = CGFloat((rgba & 0xFF00_0000) >> 24) / 255.0
+  let g = CGFloat((rgba & 0x00FF_0000) >> 16) / 255.0
+  let b = CGFloat((rgba & 0x0000_FF00) >> 8) / 255.0
+  let a = CGFloat(rgba & 0x0000_00FF) / 255.0
+
+  return (r, g, b, a)
+}
+
 nonisolated struct IntSize: Hashable {
   let width: Int
   let height: Int
@@ -36,6 +76,26 @@ nonisolated struct IntSize: Hashable {
   }
 }
 
+extension Color {
+  init(hex: String) {
+    let (r, g, b, a) = rgbaValueFromHex(hex)
+    self.init(red: r, green: g, blue: b, opacity: a)
+  }
+
+  var hex: String {
+    guard let cgColor, let color = NSColor(cgColor: cgColor)?.usingColorSpace(.sRGB) else {
+      return "#00000000"
+    }
+
+    return hexStringFromRGBA(
+      red: color.redComponent,
+      green: color.greenComponent,
+      blue: color.blueComponent,
+      alpha: color.alphaComponent,
+    )
+  }
+}
+
 extension Comparable {
   func clamped(to range: ClosedRange<Self>) -> Self {
     Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
@@ -58,6 +118,13 @@ extension NSBitmapImageRep {
     } else {
       return fallback
     }
+  }
+}
+
+extension NSColor {
+  convenience init(hex: String) {
+    let (r, g, b, a) = rgbaValueFromHex(hex)
+    self.init(red: r, green: g, blue: b, alpha: a)
   }
 }
 
@@ -234,20 +301,6 @@ extension ShapeStyle where Self == Color {
 
   static var separator: Color {
     Color(nsColor: .separatorColor)
-  }
-
-  func fromHex(_ hex: String) -> Color {
-    var hexSanitized = hex.trimmingCharacters(in: .whitespacesAndNewlines)
-    hexSanitized = hexSanitized.replacingOccurrences(of: "#", with: "")
-
-    var rgb: UInt64 = 0
-    Scanner(string: hexSanitized).scanHexInt64(&rgb)
-
-    let r = Double((rgb & 0xFF0000) >> 16) / 255.0
-    let g = Double((rgb & 0x00FF00) >> 8) / 255.0
-    let b = Double(rgb & 0x0000FF) / 255.0
-
-    return Color(red: r, green: g, blue: b)
   }
 }
 

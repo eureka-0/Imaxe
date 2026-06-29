@@ -76,12 +76,10 @@ struct ImageView: View {
 
   @ViewBuilder
   private var imageContent: some View {
-    if let currentImage = imageSession.currentImage,
-       let currentImageInfo = imageSession.currentImageInfo
-    {
+    if let image = imageSession.currentImage, let info = imageSession.currentImageInfo {
       ImageScrollView(
-        imageContainer: currentImage,
-        imageInfo: currentImageInfo,
+        imageContainer: image,
+        imageInfo: info,
         viewportController: imageSession.viewportController,
         loadedImageWindowSizeMode: loadedImageWindowSizeMode,
         fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,

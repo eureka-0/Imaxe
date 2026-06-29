@@ -7,6 +7,7 @@
 
 import AppKit
 @testable import Imaxe
+import SwiftUI
 import Testing
 
 @MainActor
@@ -30,7 +31,6 @@ struct ImaxeTests {
     let canvas = ImageCanvasView(
       imageContainer: imageContainer,
       imageInfo: imageInfo,
-      zoomScale: 1.0,
     )
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),
@@ -156,6 +156,18 @@ struct ImaxeTests {
 
     #expect(didChange)
     _ = watcher
+  }
+
+  @Test func `color hex serializes grayscale colors as rgba`() {
+    let color = Color(.sRGB, white: 0.5, opacity: 0.25)
+
+    #expect(color.hex == "#80808040")
+  }
+
+  @Test func `color hex preserves rgb and alpha components`() {
+    let color = Color(hex: "#33669980")
+
+    #expect(color.hex == "#33669980")
   }
 
   private func sampleImageURL(_ fileName: String) -> URL {
