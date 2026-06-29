@@ -71,7 +71,7 @@ actor ImageLoader {
     }
   }
 
-  nonisolated struct LoadRequestID: Hashable, Sendable {
+  nonisolated struct LoadRequestID: Hashable {
     private let value = UUID()
   }
 
@@ -105,20 +105,28 @@ actor ImageLoader {
     imageCache.totalCostLimit = 100 * 1024 * 1024 // 100 MB
   }
 
-  nonisolated static let supportedImageTypes: [UTType] = [
-    // Bitmap formats
-    .bmp,
-    .gif,
-    .heic,
-    .heif,
-    .ico,
-    .jpeg,
-    .png,
-    .tiff,
-    .webP,
-    // Vector formats
-    .svg,
-  ].compactMap(\.self)
+  nonisolated static var supportedImageTypes: [UTType] {
+    let supportedTypes: [UTType] = [
+      // Bitmap formats
+      .bmp,
+      .gif,
+      .heic,
+      .heif,
+      .ico,
+      .jpeg,
+      .png,
+      .tiff,
+      .webP,
+      // Vector formats
+      .svg,
+    ].compactMap(\.self)
+
+    #if DEBUG
+      print("Supported image types: \(supportedTypes.map(\.identifier).joined(separator: ", "))")
+    #endif
+
+    return supportedTypes
+  }
 
   nonisolated static var supportedImageExtensions: [String] {
     supportedImageTypes.compactMap(\.preferredFilenameExtension)
