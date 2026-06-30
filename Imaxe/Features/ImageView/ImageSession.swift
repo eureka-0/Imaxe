@@ -146,13 +146,21 @@ final class ImageSession {
         if let fileURLString = pasteboard.string(forType: .fileURL),
            let fileURL = URL(string: fileURLString)
         {
-          loadImage(from: fileURL, failureTitle: "Failed to Load Image from Pasteboard")
+          loadImage(
+            from: fileURL,
+            failureTitle: "Failed to Load Image from Pasteboard",
+            addToRecent: false,
+          )
         }
       case .URL:
         if let urlString = pasteboard.string(forType: .URL),
            let url = URL(string: urlString)
         {
-          loadImage(from: url, failureTitle: "Failed to Load Image from Pasteboard")
+          loadImage(
+            from: url,
+            failureTitle: "Failed to Load Image from Pasteboard",
+            addToRecent: false,
+          )
         }
       case .png, .tiff:
         if let data = pasteboard.data(forType: imageType),
@@ -167,7 +175,11 @@ final class ImageSession {
             .appendingPathExtension(imageType == .png ? "png" : "tiff")
           do {
             try data.write(to: tempFileURL)
-            loadImage(from: tempFileURL, failureTitle: "Failed to Load Image from Pasteboard")
+            loadImage(
+              from: tempFileURL,
+              failureTitle: "Failed to Load Image from Pasteboard",
+              addToRecent: false,
+            )
           } catch {
             alert = ImageAlert(
               title: "Failed to Load Image from Pasteboard",
@@ -209,7 +221,7 @@ final class ImageSession {
     }
   }
 
-  func loadImage(from url: URL, failureTitle: String? = nil) {
+  func loadImage(from url: URL, failureTitle: String? = nil, addToRecent: Bool = true) {
     let previousImage = currentImage
     let previousImageInfo = currentImageInfo
     let previousFolderNavigator = folderNavigator
@@ -267,6 +279,9 @@ final class ImageSession {
             }
             currentImage = imageContainer
             updateImageFileWatcher()
+            if addToRecent {
+              NSDocumentController.shared.noteNewRecentDocumentURL(url)
+            }
 
           case let .image(.failure(error)):
             group.cancelAll()

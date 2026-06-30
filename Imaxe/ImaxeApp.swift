@@ -9,6 +9,8 @@ import SwiftUI
 
 @main
 struct ImaxeApp: App {
+  @NSApplicationDelegateAdaptor(ImaxeApplicationDelegate.self) private var applicationDelegate
+
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance: Appearance = AppSettings.Defaults.appearance
 
@@ -40,6 +42,16 @@ struct ImaxeApp: App {
       SettingsView()
         .applyAppearance(appearance)
     }
+  }
+}
+
+final class ImaxeApplicationDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_: Notification) {
+    OpenRecentMenuController.shared.startObservingMenuUpdates()
+  }
+
+  func applicationDidBecomeActive(_: Notification) {
+    OpenRecentMenuController.shared.installIfNeeded()
   }
 }
 
