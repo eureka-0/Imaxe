@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -o pipefail
+
 OUTPUT_FILE="./Images/sample_updating.png"
 WAITING_SECONDS=20
 
