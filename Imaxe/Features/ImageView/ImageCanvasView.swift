@@ -59,7 +59,8 @@ final class ImageCanvasView: NSView {
 
   private func setupObservation() {
     let actualSizeObservation = UserDefaults.standard.observe(
-      \.imageActualSizeStrategy, options: [.initial, .new],
+      \.imageActualSizeStrategy,
+      options: [.initial, .new],
     ) { [weak self] _, _ in
       guard let self else { return }
 
@@ -70,7 +71,8 @@ final class ImageCanvasView: NSView {
     }
 
     let interpolationObservation = UserDefaults.standard.observe(
-      \.imageInterpolationStrategy, options: [.initial, .new],
+      \.imageInterpolationStrategy,
+      options: [.initial, .new],
     ) { [weak self] _, _ in
       guard let self else { return }
 

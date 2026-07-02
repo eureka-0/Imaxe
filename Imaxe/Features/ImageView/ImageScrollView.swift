@@ -449,7 +449,8 @@ struct ImageScrollView: NSViewRepresentable {
       else { return false }
 
       let fitZoomScale = min(
-        viewportSize.width / imageSize.width, viewportSize.height / imageSize.height,
+        viewportSize.width / imageSize.width,
+        viewportSize.height / imageSize.height,
       )
       applyZoomScale(fitZoomScale, to: scrollView, animated: animated)
       return true
@@ -495,7 +496,8 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     private func loadedImageWindowSizeTarget(
-      in sizingContext: WindowSizingContext, scrollView: NSScrollView,
+      in sizingContext: WindowSizingContext,
+      scrollView: NSScrollView,
     ) -> (frame: NSRect, zoomScale: CGFloat)? {
       let imageSize = sizingContext.imageSize
       let fitZoomScale = min(

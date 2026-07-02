@@ -228,13 +228,15 @@ extension NSSize {
 
 extension NSView {
   func backingAlignedSize(
-    _ size: NSSize, options: AlignmentOptions = [.alignAllEdgesNearest],
+    _ size: NSSize,
+    options: AlignmentOptions = [.alignAllEdgesNearest],
   ) -> NSSize {
     backingAlignedRect(NSRect(origin: .zero, size: size), options: options).size
   }
 
   func backingAlignedPoint(
-    _ point: NSPoint, options: AlignmentOptions = [.alignAllEdgesNearest],
+    _ point: NSPoint,
+    options: AlignmentOptions = [.alignAllEdgesNearest],
   ) -> NSPoint {
     backingAlignedRect(NSRect(origin: point, size: .zero), options: options).origin
   }

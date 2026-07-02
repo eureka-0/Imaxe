@@ -411,7 +411,8 @@ actor ImageLoader {
   }
 
   private nonisolated static func rasterizedSVGImage(
-    from sourceImage: NSImage, pixelSize: NSSize,
+    from sourceImage: NSImage,
+    pixelSize: NSSize,
   ) -> NSImage? {
     let pixelsWide = max(1, Int(pixelSize.width.rounded(.up)))
     let pixelsHigh = max(1, Int(pixelSize.height.rounded(.up)))
