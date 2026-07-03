@@ -15,6 +15,7 @@ struct ImageScrollView: NSViewRepresentable {
   let loadedImageWindowSizeMode: LoadedImageWindowSizeMode
   let fixedLoadedImageWindowSize: NSSize
   let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit
+  let shouldApplyLoadedImageWindowSize: Bool
   @Binding var zoomScale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
@@ -74,7 +75,10 @@ struct ImageScrollView: NSViewRepresentable {
       fixedSize: fixedLoadedImageWindowSize,
       fixedSizeUnit: fixedLoadedImageWindowSizeUnit,
     )
-    context.coordinator.prepareForImage(imageContainer)
+    context.coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
+    )
     context.coordinator.bind(to: viewportController)
     context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
     scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
@@ -127,7 +131,10 @@ struct ImageScrollView: NSViewRepresentable {
       )
     }
 
-    context.coordinator.prepareForImage(imageContainer)
+    context.coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
+    )
     if !context.coordinator.isLiveMagnifying || context.coordinator.hasPendingCommands {
       scrollView.layoutSubtreeIfNeeded()
     }
@@ -327,14 +334,21 @@ struct ImageScrollView: NSViewRepresentable {
       alwaysFitToWindow = newAlwaysFitToWindow
     }
 
-    func prepareForImage(_ imageContainer: ImageContainer) {
+    func prepareForImage(
+      _ imageContainer: ImageContainer,
+      shouldApplyLoadedImageWindowSize: Bool,
+    ) {
       let newIdentifier = ObjectIdentifier(imageContainer.nsImage)
       if imageIdentifier != newIdentifier {
         imageIdentifier = newIdentifier
         pendingFitToWindow = false
         pendingFitWindowToImage = false
         cancelProgrammaticZoomAnimation()
-        queueLoadedImageWindowSize()
+        if shouldApplyLoadedImageWindowSize {
+          queueLoadedImageWindowSize()
+        } else {
+          pendingLoadedImageWindowSize = false
+        }
       }
     }
 

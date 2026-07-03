@@ -84,6 +84,7 @@ struct ImageView: View {
         loadedImageWindowSizeMode: loadedImageWindowSizeMode,
         fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
         fixedLoadedImageWindowSizeUnit: fixedLoadedImageWindowSizeUnit,
+        shouldApplyLoadedImageWindowSize: imageSession.shouldApplyLoadedImageWindowSize,
         zoomScale: $imageSession.zoomScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )

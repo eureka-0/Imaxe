@@ -149,7 +149,55 @@ struct ImaxeTests {
     #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
   }
 
-  @Test func `folder navigator starts with current image and can load directory asynchronously`() async throws {
+  @Test func `file change reload keeps current image while loading`() throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-session-reload-\(UUID().uuidString).png")
+    try pngData(width: 10, height: 20).write(to: url)
+    let initialImage = ImageContainer(url: url, nsImage: bitmapImage())
+    let session = ImageSession(imageContainer: initialImage)
+
+    session.loadImage(from: url, preservingViewportOnReload: true)
+
+    #expect(session.currentImage === initialImage)
+    #expect(!session.shouldApplyLoadedImageWindowSizeOnImageChange)
+  }
+
+  @Test func `always fit to window still applies after viewport-preserving image change`() {
+    var reportedZoomScale: CGFloat?
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { reportedZoomScale = $0 },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
+    )
+    let imageView = NSView(frame: NSRect(
+      origin: .zero,
+      size: NSSize(width: 200, height: 100),
+    ))
+    let imageContainer = ImageContainer(
+      url: URL(fileURLWithPath: "/tmp/example.png"),
+      nsImage: bitmapImage(width: 200, height: 100),
+    )
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = imageView
+    coordinator.updateAlwaysFitToWindowFromBinding(true)
+    coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: false,
+    )
+
+    coordinator.scrollViewDidLayout(scrollView)
+
+    #expect(!coordinator.hasPendingCommands)
+    #expect(scrollView.magnification.isApproximatelyEqual(to: 0.5))
+    #expect(reportedZoomScale?.isApproximatelyEqual(to: 0.5) == true)
+  }
+
+  @Test func `folder navigator starts with current image and can load directory asynchronously`(
+  ) async throws {
     let directory = URL.temporaryDirectory
       .appending(path: "imaxe-folder-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -207,14 +255,14 @@ struct ImaxeTests {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appending(path: "SampleImages/\(fileName)")
+      .appending(path: "Images/\(fileName)")
   }
 
-  private func bitmapImage() -> NSImage {
+  private func bitmapImage(width: Int = 10, height: Int = 20) -> NSImage {
     let representation = NSBitmapImageRep(
       bitmapDataPlanes: nil,
-      pixelsWide: 10,
-      pixelsHigh: 20,
+      pixelsWide: width,
+      pixelsHigh: height,
       bitsPerSample: 8,
       samplesPerPixel: 4,
       hasAlpha: true,
@@ -224,7 +272,7 @@ struct ImaxeTests {
       bitsPerPixel: 0,
     )
 
-    let image = NSImage(size: NSSize(width: 10, height: 20))
+    let image = NSImage(size: NSSize(width: width, height: height))
     if let representation {
       image.addRepresentation(representation)
     }
@@ -253,5 +301,11 @@ struct ImaxeTests {
     NSGraphicsContext.restoreGraphicsState()
 
     return try #require(representation.representation(using: .png, properties: [:]))
+  }
+}
+
+private extension CGFloat {
+  func isApproximatelyEqual(to other: CGFloat) -> Bool {
+    abs(self - other) < Constants.zoomScaleUpdateTolerance
   }
 }

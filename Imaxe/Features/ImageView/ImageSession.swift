@@ -17,6 +17,7 @@ final class ImageSession {
   var zoomScale: CGFloat = 1.0
   private(set) var isWindowPinned = false
   var alwaysFitToWindow = true
+  private(set) var shouldApplyLoadedImageWindowSize = true
   private(set) var showTopBar = false
   private(set) var folderNavigator: FolderNavigator?
 
@@ -221,18 +222,29 @@ final class ImageSession {
     }
   }
 
-  func loadImage(from url: URL, failureTitle: String? = nil, addToRecent: Bool = true) {
+  func loadImage(
+    from url: URL,
+    failureTitle: String? = nil,
+    addToRecent: Bool = true,
+    preservingViewportOnReload: Bool = false,
+  ) {
     let previousImage = currentImage
     let previousImageInfo = currentImageInfo
     let previousFolderNavigator = folderNavigator
+    let shouldPreserveCurrentImage = preservingViewportOnReload
+      && currentImage != nil
+      && currentImageInfo != nil
     cancelCurrentImageLoad()
     imageFileWatcher = nil
     let imageLoad = ImageLoadOperation()
     activeImageLoad = imageLoad
 
     isLoading = true
-    currentImage = nil
-    currentImageInfo = nil
+    shouldApplyLoadedImageWindowSize = !shouldPreserveCurrentImage
+    if !shouldPreserveCurrentImage {
+      currentImage = nil
+      currentImageInfo = nil
+    }
     folderNavigator = FolderNavigator(
       for: url,
       enableLoopBrowsing: enableLoopBrowsing,
@@ -357,7 +369,7 @@ final class ImageSession {
             folderNavigator?.currentImageURL == url
       else { return }
 
-      loadImage(from: url)
+      loadImage(from: url, preservingViewportOnReload: true)
     }
   }
 
