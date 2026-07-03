@@ -242,7 +242,7 @@ struct ImaxeTests {
 
   @Test func `recent images are updated sorted and cleared`() throws {
     let container = try ModelContainer(
-      for: RecentImage.self,
+      for: RecentImage.self, FavoriteItem.self,
       configurations: ModelConfiguration(isStoredInMemoryOnly: true),
     )
     let context = ModelContext(container)
@@ -276,6 +276,38 @@ struct ImaxeTests {
     try RecentImagesStore.clear(in: context)
 
     #expect(try context.fetch(descriptor).isEmpty)
+  }
+
+  @Test func `recent and favorite images share thumbnail cache`() throws {
+    let container = try ModelContainer(
+      for: RecentImage.self, FavoriteItem.self,
+      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+    )
+    let context = ModelContext(container)
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
+    try pngData(width: 80, height: 40).write(to: url)
+
+    try RecentImagesStore.recordOpened(url, in: context)
+    try FavoriteItemsStore.add(url, kind: .image, in: context)
+
+    let recentDescriptor = FetchDescriptor<RecentImage>()
+    let favoriteDescriptor = FetchDescriptor<FavoriteItem>()
+    let recent = try #require(context.fetch(recentDescriptor).first)
+    let favorite = try #require(context.fetch(favoriteDescriptor).first)
+    let thumbnailKey = try #require(recent.thumbnailCacheKey)
+    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+
+    #expect(recent.fileSize > 0)
+    #expect(recent.contentModificationDate != nil)
+    #expect(favorite.thumbnailCacheKey == thumbnailKey)
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.path))
+
+    try RecentImagesStore.remove(location: RecentImage.location(for: url), in: context)
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.path))
+
+    try FavoriteItemsStore.remove(location: LibraryFileSnapshot.location(for: url), in: context)
+    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
   @Test func `color hex serializes grayscale colors as rgba`() {

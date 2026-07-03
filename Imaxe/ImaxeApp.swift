@@ -17,7 +17,7 @@ struct ImaxeApp: App {
 
   init() {
     do {
-      modelContainer = try ModelContainer(for: RecentImage.self)
+      modelContainer = try ModelContainer(for: RecentImage.self, FavoriteItem.self)
     } catch {
       fatalError("Failed to create model container: \(error)")
     }

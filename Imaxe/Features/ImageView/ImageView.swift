@@ -59,7 +59,7 @@ struct ImageView: View {
           .frame(height: Constants.topBarHoverStripHeight)
         }
       } else {
-        HomeView(imageSession: imageSession, recentImages: [])
+        HomeView(imageSession: imageSession, recentImages: [], favoriteItems: [])
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -91,7 +91,7 @@ struct ImageView: View {
     } else if imageSession.isLoading {
       LoadingImageView()
     } else {
-      HomeView(imageSession: imageSession, recentImages: [])
+      HomeView(imageSession: imageSession, recentImages: [], favoriteItems: [])
     }
   }
 
