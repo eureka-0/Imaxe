@@ -7,6 +7,7 @@
 
 import AppKit
 @testable import Imaxe
+import SwiftData
 import SwiftUI
 import Testing
 
@@ -159,7 +160,7 @@ struct ImaxeTests {
     session.loadImage(from: url, preservingViewportOnReload: true)
 
     #expect(session.currentImage === initialImage)
-    #expect(!session.shouldApplyLoadedImageWindowSizeOnImageChange)
+    #expect(!session.shouldApplyLoadedImageWindowSize)
   }
 
   @Test func `always fit to window still applies after viewport-preserving image change`() {
@@ -237,6 +238,44 @@ struct ImaxeTests {
 
     #expect(didChange)
     _ = watcher
+  }
+
+  @Test func `recent images are updated sorted and cleared`() throws {
+    let container = try ModelContainer(
+      for: RecentImage.self,
+      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+    )
+    let context = ModelContext(container)
+    let firstURL = URL(fileURLWithPath: "/tmp/first.png")
+    let secondURL = URL(fileURLWithPath: "/tmp/second.png")
+
+    try RecentImagesStore.recordOpened(
+      firstURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 1),
+    )
+    try RecentImagesStore.recordOpened(
+      secondURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 2),
+    )
+    try RecentImagesStore.recordOpened(
+      firstURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 3),
+    )
+
+    let descriptor = FetchDescriptor<RecentImage>(
+      sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
+    )
+    let recentImages = try context.fetch(descriptor)
+
+    #expect(recentImages.map(\.displayName) == ["first.png", "second.png"])
+    #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
+
+    try RecentImagesStore.clear(in: context)
+
+    #expect(try context.fetch(descriptor).isEmpty)
   }
 
   @Test func `color hex serializes grayscale colors as rgba`() {

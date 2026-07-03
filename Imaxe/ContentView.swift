@@ -5,11 +5,16 @@
 //  Created by lxlong on 2026/6/14.
 //
 
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+  @Environment(\.modelContext) private var modelContext
+  @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
+
   @State private var imageSession = ImageSession()
+  @State private var recentImagesSnapshot = RecentImagesSnapshot()
   @State private var isTargetedForDrop = false
 
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
@@ -25,12 +30,12 @@ struct ContentView: View {
     Group {
       if imageSession.currentImage != nil || imageSession.isLoading {
         ImageView(imageSession: imageSession)
+          .ignoresSafeArea()
       } else {
-        HomeView()
+        HomeView(imageSession: imageSession, recentImages: recentImageItems)
       }
     }
     .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
-    .background(OpenRecentMenuSessionBridge(imageSession: imageSession))
     .overlay(
       ContainerRelativeShape()
         .strokeBorder(
@@ -39,10 +44,18 @@ struct ContentView: View {
         ),
     )
     .focusedSceneValue(imageSession)
+    .focusedSceneValue(recentImagesSnapshot)
     .onAppear {
       imageSession.topBarHideDelay = topBarHideDelay
       imageSession.enableLoopBrowsing = enableLoopBrowsing
       imageSession.actionOnImageFileChange = actionOnImageFileChange
+      imageSession.recordRecentImage = { url in
+        try? RecentImagesStore.recordOpened(url, in: modelContext)
+      }
+      recentImagesSnapshot.items = recentImageItems
+    }
+    .onChange(of: recentImageItems) { _, newValue in
+      recentImagesSnapshot.items = newValue
     }
     .onChange(of: topBarHideDelay) { _, newValue in
       imageSession.topBarHideDelay = newValue
@@ -73,8 +86,13 @@ struct ContentView: View {
       imageSession.loadImage(from: url)
     }
   }
+
+  private var recentImageItems: [RecentImageItem] {
+    recentImages.map(RecentImageItem.init)
+  }
 }
 
 #Preview {
   ContentView()
+    .modelContainer(for: RecentImage.self, inMemory: true)
 }

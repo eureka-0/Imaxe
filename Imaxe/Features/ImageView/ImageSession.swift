@@ -43,6 +43,7 @@ final class ImageSession {
   @ObservationIgnored private var folderLoadTask: Task<Void, Never>?
   @ObservationIgnored private var activeImageLoad = ImageLoadOperation()
   @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
+  @ObservationIgnored var recordRecentImage: ((URL) -> Void)?
 
   init(imageContainer: ImageContainer? = nil) {
     if let imageContainer {
@@ -292,7 +293,7 @@ final class ImageSession {
             currentImage = imageContainer
             updateImageFileWatcher()
             if addToRecent {
-              NSDocumentController.shared.noteNewRecentDocumentURL(url)
+              recordRecentImage?(url)
             }
 
           case let .image(.failure(error)):

@@ -5,20 +5,28 @@
 //  Created by lxlong on 2026/6/14.
 //
 
+import SwiftData
 import SwiftUI
 
 @main
 struct ImaxeApp: App {
-  @NSApplicationDelegateAdaptor(ImaxeApplicationDelegate.self) private var applicationDelegate
-
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance: Appearance = AppSettings.Defaults.appearance
+
+  private let modelContainer: ModelContainer
+
+  init() {
+    do {
+      modelContainer = try ModelContainer(for: RecentImage.self)
+    } catch {
+      fatalError("Failed to create model container: \(error)")
+    }
+  }
 
   var body: some Scene {
     WindowGroup {
       ContentView()
         .applyAppearance(appearance)
-        .ignoresSafeArea()
         .frame(
           minWidth: Constants.minimumWindowContentWidth,
           minHeight: Constants.minimumWindowContentHeight,
@@ -29,12 +37,13 @@ struct ImaxeApp: App {
           window.titlebarAppearsTransparent = true
         }
     }
+    .modelContainer(modelContainer)
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
     .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
     .restorationDisabledIfAvailable()
     .commands {
-      FileOperationCommands()
+      FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
     }
 
@@ -42,16 +51,6 @@ struct ImaxeApp: App {
       SettingsView()
         .applyAppearance(appearance)
     }
-  }
-}
-
-final class ImaxeApplicationDelegate: NSObject, NSApplicationDelegate {
-  func applicationDidFinishLaunching(_: Notification) {
-    OpenRecentMenuController.shared.startObservingMenuUpdates()
-  }
-
-  func applicationDidBecomeActive(_: Notification) {
-    OpenRecentMenuController.shared.installIfNeeded()
   }
 }
 
@@ -99,7 +98,7 @@ private extension View {
   }
 }
 
-extension Scene {
+private extension Scene {
   @SceneBuilder func restorationDisabledIfAvailable() -> some Scene {
     if #available(macOS 15.0, *) {
       restorationBehavior(.disabled)
