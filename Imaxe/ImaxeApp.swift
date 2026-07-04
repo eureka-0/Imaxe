@@ -26,6 +26,7 @@ struct ImaxeApp: App {
   var body: some Scene {
     WindowGroup {
       ContentView()
+        .ignoresSafeArea()
         .applyAppearance(appearance)
         .frame(
           minWidth: Constants.minimumWindowContentWidth,

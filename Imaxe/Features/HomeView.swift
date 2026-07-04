@@ -8,11 +8,7 @@
 import AppKit
 import SwiftData
 import SwiftUI
-
-private enum HomeTab: Hashable {
-  case home
-  case recent
-}
+import UniformTypeIdentifiers
 
 private struct HomeOperationAlert: Identifiable {
   let id = UUID()
@@ -25,7 +21,6 @@ struct HomeView: View {
   let recentImages: [RecentImageItem]
 
   @Environment(\.modelContext) private var modelContext
-  @State private var selectedTab = HomeTab.home
   @State private var deleteTarget: HomeRecentImageItem?
   @State private var renameTarget: HomeRecentImageItem?
   @State private var renameText = ""
@@ -46,43 +41,12 @@ struct HomeView: View {
   }
 
   var body: some View {
-    Group {
-      switch selectedTab {
-      case .home:
-        homeContent
-      case .recent:
-        recentImagesCollection
-      }
+    VStack(spacing: 0) {
+      homeHero
+
+      recentImagesCollection
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .toolbar {
-      ToolbarItem(placement: .principal) {
-        Picker("Home View", selection: $selectedTab) {
-          Label("Home", systemImage: "house")
-            .tag(HomeTab.home)
-
-          Label("Recent", systemImage: "clock")
-            .tag(HomeTab.recent)
-        }
-        .pickerStyle(.segmented)
-        .labelStyle(.titleOnly)
-        .labelsHidden()
-      }
-
-      ToolbarItemGroup(placement: .confirmationAction) {
-        Button {
-          imageSession.isImporterPresented = true
-        } label: {
-          Label("Open Image", systemImage: "photo.badge.plus")
-        }
-        .help("Open Image")
-
-        SettingsLink {
-          Label("Settings", systemImage: "gearshape")
-        }
-        .help("Open Settings")
-      }
-    }
     .sheet(item: $renameTarget) { item in
       RenameFileSheet(
         item: item,
@@ -117,43 +81,67 @@ struct HomeView: View {
     }
   }
 
-  private var homeContent: some View {
-    VStack {
-      Spacer()
+  private var homeHero: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("Drop images anywhere")
+        .font(.title.weight(.semibold))
+        .lineLimit(1)
 
-      Text("Welcome to Imaxe")
-        .font(.largeTitle)
-        .padding()
+      HStack(spacing: 5) {
+        ForEach(ImageLoader.supportedImageTypes, id: \.self) { utType in
+          Text(utType.preferredFilenameExtension?.uppercased() ?? utType.identifier)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 3)
+            .background(.controlBackground)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+        }
 
-      Text("Import an image to get started.")
-        .foregroundStyle(.secondary)
-        .padding()
+        Spacer()
+      }
 
-      Spacer()
+      HStack(spacing: 12) {
+        SettingsLink {
+          Label("Settings", systemImage: "gearshape")
+        }
+        .help("Open Settings")
+
+        Button {
+          imageSession.isImporterPresented = true
+        } label: {
+          Label("Open Image", systemImage: "photo.badge.plus")
+        }
+        .help("Open Image")
+      }
+      .buttonStyle(.borderedProminent)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding([.horizontal, .bottom], 24)
+    .padding(.top, 40)
+    .frame(maxWidth: .infinity)
   }
 
   private var recentImagesCollection: some View {
-    ImageCollectionView(
-      items: recentItems,
-      clearTitle: "Clear Recent Images",
-      onClear: clearRecentImages,
-      onOpen: open,
-      searchableText: \.searchableText,
-      name: \.displayName,
-      lastOpenedAt: \.lastOpenedAt,
-      modifiedAt: \.contentModificationDate,
-      fileSize: \.fileSize,
-    ) {
+    ImageCollectionView(recentItems, onOpen: open) {
       emptyRecentImagesView
     } listRow: { context in
       HomeRecentImageListRow(context: context, actions: recentImageActions)
     } gridItem: { context in
       HomeRecentImageGridItem(context: context)
-    } contextMenu: { item in
+    }
+    .collectionTitle("Recent Images", subtitle: "Sorted by last opened")
+    .searchableText(\.searchableText)
+    .sortOptions(recentSortOptions, default: "lastOpenedAt", direction: .descending)
+    .defaultViewMode(.list)
+    .listRowHeight(84)
+    .tieBreaker { first, second in
+      first.displayName.localizedStandardCompare(second.displayName)
+    }
+    .clearAction("Clear Recent Images", clearRecentImages)
+    .contextMenu { item in
       HomeRecentImageActionsContent(item: item, actions: recentImageActions)
-    } selectionActions: { selectedItems in
+    }
+    .selectionActions { selectedItems in
       Button {
         remove(selectedItems)
       } label: {
@@ -163,25 +151,58 @@ struct HomeView: View {
   }
 
   private var emptyRecentImagesView: some View {
-    VStack(spacing: 12) {
-      Spacer()
+    VStack {
+      VStack(spacing: 22) {
+        Image(systemName: "photo.on.rectangle.angled")
+          .font(.system(size: 24, weight: .medium))
+          .foregroundStyle(.secondary)
+          .frame(width: 44, height: 44)
+          .background(.controlBackground)
+          .clipShape(RoundedRectangle(cornerRadius: 11))
 
-      Image(systemName: "photo.on.rectangle.angled")
-        .resizable()
-        .scaledToFit()
-        .frame(width: 100, height: 100)
-        .foregroundStyle(.secondary)
-
-      Text("No recent images")
-        .font(.title)
-
-      Text("Drop an image here or press command + o to open an image")
-        .font(.subheadline)
-        .foregroundStyle(.secondary)
+        Text("No recent images yet")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity)
+      .frame(height: 170)
+      .background(Color.windowBackground)
+      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .overlay {
+        RoundedRectangle(cornerRadius: 12)
+          .stroke(.separator.opacity(0.35), lineWidth: 1)
+      }
+      .padding(24)
 
       Spacer()
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+
+  private var recentSortOptions: [ImageCollectionSortOption<HomeRecentImageItem>] {
+    [
+      ImageCollectionSortOption("name", title: "Name", systemImage: "textformat") { first, second in
+        first.displayName.localizedStandardCompare(second.displayName)
+      },
+      ImageCollectionSortOption(
+        "lastOpenedAt",
+        title: "Last Opened",
+        systemImage: "clock",
+        value: \.lastOpenedAt,
+      ),
+      ImageCollectionSortOption(
+        "modifiedAt",
+        title: "Modified",
+        systemImage: "calendar",
+        optionalValue: \.contentModificationDate,
+      ),
+      ImageCollectionSortOption(
+        "fileSize",
+        title: "Size",
+        systemImage: "externaldrive",
+        value: \.fileSize,
+      ),
+    ]
   }
 
   private var isDeleteConfirmationPresented: Binding<Bool> {

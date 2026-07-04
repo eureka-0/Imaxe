@@ -122,7 +122,9 @@ actor ImageLoader {
     ].compactMap(\.self)
 
     #if DEBUG
-      print("Supported image types: \(supportedTypes.map(\.identifier).joined(separator: ", "))")
+      debugPrint(
+        "Supported image types: \(supportedTypes.map(\.identifier).joined(separator: ", "))",
+      )
     #endif
 
     return supportedTypes

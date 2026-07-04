@@ -30,7 +30,6 @@ struct ContentView: View {
     Group {
       if imageSession.currentImage != nil || imageSession.isLoading {
         ImageView(imageSession: imageSession)
-          .ignoresSafeArea()
       } else {
         HomeView(
           imageSession: imageSession,

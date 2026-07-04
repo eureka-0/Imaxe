@@ -9,6 +9,8 @@ import AppKit
 import OSLog
 import SwiftUI
 
+// MARK: - Functions
+
 private func rgbaByte(_ component: CGFloat) -> Int {
   Int((component.clamped(to: 0 ... 1) * 255).rounded())
 }
@@ -49,6 +51,8 @@ private func rgbaValueFromHex(_ hex: String) -> (r: CGFloat, g: CGFloat, b: CGFl
   return (r, g, b, a)
 }
 
+// MARK: - IntSize
+
 nonisolated struct IntSize: Hashable {
   let width: Int
   let height: Int
@@ -76,6 +80,8 @@ nonisolated struct IntSize: Hashable {
   }
 }
 
+// MARK: - Color extensions.
+
 extension Color {
   init(hex: String) {
     let (r, g, b, a) = rgbaValueFromHex(hex)
@@ -94,13 +100,69 @@ extension Color {
       alpha: color.alphaComponent,
     )
   }
+
+  /// Creates a context-dependent color with different values for light and dark appearances.
+  /// - Parameters:
+  ///   - light: The light appearance color value.
+  ///   - dark: The dark appearance color value.
+  init(light: @escaping @autoclosure () -> Color, dark: @escaping @autoclosure () -> Color) {
+    #if os(watchOS)
+      self = dark()
+    #elseif canImport(UIKit)
+      self.init(
+        uiColor: .init { traitCollection in
+          switch traitCollection.userInterfaceStyle {
+          case .unspecified, .light:
+            return UIColor(light())
+          case .dark:
+            return UIColor(dark())
+          @unknown default:
+            return UIColor(light())
+          }
+        },
+      )
+    #elseif canImport(AppKit)
+      self.init(
+        nsColor: .init(name: nil) { appearance in
+          if appearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua {
+            NSColor(light())
+          } else {
+            NSColor(dark())
+          }
+        },
+      )
+    #endif
+  }
 }
+
+// MARK: - Comparable extensions.
 
 extension Comparable {
   func clamped(to range: ClosedRange<Self>) -> Self {
     Swift.min(Swift.max(self, range.lowerBound), range.upperBound)
   }
 }
+
+// MARK: - NSApplication extensions.
+
+extension NSApplication {
+  var appIcon: NSImage {
+    if let icon = applicationIconImage {
+      return icon
+    }
+
+    guard let bundleIcons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+          let primaryIcon = bundleIcons["CFBundlePrimaryIcon"] as? [String: Any],
+          let iconFiles = primaryIcon["CFBundleIconFiles"] as? [String],
+          let iconName = iconFiles.last
+    else {
+      return NSImage()
+    }
+    return NSImage(named: iconName) ?? NSImage()
+  }
+}
+
+// MARK: - NSBitmapImageRep extensions.
 
 extension NSBitmapImageRep {
   var gifFrameCount: Int? {
@@ -121,12 +183,16 @@ extension NSBitmapImageRep {
   }
 }
 
+// MARK: - NSColor extensions.
+
 extension NSColor {
   convenience init(hex: String) {
     let (r, g, b, a) = rgbaValueFromHex(hex)
     self.init(red: r, green: g, blue: b, alpha: a)
   }
 }
+
+// MARK: - NSImage extensions.
 
 extension NSImage {
   nonisolated var pixelSize: NSSize {
@@ -161,6 +227,8 @@ extension NSImage {
   }
 }
 
+// MARK: - NSRect extensions.
+
 extension NSRect {
   func constrained(to visibleFrame: NSRect) -> NSRect {
     var rect = self
@@ -184,6 +252,8 @@ extension NSRect {
   }
 }
 
+// MARK: - NSScreen extensions.
+
 extension NSScreen {
   func getPPI() -> (width: CGFloat, height: CGFloat)? {
     guard let displayID =
@@ -203,6 +273,8 @@ extension NSScreen {
     return (width: ppiWidth, height: ppiHeight)
   }
 }
+
+// MARK: - NSSize extensions.
 
 extension NSSize {
   nonisolated var validSize: NSSize {
@@ -226,6 +298,8 @@ extension NSSize {
   }
 }
 
+// MARK: - NSView extensions.
+
 extension NSView {
   func backingAlignedSize(
     _ size: NSSize,
@@ -241,6 +315,8 @@ extension NSView {
     backingAlignedRect(NSRect(origin: point, size: .zero), options: options).origin
   }
 }
+
+// MARK: - NSWindow extensions.
 
 extension NSWindow {
   var titlebarHeight: CGFloat {
@@ -284,13 +360,18 @@ extension NSWindow {
   }
 }
 
+// MARK: - ShapeStyle extensions.
+
 extension ShapeStyle where Self == Color {
   static var windowBackground: Color {
     Color(nsColor: .windowBackgroundColor)
   }
 
   static var controlBackground: Color {
-    Color(nsColor: .controlBackgroundColor)
+    Color(
+      light: Color(white: 0.9),
+      dark: Color(nsColor: .controlBackgroundColor),
+    )
   }
 
   static var controlAccent: Color {
@@ -305,6 +386,8 @@ extension ShapeStyle where Self == Color {
     Color(nsColor: .separatorColor)
   }
 }
+
+// MARK: - UserDefaults extensions.
 
 extension UserDefaults {
   @objc dynamic var imageActualSizeStrategy: String? {
