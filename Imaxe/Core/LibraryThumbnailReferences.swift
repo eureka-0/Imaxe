@@ -41,12 +41,6 @@ enum LibraryThumbnailReferences {
       return true
     }
 
-    var favoriteDescriptor = FetchDescriptor<FavoriteItem>(
-      predicate: #Predicate<FavoriteItem> { favoriteItem in
-        favoriteItem.thumbnailCacheKey == key
-      },
-    )
-    favoriteDescriptor.fetchLimit = 1
-    return try !modelContext.fetch(favoriteDescriptor).isEmpty
+    return false
   }
 }

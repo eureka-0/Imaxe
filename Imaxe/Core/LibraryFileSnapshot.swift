@@ -7,11 +7,6 @@
 
 import Foundation
 
-enum LibraryItemKind: String, Codable, CaseIterable {
-  case image
-  case folder
-}
-
 nonisolated struct LibraryFileSnapshot: Hashable {
   let url: URL
   let location: String

@@ -12,7 +12,6 @@ import UniformTypeIdentifiers
 struct ContentView: View {
   @Environment(\.modelContext) private var modelContext
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
-  @Query(sort: \FavoriteItem.addedAt, order: .reverse) private var favoriteItems: [FavoriteItem]
 
   @State private var imageSession = ImageSession()
   @State private var recentImagesSnapshot = RecentImagesSnapshot()
@@ -36,7 +35,6 @@ struct ContentView: View {
         HomeView(
           imageSession: imageSession,
           recentImages: recentImageItems,
-          favoriteItems: favoriteItemSnapshots,
         )
       }
     }
@@ -95,13 +93,9 @@ struct ContentView: View {
   private var recentImageItems: [RecentImageItem] {
     recentImages.map(RecentImageItem.init)
   }
-
-  private var favoriteItemSnapshots: [FavoriteItemSnapshot] {
-    favoriteItems.map(FavoriteItemSnapshot.init)
-  }
 }
 
 #Preview {
   ContentView()
-    .modelContainer(for: [RecentImage.self, FavoriteItem.self], inMemory: true)
+    .modelContainer(for: [RecentImage.self], inMemory: true)
 }

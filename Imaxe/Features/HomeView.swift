@@ -10,8 +10,8 @@ import SwiftData
 import SwiftUI
 
 private enum HomeTab: Hashable {
+  case home
   case recent
-  case favorites
 }
 
 private struct HomeOperationAlert: Identifiable {
@@ -23,50 +23,46 @@ private struct HomeOperationAlert: Identifiable {
 struct HomeView: View {
   @Bindable var imageSession: ImageSession
   let recentImages: [RecentImageItem]
-  let favoriteItems: [FavoriteItemSnapshot]
 
   @Environment(\.modelContext) private var modelContext
-  @State private var selectedTab = HomeTab.recent
-  @State private var searchText = ""
-  @State private var sort = HomeCollectionSort.lastOpenedAt
-  @State private var sortDirection = HomeSortDirection.descending
-  @State private var viewMode = HomeCollectionViewMode.list
-  @State private var isSelecting = false
-  @State private var selectedItemIDs = Set<String>()
-  @State private var favoriteFolder: HomeCollectionItem?
-  @State private var favoriteFolderItems: [HomeCollectionItem] = []
-  @State private var isFavoriteImageImporterPresented = false
-  @State private var deleteTarget: HomeCollectionItem?
-  @State private var renameTarget: HomeCollectionItem?
+  @State private var selectedTab = HomeTab.home
+  @State private var deleteTarget: HomeRecentImageItem?
+  @State private var renameTarget: HomeRecentImageItem?
   @State private var renameText = ""
   @State private var operationAlert: HomeOperationAlert?
 
-  private var recentCollectionItems: [HomeCollectionItem] {
-    recentImages.map(HomeCollectionItem.init)
+  private var recentItems: [HomeRecentImageItem] {
+    recentImages.map(HomeRecentImageItem.init)
   }
 
-  private var favoriteCollectionItems: [HomeCollectionItem] {
-    favoriteItems.map(HomeCollectionItem.init)
+  private var recentImageActions: HomeRecentImageActions {
+    HomeRecentImageActions(
+      onOpen: open,
+      onRemove: remove,
+      onReveal: revealInFinder,
+      onDeleteFile: confirmDelete,
+      onRename: beginRename,
+    )
   }
 
   var body: some View {
     Group {
       switch selectedTab {
+      case .home:
+        homeContent
       case .recent:
         recentImagesCollection
-      case .favorites:
-        favoriteCollection
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .toolbar {
       ToolbarItem(placement: .principal) {
         Picker("Home View", selection: $selectedTab) {
+          Label("Home", systemImage: "house")
+            .tag(HomeTab.home)
+
           Label("Recent", systemImage: "clock")
             .tag(HomeTab.recent)
-
-          Label("Favorites", systemImage: "star")
-            .tag(HomeTab.favorites)
         }
         .pickerStyle(.segmented)
         .labelStyle(.titleOnly)
@@ -86,13 +82,6 @@ struct HomeView: View {
         }
         .help("Open Settings")
       }
-    }
-    .fileImporter(
-      isPresented: $isFavoriteImageImporterPresented,
-      allowedContentTypes: ImageLoader.supportedImageTypes,
-      allowsMultipleSelection: true,
-    ) { result in
-      addFavoriteImages(from: result)
     }
     .sheet(item: $renameTarget) { item in
       RenameFileSheet(
@@ -126,106 +115,73 @@ struct HomeView: View {
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
     }
-    .onChange(of: selectedTab) { _, _ in
-      selectedItemIDs.removeAll()
-      isSelecting = false
-      favoriteFolder = nil
-      favoriteFolderItems = []
-      searchText = ""
-      sort = .lastOpenedAt
-      sortDirection = .descending
+  }
+
+  private var homeContent: some View {
+    VStack {
+      Spacer()
+
+      Text("Welcome to Imaxe")
+        .font(.largeTitle)
+        .padding()
+
+      Text("Import an image to get started.")
+        .foregroundStyle(.secondary)
+        .padding()
+
+      Spacer()
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var recentImagesCollection: some View {
-    HomeCollectionView(
-      title: nil,
-      subtitle: nil,
-      items: recentCollectionItems,
-      emptyTitle: "No recent images",
-      emptyMessage: "Drop an image here or press command + o to open an image",
-      keepsFoldersFirst: false,
+    ImageCollectionView(
+      items: recentItems,
       clearTitle: "Clear Recent Images",
-      onBack: nil,
       onClear: clearRecentImages,
-      onAddFavoriteImages: nil,
-      onAddFavoriteFolder: nil,
       onOpen: open,
-      onRemove: remove,
-      onRemoveItems: remove,
-      onAddFavorite: addFavorite,
-      onAddFavorites: addFavorites,
-      onReveal: revealInFinder,
-      onDeleteFile: confirmDelete,
-      onRename: beginRename,
-      searchText: $searchText,
-      sort: $sort,
-      sortDirection: $sortDirection,
-      viewMode: $viewMode,
-      isSelecting: $isSelecting,
-      selectedItemIDs: $selectedItemIDs,
-    )
+      searchableText: \.searchableText,
+      name: \.displayName,
+      lastOpenedAt: \.lastOpenedAt,
+      modifiedAt: \.contentModificationDate,
+      fileSize: \.fileSize,
+    ) {
+      emptyRecentImagesView
+    } listRow: { context in
+      HomeRecentImageListRow(context: context, actions: recentImageActions)
+    } gridItem: { context in
+      HomeRecentImageGridItem(context: context)
+    } contextMenu: { item in
+      HomeRecentImageActionsContent(item: item, actions: recentImageActions)
+    } selectionActions: { selectedItems in
+      Button {
+        remove(selectedItems)
+      } label: {
+        Label("Remove Selected", systemImage: "minus.circle")
+      }
+    }
   }
 
-  @ViewBuilder
-  private var favoriteCollection: some View {
-    if let favoriteFolder {
-      HomeCollectionView(
-        title: favoriteFolder.displayName,
-        subtitle: favoriteFolder.location,
-        items: favoriteFolderItems,
-        emptyTitle: "No images in this folder",
-        emptyMessage: "This folder does not contain supported images",
-        keepsFoldersFirst: true,
-        clearTitle: nil,
-        onBack: leaveFavoriteFolder,
-        onClear: nil,
-        onAddFavoriteImages: nil,
-        onAddFavoriteFolder: nil,
-        onOpen: open,
-        onRemove: remove,
-        onRemoveItems: remove,
-        onAddFavorite: addFavorite,
-        onAddFavorites: addFavorites,
-        onReveal: revealInFinder,
-        onDeleteFile: confirmDelete,
-        onRename: beginRename,
-        searchText: $searchText,
-        sort: $sort,
-        sortDirection: $sortDirection,
-        viewMode: $viewMode,
-        isSelecting: $isSelecting,
-        selectedItemIDs: $selectedItemIDs,
-      )
-    } else {
-      HomeCollectionView(
-        title: nil,
-        subtitle: nil,
-        items: favoriteCollectionItems,
-        emptyTitle: "No favorite images",
-        emptyMessage: "Add images or folders to keep them close",
-        keepsFoldersFirst: true,
-        clearTitle: "Clear Favorites",
-        onBack: nil,
-        onClear: clearFavorites,
-        onAddFavoriteImages: { isFavoriteImageImporterPresented = true },
-        onAddFavoriteFolder: addFavoriteFolder,
-        onOpen: open,
-        onRemove: remove,
-        onRemoveItems: remove,
-        onAddFavorite: addFavorite,
-        onAddFavorites: addFavorites,
-        onReveal: revealInFinder,
-        onDeleteFile: confirmDelete,
-        onRename: beginRename,
-        searchText: $searchText,
-        sort: $sort,
-        sortDirection: $sortDirection,
-        viewMode: $viewMode,
-        isSelecting: $isSelecting,
-        selectedItemIDs: $selectedItemIDs,
-      )
+  private var emptyRecentImagesView: some View {
+    VStack(spacing: 12) {
+      Spacer()
+
+      Image(systemName: "photo.on.rectangle.angled")
+        .resizable()
+        .scaledToFit()
+        .frame(width: 100, height: 100)
+        .foregroundStyle(.secondary)
+
+      Text("No recent images")
+        .font(.title)
+
+      Text("Drop an image here or press command + o to open an image")
+        .font(.subheadline)
+        .foregroundStyle(.secondary)
+
+      Spacer()
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   private var isDeleteConfirmationPresented: Binding<Bool> {
@@ -238,27 +194,15 @@ struct HomeView: View {
     }
   }
 
-  private func open(_ item: HomeCollectionItem) {
-    if item.kind == .folder {
-      showFavoriteFolder(item)
-      return
-    }
-
+  private func open(_ item: HomeRecentImageItem) {
     guard let url = item.url else { return }
+
     imageSession.loadImage(from: url)
   }
 
-  private func remove(_ item: HomeCollectionItem) {
+  private func remove(_ item: HomeRecentImageItem) {
     do {
-      switch item.source {
-      case .recent:
-        try RecentImagesStore.remove(location: item.location, in: modelContext)
-      case .favorite:
-        try FavoriteItemsStore.remove(location: item.location, in: modelContext)
-      case .favoriteFolderImage:
-        break
-      }
-      selectedItemIDs.remove(item.id)
+      try RecentImagesStore.remove(location: item.location, in: modelContext)
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Remove Item",
@@ -267,50 +211,29 @@ struct HomeView: View {
     }
   }
 
-  private func remove(_ items: [HomeCollectionItem]) {
+  private func remove(_ items: [HomeRecentImageItem]) {
     for item in items {
       remove(item)
     }
-    selectedItemIDs.removeAll()
   }
 
-  private func addFavorite(_ item: HomeCollectionItem) {
-    guard let url = item.url else { return }
-
-    do {
-      try FavoriteItemsStore.add(url, kind: item.kind, in: modelContext)
-    } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Add Favorite",
-        message: error.localizedDescription,
-      )
-    }
-  }
-
-  private func addFavorites(_ items: [HomeCollectionItem]) {
-    for item in items where item.source != .favorite {
-      addFavorite(item)
-    }
-  }
-
-  private func revealInFinder(_ item: HomeCollectionItem) {
+  private func revealInFinder(_ item: HomeRecentImageItem) {
     guard let url = item.url else { return }
 
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
-  private func confirmDelete(_ item: HomeCollectionItem) {
+  private func confirmDelete(_ item: HomeRecentImageItem) {
     deleteTarget = item
   }
 
-  private func moveToTrash(_ item: HomeCollectionItem) {
+  private func moveToTrash(_ item: HomeRecentImageItem) {
     guard let url = item.url else { return }
 
     do {
       var trashedURL: NSURL?
       try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
-      try removePersistentReferences(to: item.location)
-      reloadFavoriteFolderIfNeeded()
+      try RecentImagesStore.remove(location: item.location, in: modelContext)
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Move Item to Trash",
@@ -319,12 +242,12 @@ struct HomeView: View {
     }
   }
 
-  private func beginRename(_ item: HomeCollectionItem) {
+  private func beginRename(_ item: HomeRecentImageItem) {
     renameText = item.displayName
     renameTarget = item
   }
 
-  private func rename(_ item: HomeCollectionItem, to newName: String) {
+  private func rename(_ item: HomeRecentImageItem, to newName: String) {
     guard let url = item.url else { return }
 
     let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -334,15 +257,6 @@ struct HomeView: View {
     do {
       try FileManager.default.moveItem(at: url, to: newURL)
       try RecentImagesStore.updateLocation(from: item.location, to: newURL, in: modelContext)
-      try FavoriteItemsStore.updateLocation(from: item.location, to: newURL, in: modelContext)
-      if favoriteFolder?.id == item.id {
-        favoriteFolder = try HomeCollectionItem(
-          favoriteItem: FavoriteItemSnapshot(
-            favoriteItem: fetchFavoriteItem(location: LibraryFileSnapshot.location(for: newURL)),
-          ),
-        )
-      }
-      reloadFavoriteFolderIfNeeded()
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Rename Item",
@@ -354,117 +268,11 @@ struct HomeView: View {
   private func clearRecentImages() {
     do {
       try RecentImagesStore.clear(in: modelContext)
-      selectedItemIDs.removeAll()
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Clear Recent Images",
         message: error.localizedDescription,
       )
     }
-  }
-
-  private func clearFavorites() {
-    do {
-      try FavoriteItemsStore.clear(in: modelContext)
-      selectedItemIDs.removeAll()
-    } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Clear Favorites",
-        message: error.localizedDescription,
-      )
-    }
-  }
-
-  private func addFavoriteImages(from result: Result<[URL], Error>) {
-    do {
-      let urls = try result.get()
-      for url in urls {
-        try FavoriteItemsStore.add(url, kind: .image, in: modelContext)
-      }
-    } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Add Favorite Images",
-        message: error.localizedDescription,
-      )
-    }
-  }
-
-  private func addFavoriteFolder() {
-    let panel = NSOpenPanel()
-    panel.canChooseFiles = false
-    panel.canChooseDirectories = true
-    panel.allowsMultipleSelection = false
-    panel.prompt = "Add"
-
-    guard panel.runModal() == .OK,
-          let url = panel.url
-    else { return }
-
-    do {
-      try FavoriteItemsStore.add(url, kind: .folder, in: modelContext)
-    } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Add Favorite Folder",
-        message: error.localizedDescription,
-      )
-    }
-  }
-
-  private func showFavoriteFolder(_ item: HomeCollectionItem) {
-    guard let url = item.url else { return }
-
-    favoriteFolder = item
-    favoriteFolderItems = favoriteFolderImageItems(in: url)
-    selectedItemIDs.removeAll()
-    isSelecting = false
-  }
-
-  private func leaveFavoriteFolder() {
-    favoriteFolder = nil
-    favoriteFolderItems = []
-    selectedItemIDs.removeAll()
-    isSelecting = false
-  }
-
-  private func reloadFavoriteFolderIfNeeded() {
-    guard let url = favoriteFolder?.url else { return }
-
-    favoriteFolderItems = favoriteFolderImageItems(in: url)
-  }
-
-  private func favoriteFolderImageItems(in folderURL: URL) -> [HomeCollectionItem] {
-    guard let contents = try? FileManager.default.contentsOfDirectory(
-      at: folderURL,
-      includingPropertiesForKeys: [.isRegularFileKey],
-      options: [.skipsHiddenFiles],
-    ) else { return [] }
-
-    return contents
-      .filter { FolderNavigator.isRegularFile($0) && ImageLoader.isSupportedImage($0) }
-      .sorted { first, second in
-        first.lastPathComponent
-          .localizedStandardCompare(second.lastPathComponent) == .orderedAscending
-      }
-      .map(HomeCollectionItem.init(favoriteFolderImageURL:))
-  }
-
-  private func removePersistentReferences(to location: String) throws {
-    try RecentImagesStore.remove(location: location, in: modelContext)
-    try FavoriteItemsStore.remove(location: location, in: modelContext)
-    selectedItemIDs.removeAll()
-  }
-
-  private func fetchFavoriteItem(location: String) throws -> FavoriteItem {
-    var descriptor = FetchDescriptor<FavoriteItem>(
-      predicate: #Predicate<FavoriteItem> { item in
-        item.location == location
-      },
-    )
-    descriptor.fetchLimit = 1
-    if let favoriteItem = try modelContext.fetch(descriptor).first {
-      return favoriteItem
-    }
-
-    throw CocoaError(.fileNoSuchFile)
   }
 }
