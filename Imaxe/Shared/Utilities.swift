@@ -6,8 +6,82 @@
 //
 
 import AppKit
-import OSLog
 import SwiftUI
+
+// MARK: - DismissTextFocusOnClickOutside
+
+private struct DismissTextFocusOnClickOutside: NSViewRepresentable {
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  func makeNSView(context: Context) -> NSView {
+    let view = WindowTrackingView(frame: .zero)
+    view.onWindowChange = { [weak coordinator = context.coordinator] window in
+      coordinator?.trackedWindow = window
+    }
+    context.coordinator.install()
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.trackedWindow = nsView.window
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    if let view = nsView as? WindowTrackingView {
+      view.onWindowChange = nil
+    }
+    coordinator.trackedWindow = nil
+    coordinator.uninstall()
+  }
+
+  final class Coordinator {
+    private var monitor: Any?
+    weak var trackedWindow: NSWindow?
+
+    func install() {
+      guard monitor == nil else { return }
+
+      monitor = NSEvent.addLocalMonitorForEvents(matching: [
+        .leftMouseDown,
+        .rightMouseDown,
+      ]) { [weak self] event in
+        guard
+          let self,
+          let window = event.window,
+          window === trackedWindow,
+          let contentView = window.contentView
+        else {
+          return event
+        }
+
+        let location = contentView.convert(event.locationInWindow, from: nil)
+        if let hitView = contentView.hitTest(location), !hitView.isInsideTextInput {
+          window.makeFirstResponder(nil)
+        }
+
+        return event
+      }
+    }
+
+    func uninstall() {
+      if let monitor {
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+      }
+    }
+  }
+}
+
+private final class WindowTrackingView: NSView {
+  var onWindowChange: ((NSWindow?) -> Void)?
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    onWindowChange?(window)
+  }
+}
 
 // MARK: - Functions
 
@@ -301,6 +375,14 @@ extension NSSize {
 // MARK: - NSView extensions.
 
 extension NSView {
+  var isInsideTextInput: Bool {
+    if self is NSTextField || self is NSTextView || self is NSSearchField {
+      return true
+    }
+
+    return superview?.isInsideTextInput ?? false
+  }
+
   func backingAlignedSize(
     _ size: NSSize,
     options: AlignmentOptions = [.alignAllEdgesNearest],
@@ -406,5 +488,13 @@ extension UserDefaults {
   var imageInterpolationStrategyValue: ImageInterpolationStrategy {
     imageInterpolationStrategy.flatMap { ImageInterpolationStrategy(rawValue: $0) }
       ?? AppSettings.Defaults.imageInterpolationStrategy
+  }
+}
+
+// MARK: - View extensions.
+
+extension View {
+  func dismissTextFocusOnClickOutside() -> some View {
+    background(DismissTextFocusOnClickOutside().frame(width: 0, height: 0))
   }
 }

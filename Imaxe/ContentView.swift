@@ -47,6 +47,7 @@ struct ContentView: View {
     )
     .focusedSceneValue(imageSession)
     .focusedSceneValue(recentImagesSnapshot)
+    .dismissTextFocusOnClickOutside()
     .onAppear {
       imageSession.topBarHideDelay = topBarHideDelay
       imageSession.enableLoopBrowsing = enableLoopBrowsing
