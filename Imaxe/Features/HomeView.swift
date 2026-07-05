@@ -41,9 +41,8 @@ struct HomeView: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
+    VStack(spacing: 24) {
       homeHero
-
       recentImagesCollection
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -116,7 +115,7 @@ struct HomeView: View {
       }
       .buttonStyle(.borderedProminent)
     }
-    .padding([.horizontal, .bottom], 24)
+    .padding(.horizontal, 32)
     .padding(.top, 40)
     .frame(maxWidth: .infinity)
   }
@@ -129,7 +128,7 @@ struct HomeView: View {
     } gridItem: { context in
       HomeRecentImageGridItem(context: context)
     }
-    .collectionTitle("Recent Images", subtitle: "Sorted by last opened")
+    .collectionTitle("Recent Images")
     .searchableText(\.searchableText)
     .sortOptions(recentSortOptions, default: "lastOpenedAt", direction: .descending)
     .defaultViewMode(.list)
@@ -148,6 +147,13 @@ struct HomeView: View {
         Label("Remove Selected", systemImage: "minus.circle")
       }
     }
+    .background(.controlBackground.opacity(0.5))
+    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    .overlay(
+      RoundedRectangle(cornerRadius: 12, style: .continuous)
+        .stroke(Color(.separatorColor), lineWidth: 0.5),
+    )
+    .padding([.horizontal, .bottom], 8)
   }
 
   private var emptyRecentImagesView: some View {
@@ -167,7 +173,7 @@ struct HomeView: View {
       .frame(maxWidth: .infinity)
       .frame(height: 170)
       .background(Color.windowBackground)
-      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
       .overlay {
         RoundedRectangle(cornerRadius: 12)
           .stroke(.separator.opacity(0.35), lineWidth: 1)

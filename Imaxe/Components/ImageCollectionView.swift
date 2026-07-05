@@ -7,11 +7,15 @@
 
 import SwiftUI
 
+// MARK: - Enums and Structs
+
 enum ImageCollectionViewMode: String, CaseIterable, Identifiable {
   case list
   case grid
 
-  var id: Self { self }
+  var id: Self {
+    self
+  }
 
   var title: String {
     switch self {
@@ -69,22 +73,22 @@ struct ImageCollectionSortOption<Item>: Identifiable {
     self.compare = compare
   }
 
-  init<Value: Comparable>(
+  init(
     _ id: String,
     title: String,
     systemImage: String,
-    value: @escaping (Item) -> Value,
+    value: @escaping (Item) -> some Comparable,
   ) {
     self.init(id, title: title, systemImage: systemImage) { first, second in
       compareValues(value(first), value(second))
     }
   }
 
-  init<Value: Comparable>(
+  init(
     _ id: String,
     title: String,
     systemImage: String,
-    optionalValue: @escaping (Item) -> Value?,
+    optionalValue: @escaping (Item) -> (some Comparable)?,
   ) {
     self.init(id, title: title, systemImage: systemImage) { first, second in
       compareOptionalValues(optionalValue(first), optionalValue(second))
@@ -100,13 +104,15 @@ struct ImageCollectionItemContext<Item> {
   let viewMode: ImageCollectionViewMode
 }
 
+// MARK: - ImageCollectionView
+
 struct ImageCollectionView<
   Item: Identifiable & Hashable,
   EmptyContent: View,
   ListRowContent: View,
   GridItemContent: View,
   ContextMenuContent: View,
-  SelectionActionsContent: View
+  SelectionActionsContent: View,
 >: View where Item.ID: Hashable {
   private var configuration: ImageCollectionConfiguration<Item>
   private let items: [Item]
@@ -123,7 +129,6 @@ struct ImageCollectionView<
   @State private var viewMode: ImageCollectionViewMode?
   @State private var isSelecting = false
   @State private var selectedItemIDs = Set<Item.ID>()
-  @FocusState private var isSearchFocused: Bool
 
   private var visibleItems: [Item] {
     let filteredItems = if let searchableText = configuration.searchableText, !searchText.isEmpty {
@@ -139,7 +144,9 @@ struct ImageCollectionView<
     }
 
     return filteredItems.sorted { first, second in
-      if configuration.keepsFoldersFirst, configuration.isFolder(first) != configuration.isFolder(second) {
+      if configuration.keepsFoldersFirst,
+         configuration.isFolder(first) != configuration.isFolder(second)
+      {
         return configuration.isFolder(first)
       }
 
@@ -149,7 +156,8 @@ struct ImageCollectionView<
         return tieBreakerResult == .orderedAscending
       }
 
-      return currentSortDirection == .ascending ? result == .orderedAscending : result == .orderedDescending
+      return currentSortDirection == .ascending ? result == .orderedAscending : result ==
+        .orderedDescending
     }
   }
 
@@ -180,6 +188,14 @@ struct ImageCollectionView<
     viewMode ?? configuration.defaultViewMode
   }
 
+  private var viewModeBinding: Binding<ImageCollectionViewMode> {
+    Binding {
+      currentViewMode
+    } set: { newMode in
+      viewMode = newMode
+    }
+  }
+
   private init(
     configuration: ImageCollectionConfiguration<Item>,
     items: [Item],
@@ -203,7 +219,6 @@ struct ImageCollectionView<
   var body: some View {
     VStack(spacing: 0) {
       collectionToolbar
-        .zIndex(10)
 
       if visibleItems.isEmpty {
         emptyContent()
@@ -217,151 +232,24 @@ struct ImageCollectionView<
             gridContent
           }
         }
-        .scrollClipDisabled()
       }
     }
-    .background(Color.windowBackground)
     .onChange(of: itemIDs) { _, newValue in
       selectedItemIDs.formIntersection(Set(newValue))
     }
-  }
-
-  func collectionTitle(_ title: String, subtitle: String? = nil) -> Self {
-    var view = self
-    view.configuration.title = title
-    view.configuration.subtitle = subtitle
-    return view
-  }
-
-  func searchableText(_ searchableText: @escaping (Item) -> String) -> Self {
-    var view = self
-    view.configuration.searchableText = searchableText
-    return view
-  }
-
-  func sortOptions(
-    _ options: [ImageCollectionSortOption<Item>],
-    default defaultSortID: String? = nil,
-    direction: ImageCollectionSortDirection = .ascending,
-  ) -> Self {
-    var view = self
-    view.configuration.sortOptions = options
-    view.configuration.defaultSortID = defaultSortID
-    view.configuration.defaultSortDirection = direction
-    return view
-  }
-
-  func defaultViewMode(_ mode: ImageCollectionViewMode) -> Self {
-    var view = self
-    view.configuration.defaultViewMode = mode
-    return view
-  }
-
-  func listRowHeight(_ height: CGFloat) -> Self {
-    var view = self
-    view.configuration.listRowHeight = height
-    return view
-  }
-
-  func gridItemSize(minimum: CGFloat, maximum: CGFloat? = nil, spacing: CGFloat = 16) -> Self {
-    var view = self
-    view.configuration.gridMinimumItemWidth = minimum
-    view.configuration.gridMaximumItemWidth = maximum ?? minimum
-    view.configuration.gridSpacing = spacing
-    return view
-  }
-
-  func keepsFoldersFirst(_ isEnabled: Bool = true, isFolder: @escaping (Item) -> Bool) -> Self {
-    var view = self
-    view.configuration.keepsFoldersFirst = isEnabled
-    view.configuration.isFolder = isFolder
-    return view
-  }
-
-  func tieBreaker(_ compare: @escaping (Item, Item) -> ComparisonResult) -> Self {
-    var view = self
-    view.configuration.tieBreaker = compare
-    return view
-  }
-
-  func clearAction(_ title: String, _ action: @escaping () -> Void) -> Self {
-    var view = self
-    view.configuration.clearTitle = title
-    view.configuration.onClear = action
-    return view
-  }
-
-  func contextMenu<MenuContent: View>(
-    @ViewBuilder _ content: @escaping (Item) -> MenuContent,
-  ) -> ImageCollectionView<
-    Item,
-    EmptyContent,
-    ListRowContent,
-    GridItemContent,
-    MenuContent,
-    SelectionActionsContent
-  > {
-    var configuration = configuration
-    configuration.hasContextMenu = true
-
-    return ImageCollectionView<
-      Item,
-      EmptyContent,
-      ListRowContent,
-      GridItemContent,
-      MenuContent,
-      SelectionActionsContent
-    >(
-      configuration: configuration,
-      items: items,
-      onOpen: onOpen,
-      emptyContent: emptyContent,
-      listRow: listRow,
-      gridItem: gridItem,
-      contextMenuContent: content,
-      selectionActionsContent: selectionActionsContent,
-    )
-  }
-
-  func selectionActions<ActionsContent: View>(
-    @ViewBuilder _ content: @escaping ([Item]) -> ActionsContent,
-  ) -> ImageCollectionView<
-    Item,
-    EmptyContent,
-    ListRowContent,
-    GridItemContent,
-    ContextMenuContent,
-    ActionsContent
-  > {
-    var configuration = configuration
-    configuration.hasSelectionActions = true
-
-    return ImageCollectionView<
-      Item,
-      EmptyContent,
-      ListRowContent,
-      GridItemContent,
-      ContextMenuContent,
-      ActionsContent
-    >(
-      configuration: configuration,
-      items: items,
-      onOpen: onOpen,
-      emptyContent: emptyContent,
-      listRow: listRow,
-      gridItem: gridItem,
-      contextMenuContent: contextMenuContent,
-      selectionActionsContent: content,
-    )
   }
 
   private var collectionToolbar: some View {
     HStack(spacing: 10) {
       titleBlock
 
-      Spacer(minLength: 12)
+      Spacer()
 
-      searchControl
+      if configuration.searchableText != nil {
+        SearchField("Search", text: $searchText)
+          .foldable(true)
+          .frame(maxWidth: 220, fieldHeight: 26)
+      }
 
       sortMenu
 
@@ -412,15 +300,8 @@ struct ImageCollectionView<
       }
     }
     .buttonStyle(.borderless)
-    .controlSize(.small)
-    .padding(.horizontal, 24)
-    .padding(.vertical, 12)
-    .background(.regularMaterial)
-    .overlay(alignment: .top) {
-      Rectangle()
-        .fill(.separator.opacity(0.55))
-        .frame(height: 1)
-    }
+    .padding(.horizontal, 12)
+    .frame(height: 32, alignment: .center)
     .overlay(alignment: .bottom) {
       Rectangle()
         .fill(.separator.opacity(0.5))
@@ -430,57 +311,20 @@ struct ImageCollectionView<
 
   @ViewBuilder
   private var titleBlock: some View {
-    if configuration.title != nil || configuration.subtitle != nil {
-      HStack(alignment: .firstTextBaseline, spacing: 8) {
-        if let title = configuration.title {
-          Text(title)
-            .font(.headline)
-            .lineLimit(1)
-        }
+    if let title = configuration.title {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title)
+          .font(.headline)
+          .lineLimit(1)
+          .truncationMode(.middle)
 
         if let subtitle = configuration.subtitle {
           Text(subtitle)
-            .font(.callout)
+            .font(.caption)
             .foregroundStyle(.secondary)
             .lineLimit(1)
             .truncationMode(.middle)
         }
-      }
-      .frame(minWidth: 120, maxWidth: 360, alignment: .leading)
-    }
-  }
-
-  @ViewBuilder
-  private var searchControl: some View {
-    if configuration.searchableText != nil {
-      HStack(spacing: 6) {
-        Image(systemName: "magnifyingglass")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-
-        TextField("Search", text: $searchText)
-          .textFieldStyle(.plain)
-          .focused($isSearchFocused)
-
-        if !searchText.isEmpty {
-          Button {
-            searchText = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .foregroundStyle(.secondary)
-          }
-          .buttonStyle(.plain)
-          .help("Clear Search")
-        }
-      }
-      .font(.callout)
-      .padding(.horizontal, 9)
-      .padding(.vertical, 6)
-      .frame(width: 180)
-      .background(.controlBackground.opacity(0.65))
-      .clipShape(RoundedRectangle(cornerRadius: 8))
-      .onTapGesture {
-        isSearchFocused = true
       }
     }
   }
@@ -566,14 +410,6 @@ struct ImageCollectionView<
     .padding(configuration.gridSpacing)
   }
 
-  private var viewModeBinding: Binding<ImageCollectionViewMode> {
-    Binding {
-      currentViewMode
-    } set: { newMode in
-      viewMode = newMode
-    }
-  }
-
   private func select(_ item: Item) {
     if isSelecting {
       if selectedItemIDs.contains(item.id) {
@@ -587,7 +423,144 @@ struct ImageCollectionView<
   }
 }
 
-extension ImageCollectionView where ContextMenuContent == EmptyView, SelectionActionsContent == EmptyView {
+// MARK: - Modifiers
+
+extension ImageCollectionView {
+  func collectionTitle(_ title: String, subtitle: String? = nil) -> Self {
+    var view = self
+    view.configuration.title = title
+    view.configuration.subtitle = subtitle
+    return view
+  }
+
+  func searchableText(_ searchableText: @escaping (Item) -> String) -> Self {
+    var view = self
+    view.configuration.searchableText = searchableText
+    return view
+  }
+
+  func sortOptions(
+    _ options: [ImageCollectionSortOption<Item>],
+    default defaultSortID: String? = nil,
+    direction: ImageCollectionSortDirection = .ascending,
+  ) -> Self {
+    var view = self
+    view.configuration.sortOptions = options
+    view.configuration.defaultSortID = defaultSortID
+    view.configuration.defaultSortDirection = direction
+    return view
+  }
+
+  func defaultViewMode(_ mode: ImageCollectionViewMode) -> Self {
+    var view = self
+    view.configuration.defaultViewMode = mode
+    return view
+  }
+
+  func listRowHeight(_ height: CGFloat) -> Self {
+    var view = self
+    view.configuration.listRowHeight = height
+    return view
+  }
+
+  func gridItemSize(minimum: CGFloat, maximum: CGFloat? = nil, spacing: CGFloat = 16) -> Self {
+    var view = self
+    view.configuration.gridMinimumItemWidth = minimum
+    view.configuration.gridMaximumItemWidth = maximum ?? minimum
+    view.configuration.gridSpacing = spacing
+    return view
+  }
+
+  func keepsFoldersFirst(_ isEnabled: Bool = true, isFolder: @escaping (Item) -> Bool) -> Self {
+    var view = self
+    view.configuration.keepsFoldersFirst = isEnabled
+    view.configuration.isFolder = isFolder
+    return view
+  }
+
+  func tieBreaker(_ compare: @escaping (Item, Item) -> ComparisonResult) -> Self {
+    var view = self
+    view.configuration.tieBreaker = compare
+    return view
+  }
+
+  func clearAction(_ title: String, _ action: @escaping () -> Void) -> Self {
+    var view = self
+    view.configuration.clearTitle = title
+    view.configuration.onClear = action
+    return view
+  }
+
+  func contextMenu<MenuContent: View>(
+    @ViewBuilder _ content: @escaping (Item) -> MenuContent,
+  ) -> ImageCollectionView<
+    Item,
+    EmptyContent,
+    ListRowContent,
+    GridItemContent,
+    MenuContent,
+    SelectionActionsContent,
+  > {
+    var configuration = configuration
+    configuration.hasContextMenu = true
+
+    return ImageCollectionView<
+      Item,
+      EmptyContent,
+      ListRowContent,
+      GridItemContent,
+      MenuContent,
+      SelectionActionsContent,
+    >(
+      configuration: configuration,
+      items: items,
+      onOpen: onOpen,
+      emptyContent: emptyContent,
+      listRow: listRow,
+      gridItem: gridItem,
+      contextMenuContent: content,
+      selectionActionsContent: selectionActionsContent,
+    )
+  }
+
+  func selectionActions<ActionsContent: View>(
+    @ViewBuilder _ content: @escaping ([Item]) -> ActionsContent,
+  ) -> ImageCollectionView<
+    Item,
+    EmptyContent,
+    ListRowContent,
+    GridItemContent,
+    ContextMenuContent,
+    ActionsContent,
+  > {
+    var configuration = configuration
+    configuration.hasSelectionActions = true
+
+    return ImageCollectionView<
+      Item,
+      EmptyContent,
+      ListRowContent,
+      GridItemContent,
+      ContextMenuContent,
+      ActionsContent,
+    >(
+      configuration: configuration,
+      items: items,
+      onOpen: onOpen,
+      emptyContent: emptyContent,
+      listRow: listRow,
+      gridItem: gridItem,
+      contextMenuContent: contextMenuContent,
+      selectionActionsContent: content,
+    )
+  }
+}
+
+// MARK: - Convenience Initializers
+
+extension ImageCollectionView where ContextMenuContent == EmptyView,
+  SelectionActionsContent == EmptyView
+{
   init(
     _ items: [Item],
     onOpen: @escaping (Item) -> Void,
@@ -607,6 +580,8 @@ extension ImageCollectionView where ContextMenuContent == EmptyView, SelectionAc
     )
   }
 }
+
+// MARK: - ImageCollectionConfiguration
 
 private struct ImageCollectionConfiguration<Item> {
   var title: String?
@@ -629,10 +604,12 @@ private struct ImageCollectionConfiguration<Item> {
   var hasSelectionActions = false
 }
 
+// MARK: - ImageCollectionListRowContainer
+
 private struct ImageCollectionListRowContainer<
   Item,
   Content: View,
-  ContextMenuContent: View
+  ContextMenuContent: View,
 >: View {
   let item: Item
   let isSelected: Bool
@@ -690,10 +667,12 @@ private struct ImageCollectionListRowContainer<
   }
 }
 
+// MARK: - ImageCollectionGridItemContainer
+
 private struct ImageCollectionGridItemContainer<
   Item,
   Content: View,
-  ContextMenuContent: View
+  ContextMenuContent: View,
 >: View {
   let item: Item
   let isSelected: Bool
@@ -736,21 +715,25 @@ private struct ImageCollectionGridItemContainer<
   }
 }
 
+// MARK: - Comparison Helpers
+
 private func compareValues<Value: Comparable>(_ first: Value, _ second: Value) -> ComparisonResult {
   if first < second { return .orderedAscending }
   if first > second { return .orderedDescending }
   return .orderedSame
 }
 
-private func compareOptionalValues<Value: Comparable>(_ first: Value?, _ second: Value?) -> ComparisonResult {
+private func compareOptionalValues<Value: Comparable>(_ first: Value?,
+                                                      _ second: Value?) -> ComparisonResult
+{
   switch (first, second) {
   case let (first?, second?):
-    return compareValues(first, second)
+    compareValues(first, second)
   case (nil, nil):
-    return .orderedSame
+    .orderedSame
   case (nil, _):
-    return .orderedAscending
+    .orderedAscending
   case (_, nil):
-    return .orderedDescending
+    .orderedDescending
   }
 }
