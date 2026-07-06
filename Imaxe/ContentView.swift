@@ -14,7 +14,6 @@ struct ContentView: View {
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
   @State private var imageSession = ImageSession()
-  @State private var recentImagesSnapshot = RecentImagesSnapshot()
   @State private var isTargetedForDrop = false
 
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
@@ -33,7 +32,7 @@ struct ContentView: View {
       } else {
         HomeView(
           imageSession: imageSession,
-          recentImages: recentImageItems,
+          recentImages: recentImages,
         )
       }
     }
@@ -46,7 +45,6 @@ struct ContentView: View {
         ),
     )
     .focusedSceneValue(imageSession)
-    .focusedSceneValue(recentImagesSnapshot)
     .dismissTextFocusOnClickOutside()
     .onAppear {
       imageSession.topBarHideDelay = topBarHideDelay
@@ -55,10 +53,14 @@ struct ContentView: View {
       imageSession.recordRecentImage = { url in
         try? RecentImagesStore.recordOpened(url, in: modelContext)
       }
-      recentImagesSnapshot.items = recentImageItems
+      imageSession.recentImages = Array(
+        recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu),
+      )
     }
-    .onChange(of: recentImageItems) { _, newValue in
-      recentImagesSnapshot.items = newValue
+    .onChange(of: recentImages) { _, newValue in
+      imageSession.recentImages = Array(
+        newValue.prefix(Constants.maximumRecentImagesToDisplayInMenu),
+      )
     }
     .onChange(of: topBarHideDelay) { _, newValue in
       imageSession.topBarHideDelay = newValue
@@ -88,10 +90,6 @@ struct ContentView: View {
     .onOpenURL { url in
       imageSession.loadImage(from: url)
     }
-  }
-
-  private var recentImageItems: [RecentImageItem] {
-    recentImages.map(RecentImageItem.init)
   }
 }
 

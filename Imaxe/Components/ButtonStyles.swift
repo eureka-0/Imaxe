@@ -1,5 +1,5 @@
 //
-//  Styles.swift
+//  ButtonStyles.swift
 //  Imaxe
 //
 //  Created by lxlong on 2026/7/5.

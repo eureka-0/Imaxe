@@ -270,7 +270,7 @@ struct ImaxeTests {
     )
     let recentImages = try context.fetch(descriptor)
 
-    #expect(recentImages.map(\.displayName) == ["first.png", "second.png"])
+    #expect(recentImages.compactMap(\.url).map(\.lastPathComponent) == ["first.png", "second.png"])
     #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
 
     try RecentImagesStore.clear(in: context)
@@ -295,11 +295,15 @@ struct ImaxeTests {
     let thumbnailKey = try #require(recent.thumbnailCacheKey)
     let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
 
-    #expect(recent.fileSize > 0)
-    #expect(recent.contentModificationDate != nil)
+    let resourceValues = try recent.url.resourceValues(forKeys: [
+      .contentModificationDateKey,
+      .fileSizeKey,
+    ])
+    #expect((resourceValues.fileSize ?? 0) > 0)
+    #expect(resourceValues.contentModificationDate != nil)
     #expect(FileManager.default.fileExists(atPath: thumbnailURL.path))
 
-    try RecentImagesStore.remove(location: RecentImage.location(for: url), in: context)
+    try RecentImagesStore.remove(path: url.filePath, in: context)
     #expect(!FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 

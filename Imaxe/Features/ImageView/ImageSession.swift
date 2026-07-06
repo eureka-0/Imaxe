@@ -8,6 +8,12 @@
 import AppKit
 import SwiftUI
 
+struct ImageAlert: Identifiable {
+  let id = UUID()
+  let title: String
+  let message: String
+}
+
 @Observable
 final class ImageSession {
   private(set) var currentImage: ImageContainer?
@@ -20,6 +26,7 @@ final class ImageSession {
   private(set) var shouldApplyLoadedImageWindowSize = true
   private(set) var showTopBar = false
   private(set) var folderNavigator: FolderNavigator?
+  var recentImages: [RecentImage] = []
 
   var topBarHideDelay: TimeInterval = AppSettings.Defaults.topBarHideDelay
 

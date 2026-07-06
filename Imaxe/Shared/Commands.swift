@@ -10,7 +10,6 @@ import SwiftUI
 
 struct FileOperationCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
-  @FocusedValue(RecentImagesSnapshot.self) private var recentImagesSnapshot
 
   let modelContainer: ModelContainer
 
@@ -36,17 +35,15 @@ struct FileOperationCommands: Commands {
             .disabled(true)
         } else {
           ForEach(recentImages) { recentImage in
-            Button(recentImage.displayName) {
-              guard let url = recentImage.url,
-                    let imageSession
-              else {
+            Button(recentImage.fileName) {
+              guard let imageSession else {
                 NSSound.beep()
                 return
               }
 
-              imageSession.loadImage(from: url)
+              imageSession.loadImage(from: recentImage.url)
             }
-            .disabled(imageSession == nil || recentImage.url == nil)
+            .disabled(imageSession == nil)
           }
 
           Divider()
@@ -68,8 +65,8 @@ struct FileOperationCommands: Commands {
     }
   }
 
-  private var recentImages: [RecentImageItem] {
-    recentImagesSnapshot?.items ?? []
+  private var recentImages: [RecentImage] {
+    imageSession?.recentImages ?? []
   }
 }
 

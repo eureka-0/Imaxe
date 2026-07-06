@@ -1,5 +1,5 @@
 //
-//  ImageThumbnailCache.swift
+//  ImageThumbnail.swift
 //  Imaxe
 //
 //  Created by lxlong on 2026/7/3.
@@ -8,7 +8,45 @@
 import CryptoKit
 import Foundation
 import ImageIO
+import SwiftData
 import UniformTypeIdentifiers
+
+enum LibraryThumbnailReferences {
+  static func removeThumbnailsIfUnused(
+    _ keys: Set<String>,
+    in modelContext: ModelContext,
+  ) throws {
+    for key in keys {
+      try removeThumbnailIfUnused(key, in: modelContext)
+    }
+  }
+
+  static func removeThumbnailIfUnused(
+    _ key: String,
+    in modelContext: ModelContext,
+  ) throws {
+    guard try !isThumbnailReferenced(key, in: modelContext) else { return }
+
+    try ImageThumbnailCache.removeThumbnail(for: key)
+  }
+
+  private static func isThumbnailReferenced(
+    _ key: String,
+    in modelContext: ModelContext,
+  ) throws -> Bool {
+    var recentDescriptor = FetchDescriptor<RecentImage>(
+      predicate: #Predicate<RecentImage> { recentImage in
+        recentImage.thumbnailCacheKey == key
+      },
+    )
+    recentDescriptor.fetchLimit = 1
+    if try !modelContext.fetch(recentDescriptor).isEmpty {
+      return true
+    }
+
+    return false
+  }
+}
 
 nonisolated enum ImageThumbnailCache {
   static let maxPixelSize = 320
@@ -16,21 +54,20 @@ nonisolated enum ImageThumbnailCache {
   private static let cacheVersion = "v1"
 
   static var cacheDirectory: URL {
-    let baseURL = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
-      ?? URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
-
-    return baseURL
-      .appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
+    FileManager.default.cachesDirectory
       .appendingPathComponent("Thumbnails", isDirectory: true)
   }
 
-  static func ensureThumbnail(for snapshot: LibraryFileSnapshot) -> String? {
-    guard snapshot.isFileURL,
-          !snapshot.isDirectory,
-          ImageLoader.isSupportedImage(snapshot.url)
+  /// Ensures that a thumbnail exists for the given image URL. If a thumbnail already exists in the
+  /// cache, it returns the cache key. If not, it generates a new thumbnail, saves it to the cache,
+  /// and returns the new cache key. Returns `nil` if the thumbnail cannot be created.
+  static func ensureThumbnail(for url: URL) -> String? {
+    guard url.isFileURL,
+          !isDirectory(url),
+          ImageLoader.isSupportedImage(url)
     else { return nil }
 
-    let key = thumbnailCacheKey(for: snapshot)
+    let key = thumbnailCacheKey(for: url)
     let outputURL = thumbnailURL(for: key)
     if FileManager.default.fileExists(atPath: outputURL.path) {
       return key
@@ -41,7 +78,7 @@ nonisolated enum ImageThumbnailCache {
         at: cacheDirectory,
         withIntermediateDirectories: true,
       )
-      try writeThumbnail(from: snapshot.url, to: outputURL)
+      try writeThumbnail(from: url, to: outputURL)
       return key
     } catch {
       try? FileManager.default.removeItem(at: outputURL)
@@ -60,18 +97,30 @@ nonisolated enum ImageThumbnailCache {
     }
   }
 
-  private static func thumbnailCacheKey(for snapshot: LibraryFileSnapshot) -> String {
-    let modifiedAt = snapshot.contentModificationDate?.timeIntervalSince1970 ?? 0
+  private static func thumbnailCacheKey(for url: URL) -> String {
+    let modifiedAt = lastModifiedAt(url)?.timeIntervalSince1970 ?? 0
     let source = [
       cacheVersion,
-      snapshot.location,
-      "\(snapshot.fileSize)",
+      url.filePath,
+      "\(fileSize(url))",
       "\(modifiedAt)",
       "\(maxPixelSize)",
     ].joined(separator: "|")
 
     let digest = SHA256.hash(data: Data(source.utf8))
     return digest.map { String(format: "%02x", $0) }.joined()
+  }
+
+  private static func isDirectory(_ url: URL) -> Bool {
+    (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+  }
+
+  private static func fileSize(_ url: URL) -> Int {
+    (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+  }
+
+  private static func lastModifiedAt(_ url: URL) -> Date? {
+    (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
   }
 
   private static func writeThumbnail(from sourceURL: URL, to outputURL: URL) throws {
@@ -88,7 +137,8 @@ nonisolated enum ImageThumbnailCache {
       kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
       kCGImageSourceShouldCacheImmediately: false,
     ] as CFDictionary
-    guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, thumbnailOptions) else {
+    guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, thumbnailOptions)
+    else {
       throw ThumbnailCacheError.failedToCreateThumbnail
     }
 

@@ -117,7 +117,7 @@ struct ImageView: View {
         .frame(height: 1)
     }
     .frame(height: Constants.topBarHeight)
-    .buttonStyle(TopBarButtonStyle())
+    .buttonStyle(.borderedOnHover)
     .controlSize(.small)
   }
 
@@ -297,43 +297,6 @@ private struct LoadingImageView: View {
   }
 }
 
-private struct TopBarButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    TopBarButton(configuration: configuration)
-  }
-
-  private struct TopBarButton: View {
-    let configuration: Configuration
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovering = false
-
-    var body: some View {
-      configuration.label
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(isEnabled ? .primary : .tertiary)
-        .background(background)
-        .clipShape(.rect(cornerRadius: 7))
-        .contentShape(.rect(cornerRadius: 7))
-        .opacity(configuration.isPressed ? 0.72 : 1)
-        .animation(.easeOut(duration: 0.12), value: isHovering)
-        .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
-        .onHover { isHovering in
-          self.isHovering = isHovering
-        }
-    }
-
-    private var background: some ShapeStyle {
-      if configuration.isPressed {
-        return Color.primary.opacity(0.16)
-      }
-      if isHovering, isEnabled {
-        return Color.primary.opacity(0.10)
-      }
-      return Color.clear
-    }
-  }
-}
-
 private struct ZoomScalePickerPopover: View {
   let currentZoomScale: CGFloat
   @Binding var customZoomScaleText: String
@@ -396,11 +359,11 @@ private struct ZoomScalePickerPopover: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 5)
         .background {
-          RoundedRectangle(cornerRadius: 7, style: .continuous)
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(isSelected ? Color.accentColor.opacity(0.14) : .controlBackground)
         }
         .overlay {
-          RoundedRectangle(cornerRadius: 7, style: .continuous)
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
             .stroke(
               isSelected ? Color.accentColor.opacity(0.38) : .separator.opacity(0.3),
               lineWidth: 0.5,
@@ -420,28 +383,23 @@ private struct ImageInfoPanel: View {
         .font(.headline)
 
       VStack(alignment: .leading, spacing: 8) {
-        ImageInfoRow(title: "File Name", value: info.fileName)
-        ImageInfoRow(title: "Location", value: info.location)
-        ImageInfoRow(title: "Format", value: info.typeDescription)
-        ImageInfoRow(title: "File Size", value: info.fileSizeDescription)
+        infoRow(title: "File Name", value: info.fileName)
+        infoRow(title: "Location", value: info.location)
+        infoRow(title: "Format", value: info.typeDescription)
+        infoRow(title: "File Size", value: info.fileSizeDescription)
 
         Divider()
 
-        ImageInfoRow(title: "Pixel Width", value: String(info.pixelSize.width))
-        ImageInfoRow(title: "Pixel Height", value: String(info.pixelSize.height))
-        ImageInfoRow(title: "Image DPI", value: info.DPIDescription)
+        infoRow(title: "Pixel Width", value: String(info.pixelSize.width))
+        infoRow(title: "Pixel Height", value: String(info.pixelSize.height))
+        infoRow(title: "Image DPI", value: info.DPIDescription)
       }
     }
     .padding(14)
     .frame(width: 360, alignment: .leading)
   }
-}
 
-private struct ImageInfoRow: View {
-  let title: String
-  let value: String
-
-  var body: some View {
+  private func infoRow(title: String, value: String) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 10) {
       Text(title)
         .font(.system(size: 12))
@@ -466,11 +424,11 @@ private extension View {
       .padding(Constants.topBarControlGroupPadding)
       .frame(height: Constants.topBarButtonHeight + Constants.topBarControlGroupPadding * 2)
       .background {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(.controlBackground.opacity(0.8))
       }
       .overlay {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
           .stroke(.separator.opacity(0.24), lineWidth: 0.5)
       }
   }

@@ -1,5 +1,5 @@
 //
-//  RecentImage.swift
+//  RecentImageModel.swift
 //  Imaxe
 //
 //  Created by lxlong on 2026/7/3.
@@ -11,112 +11,52 @@ import SwiftData
 
 @Model
 final class RecentImage {
-  @Attribute(.unique) var location: String
-  var isFileURL: Bool
-  var displayName: String
+  @Attribute(.unique) var path: String
   var lastOpenedAt: Date
-  var contentModificationDate: Date?
-  var fileSize: Int = 0
   var thumbnailCacheKey: String?
 
   init(url: URL, lastOpenedAt: Date = .now) {
-    let snapshot = LibraryFileSnapshot(url: url)
-    location = snapshot.location
-    isFileURL = snapshot.isFileURL
-    displayName = snapshot.displayName
+    path = url.filePath
     self.lastOpenedAt = lastOpenedAt
-    contentModificationDate = snapshot.contentModificationDate
-    fileSize = snapshot.fileSize
-    thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: snapshot)
-  }
-
-  var url: URL? {
-    if isFileURL {
-      return URL(fileURLWithPath: location)
-    }
-
-    return URL(string: location)
-  }
-
-  func update(from url: URL, lastOpenedAt: Date = .now) {
-    let snapshot = LibraryFileSnapshot(url: url)
-    update(from: snapshot, lastOpenedAt: lastOpenedAt)
+    thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
   }
 
   func update(
-    from snapshot: LibraryFileSnapshot,
+    from url: URL,
     lastOpenedAt: Date = .now,
     thumbnailCacheKey: String? = nil,
   ) {
-    location = snapshot.location
-    isFileURL = snapshot.isFileURL
-    displayName = snapshot.displayName
+    path = url.filePath
     self.lastOpenedAt = lastOpenedAt
-    contentModificationDate = snapshot.contentModificationDate
-    fileSize = snapshot.fileSize
-    self.thumbnailCacheKey = thumbnailCacheKey ?? ImageThumbnailCache.ensureThumbnail(for: snapshot)
+    self.thumbnailCacheKey = thumbnailCacheKey ?? ImageThumbnailCache.ensureThumbnail(for: url)
   }
 
-  static func location(for url: URL) -> String {
-    LibraryFileSnapshot.location(for: url)
-  }
-}
-
-struct RecentImageItem: Identifiable, Hashable {
-  let id: String
-  let location: String
-  let isFileURL: Bool
-  let displayName: String
-  let lastOpenedAt: Date
-  let contentModificationDate: Date?
-  let fileSize: Int
-  let thumbnailCacheKey: String?
-
-  init(recentImage: RecentImage) {
-    id = recentImage.location
-    location = recentImage.location
-    isFileURL = recentImage.isFileURL
-    displayName = recentImage.displayName
-    lastOpenedAt = recentImage.lastOpenedAt
-    contentModificationDate = recentImage.contentModificationDate
-    fileSize = recentImage.fileSize
-    thumbnailCacheKey = recentImage.thumbnailCacheKey
-  }
-
-  var url: URL? {
-    if isFileURL {
-      return URL(fileURLWithPath: location)
+  var url: URL {
+    if path.hasPrefix("/") {
+      return URL(fileURLWithPath: path)
     }
 
-    return URL(string: location)
+    return URL(string: path) ?? URL(fileURLWithPath: path)
   }
-}
 
-@Observable
-final class RecentImagesSnapshot {
-  var items: [RecentImageItem]
-
-  init(items: [RecentImageItem] = []) {
-    self.items = items
+  var fileName: String {
+    url.lastPathComponent
   }
 }
 
 enum RecentImagesStore {
-  static let defaultLimit = 100
-
   static func recordOpened(
     _ url: URL,
     in modelContext: ModelContext,
     openedAt: Date = .now,
-    limit: Int = defaultLimit,
+    limit: Int = Constants.maximumRecentImagesCount,
   ) throws {
-    let location = RecentImage.location(for: url)
-    let snapshot = LibraryFileSnapshot(url: url)
-    let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: snapshot)
+    let path = url.filePath
+    let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
     var thumbnailKeysToCleanup = Set<String>()
     var descriptor = FetchDescriptor<RecentImage>(
       predicate: #Predicate<RecentImage> { recentImage in
-        recentImage.location == location
+        recentImage.path == path
       },
     )
     descriptor.fetchLimit = 1
@@ -128,7 +68,7 @@ enum RecentImagesStore {
         thumbnailKeysToCleanup.insert(oldKey)
       }
       recentImage.update(
-        from: snapshot,
+        from: url,
         lastOpenedAt: openedAt,
         thumbnailCacheKey: thumbnailCacheKey,
       )
@@ -138,9 +78,12 @@ enum RecentImagesStore {
       modelContext.insert(recentImage)
     }
 
-    thumbnailKeysToCleanup.formUnion(try trim(to: limit, in: modelContext))
+    try thumbnailKeysToCleanup.formUnion(trim(to: limit, in: modelContext))
     try modelContext.save()
-    try LibraryThumbnailReferences.removeThumbnailsIfUnused(thumbnailKeysToCleanup, in: modelContext)
+    try LibraryThumbnailReferences.removeThumbnailsIfUnused(
+      thumbnailKeysToCleanup,
+      in: modelContext,
+    )
   }
 
   static func clear(in modelContext: ModelContext) throws {
@@ -150,10 +93,10 @@ enum RecentImagesStore {
     try LibraryThumbnailReferences.removeThumbnailsIfUnused(thumbnailKeys, in: modelContext)
   }
 
-  static func remove(location: String, in modelContext: ModelContext) throws {
+  static func remove(path: String, in modelContext: ModelContext) throws {
     var descriptor = FetchDescriptor<RecentImage>(
       predicate: #Predicate<RecentImage> { recentImage in
-        recentImage.location == location
+        recentImage.path == path
       },
     )
     descriptor.fetchLimit = 1
@@ -169,23 +112,22 @@ enum RecentImagesStore {
   }
 
   static func updateLocation(
-    from oldLocation: String,
+    from oldPath: String,
     to url: URL,
     in modelContext: ModelContext,
   ) throws {
     var descriptor = FetchDescriptor<RecentImage>(
       predicate: #Predicate<RecentImage> { recentImage in
-        recentImage.location == oldLocation
+        recentImage.path == oldPath
       },
     )
     descriptor.fetchLimit = 1
     guard let recentImage = try modelContext.fetch(descriptor).first else { return }
 
-    let snapshot = LibraryFileSnapshot(url: url)
-    let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: snapshot)
+    let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
     let oldThumbnailKey = recentImage.thumbnailCacheKey
     recentImage.update(
-      from: snapshot,
+      from: url,
       lastOpenedAt: recentImage.lastOpenedAt,
       thumbnailCacheKey: thumbnailCacheKey,
     )
@@ -221,6 +163,6 @@ enum RecentImagesStore {
 
   private static func thumbnailKeys(in modelContext: ModelContext) throws -> Set<String> {
     let descriptor = FetchDescriptor<RecentImage>()
-    return Set(try modelContext.fetch(descriptor).compactMap(\.thumbnailCacheKey))
+    return try Set(modelContext.fetch(descriptor).compactMap(\.thumbnailCacheKey))
   }
 }

@@ -18,21 +18,35 @@ private struct HomeOperationAlert: Identifiable {
 
 struct HomeView: View {
   @Bindable var imageSession: ImageSession
-  let recentImages: [RecentImageItem]
+  let recentImages: [RecentImage]
 
   @Environment(\.modelContext) private var modelContext
-  @State private var deleteTarget: HomeRecentImageItem?
-  @State private var renameTarget: HomeRecentImageItem?
+  @State private var deleteTargetURL: URL?
+  @State private var renameTarget: ImageCollectionItem?
   @State private var renameText = ""
   @State private var operationAlert: HomeOperationAlert?
 
-  private var recentItems: [HomeRecentImageItem] {
-    recentImages.map(HomeRecentImageItem.init)
+  private var recentImageItems: [ImageCollectionItem] {
+    recentImages.map { recentImage in
+      ImageCollectionItem(
+        url: recentImage.url,
+        lastOpenedAt: recentImage.lastOpenedAt,
+        thumbnailCacheKey: recentImage.thumbnailCacheKey,
+      )
+    }
   }
 
-  private var recentImageActions: HomeRecentImageActions {
-    HomeRecentImageActions(
-      onOpen: open,
+  private struct RecentImageActions {
+    let onOpen: (URL) -> Void
+    let onRemove: (String) -> Void
+    let onReveal: (URL) -> Void
+    let onDeleteFile: (URL) -> Void
+    let onRename: (ImageCollectionItem) -> Void
+  }
+
+  private var recentImageActions: RecentImageActions {
+    RecentImageActions(
+      onOpen: { imageSession.loadImage(from: $0) },
       onRemove: remove,
       onReveal: revealInFinder,
       onDeleteFile: confirmDelete,
@@ -47,15 +61,7 @@ struct HomeView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .sheet(item: $renameTarget) { item in
-      RenameFileSheet(
-        item: item,
-        fileName: $renameText,
-      ) {
-        renameTarget = nil
-      } onRename: { newName in
-        rename(item, to: newName)
-        renameTarget = nil
-      }
+      fileRenameSheet(for: item)
     }
     .confirmationDialog(
       "Move to Trash?",
@@ -63,17 +69,17 @@ struct HomeView: View {
       titleVisibility: .visible,
     ) {
       Button("Move to Trash", role: .destructive) {
-        if let deleteTarget {
-          moveToTrash(deleteTarget)
+        if let deleteTargetURL {
+          moveToTrash(deleteTargetURL)
         }
-        deleteTarget = nil
+        deleteTargetURL = nil
       }
 
       Button("Cancel", role: .cancel) {
-        deleteTarget = nil
+        deleteTargetURL = nil
       }
     } message: {
-      Text(deleteTarget?.displayName ?? "")
+      Text(deleteTargetURL?.lastPathComponent ?? "")
     }
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
@@ -121,30 +127,33 @@ struct HomeView: View {
   }
 
   private var recentImagesCollection: some View {
-    ImageCollectionView(recentItems, onOpen: open) {
-      emptyRecentImagesView
-    } listRow: { context in
-      HomeRecentImageListRow(context: context, actions: recentImageActions)
-    } gridItem: { context in
-      HomeRecentImageGridItem(context: context)
+    ImageCollectionView(recentImageItems) {
+      imageSession.loadImage(from: $0.url)
+    } emptyContent: {
+      VStack(spacing: 15) {
+        Image(systemName: "photo.on.rectangle.angled")
+          .resizable()
+          .scaledToFit()
+          .foregroundStyle(.secondary)
+          .frame(width: 64, height: 64)
+
+        Text("No recent images yet")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } listRow: { item in
+      recentImageListRow(item)
+    } gridItem: { item in
+      recentImageGridItem(item)
     }
     .collectionTitle("Recent Images")
     .searchableText(\.searchableText)
-    .sortOptions(recentSortOptions, default: "lastOpenedAt", direction: .descending)
+    .sortOptions(recentSortOptions, default: "lastOpenedAt")
     .defaultViewMode(.grid)
-    .tieBreaker { first, second in
-      first.displayName.localizedStandardCompare(second.displayName)
-    }
     .clearAction("Clear Recent Images", clearRecentImages)
     .contextMenu { item in
-      HomeRecentImageActionsContent(item: item, actions: recentImageActions)
-    }
-    .selectionActions { selectedItems in
-      Button {
-        remove(selectedItems)
-      } label: {
-        Label("Remove Selected", systemImage: "minus.circle")
-      }
+      recentImageActionsMenu(item)
     }
     .background(.controlBackground.opacity(0.5))
     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -155,25 +164,139 @@ struct HomeView: View {
     .padding([.horizontal, .bottom], 8)
   }
 
-  private var emptyRecentImagesView: some View {
-    VStack(spacing: 15) {
-      Image(systemName: "photo.on.rectangle.angled")
-        .resizable()
-        .scaledToFit()
-        .foregroundStyle(.secondary)
-        .frame(width: 64, height: 64)
+  private func recentImageListRow(_ item: ImageCollectionItem) -> some View {
+    HStack(spacing: 6) {
+      ImageThumbnailView(url: item.url)
+        .frame(width: 28, height: 28)
 
-      Text("No recent images yet")
+      VStack(alignment: .leading, spacing: 2) {
+        Text(item.fileName)
+          .font(.callout)
+          .lineLimit(1)
+          .truncationMode(.middle)
+
+        Text(item.path)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+      }
+      .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
+
+      Text(item.lastOpenedAt.relativeDateDescription)
         .font(.callout)
         .foregroundStyle(.secondary)
+        .frame(idealWidth: 116, alignment: .leading)
+
+      Text(item.fileSizeDescription)
+        .font(.callout)
+        .monospacedDigit()
+        .foregroundStyle(.secondary)
+        .frame(width: 68, alignment: .trailing)
+
+      Menu {
+        recentImageActionsMenu(item)
+      } label: {
+        Label("More", systemImage: "ellipsis")
+          .labelStyle(.iconOnly)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(.secondary)
+          .frame(width: 24, height: 24)
+      }
+      .menuStyle(.button)
+      .buttonStyle(.borderedOnHover)
+      .help("More")
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(.horizontal, 12)
+    .padding(.vertical, 2)
   }
 
-  private var recentSortOptions: [ImageCollectionSortOption<HomeRecentImageItem>] {
+  @ViewBuilder
+  private func recentImageActionsMenu(_ item: ImageCollectionItem) -> some View {
+    Button {
+      recentImageActions.onOpen(item.url)
+    } label: {
+      Label("Open", systemImage: "photo")
+    }
+
+    Button {
+      recentImageActions.onRename(item)
+    } label: {
+      Label("Rename", systemImage: "pencil")
+    }
+
+    Button(role: .destructive) {
+      recentImageActions.onDeleteFile(item.url)
+    } label: {
+      Label("Move to Trash", systemImage: "trash")
+    }
+
+    Divider()
+
+    Button {
+      recentImageActions.onRemove(item.path)
+    } label: {
+      Label("Remove from Recents", systemImage: "minus.circle")
+    }
+
+    Button {
+      recentImageActions.onReveal(item.url)
+    } label: {
+      Label("Show in Finder", systemImage: "folder")
+    }
+  }
+
+  private func recentImageGridItem(_ item: ImageCollectionItem) -> some View {
+    ImageThumbnailView(url: item.url)
+      .overlay(alignment: .bottom) {
+        if item.isHovered {
+          Text(item.fileName)
+            .font(.system(size: 9, weight: .light))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
+            .background(.regularMaterial)
+        }
+      }
+      .help(item.path)
+  }
+
+  private func fileRenameSheet(for item: ImageCollectionItem) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Rename")
+        .font(.headline)
+
+      TextField("Name", text: $renameText)
+        .textFieldStyle(.roundedBorder)
+        .frame(width: 320)
+
+      HStack {
+        Spacer()
+
+        Button("Cancel") {
+          renameTarget = nil
+        }
+        .keyboardShortcut(.cancelAction)
+
+        Button("Rename") {
+          rename(item.url, to: renameText)
+          renameTarget = nil
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+    .padding(20)
+    .frame(width: 380)
+  }
+
+  private var recentSortOptions: [ImageCollectionSortOption] {
     [
       ImageCollectionSortOption("name", title: "Name", systemImage: "textformat") { first, second in
-        first.displayName.localizedStandardCompare(second.displayName)
+        first.fileName.localizedStandardCompare(second.fileName)
       },
       ImageCollectionSortOption(
         "lastOpenedAt",
@@ -185,36 +308,30 @@ struct HomeView: View {
         "modifiedAt",
         title: "Modified",
         systemImage: "calendar",
-        optionalValue: \.contentModificationDate,
+        optionalValue: \.url.lastModifiedAt,
       ),
       ImageCollectionSortOption(
         "fileSize",
         title: "Size",
         systemImage: "externaldrive",
-        value: \.fileSize,
+        value: \.url.fileSize,
       ),
     ]
   }
 
   private var isDeleteConfirmationPresented: Binding<Bool> {
     Binding {
-      deleteTarget != nil
+      deleteTargetURL != nil
     } set: { isPresented in
       if !isPresented {
-        deleteTarget = nil
+        deleteTargetURL = nil
       }
     }
   }
 
-  private func open(_ item: HomeRecentImageItem) {
-    guard let url = item.url else { return }
-
-    imageSession.loadImage(from: url)
-  }
-
-  private func remove(_ item: HomeRecentImageItem) {
+  private func remove(path: String) {
     do {
-      try RecentImagesStore.remove(location: item.location, in: modelContext)
+      try RecentImagesStore.remove(path: path, in: modelContext)
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Remove Item",
@@ -223,29 +340,25 @@ struct HomeView: View {
     }
   }
 
-  private func remove(_ items: [HomeRecentImageItem]) {
+  private func remove(_ items: [ImageCollectionItem]) {
     for item in items {
-      remove(item)
+      remove(path: item.path)
     }
   }
 
-  private func revealInFinder(_ item: HomeRecentImageItem) {
-    guard let url = item.url else { return }
-
+  private func revealInFinder(_ url: URL) {
     NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
-  private func confirmDelete(_ item: HomeRecentImageItem) {
-    deleteTarget = item
+  private func confirmDelete(_ url: URL) {
+    deleteTargetURL = url
   }
 
-  private func moveToTrash(_ item: HomeRecentImageItem) {
-    guard let url = item.url else { return }
-
+  private func moveToTrash(_ url: URL) {
     do {
       var trashedURL: NSURL?
       try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
-      try RecentImagesStore.remove(location: item.location, in: modelContext)
+      try RecentImagesStore.remove(path: url.filePath, in: modelContext)
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Move Item to Trash",
@@ -254,21 +367,19 @@ struct HomeView: View {
     }
   }
 
-  private func beginRename(_ item: HomeRecentImageItem) {
-    renameText = item.displayName
+  private func beginRename(_ item: ImageCollectionItem) {
+    renameText = item.url.lastPathComponent
     renameTarget = item
   }
 
-  private func rename(_ item: HomeRecentImageItem, to newName: String) {
-    guard let url = item.url else { return }
-
+  private func rename(_ url: URL, to newName: String) {
     let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty, trimmedName != item.displayName else { return }
+    guard !trimmedName.isEmpty, trimmedName != url.lastPathComponent else { return }
 
     let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedName)
     do {
       try FileManager.default.moveItem(at: url, to: newURL)
-      try RecentImagesStore.updateLocation(from: item.location, to: newURL, in: modelContext)
+      try RecentImagesStore.updateLocation(from: url.filePath, to: newURL, in: modelContext)
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Rename Item",

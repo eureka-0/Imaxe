@@ -194,6 +194,61 @@ extension Date {
   }
 }
 
+// MARK: - FileManager extensions.
+
+extension FileManager {
+  nonisolated var cachesDirectory: URL {
+    (
+      urls(for: .cachesDirectory, in: .userDomainMask).first ?? URL(
+        fileURLWithPath: NSTemporaryDirectory(),
+        isDirectory: true,
+      ),
+    ).appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
+  }
+
+  var applicationSupportDirectory: URL {
+    guard let appSupportURL = urls(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+    ).first else {
+      fatalError("Unable to locate Application Support directory.")
+    }
+
+    return appSupportURL
+  }
+
+  var dataDirectory: URL {
+    #if DEBUG
+      let directoryName = "Imaxe Debug"
+    #else
+      let directoryName = "Imaxe"
+    #endif
+
+    let url = applicationSupportDirectory.appendingPathComponent(
+      "\(directoryName)",
+      isDirectory: true,
+    )
+
+    do {
+      try ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create data directory: \(error)")
+    }
+
+    return url
+  }
+
+  func ensureExists(for directoryURL: URL) throws {
+    if !fileExists(atPath: directoryURL.path) {
+      try createDirectory(
+        at: directoryURL,
+        withIntermediateDirectories: true,
+        attributes: nil,
+      )
+    }
+  }
+}
+
 // MARK: - NSApplication extensions.
 
 extension NSApplication {
@@ -379,6 +434,30 @@ extension NSWindow {
     }
 
     return frame
+  }
+}
+
+// MARK: - URL extensions.
+
+extension URL {
+  nonisolated var filePath: String {
+    if isFileURL {
+      return standardizedFileURL.path
+    }
+
+    return absoluteString
+  }
+
+  nonisolated var isDirectory: Bool {
+    (try? resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+  }
+
+  nonisolated var fileSize: Int {
+    (try? resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+  }
+
+  var lastModifiedAt: Date? {
+    (try? resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
   }
 }
 
