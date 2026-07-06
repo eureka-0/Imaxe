@@ -184,6 +184,16 @@ extension Comparable {
   }
 }
 
+// MARK: - Date extensions.
+
+extension Date {
+  var relativeDateDescription: String {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .full
+    return formatter.localizedString(for: self, relativeTo: .now)
+  }
+}
+
 // MARK: - NSApplication extensions.
 
 extension NSApplication {

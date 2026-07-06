@@ -55,7 +55,7 @@ enum ImageCollectionSortDirection {
   }
 }
 
-struct ImageCollectionSortOption<Item>: Identifiable {
+struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
   let id: String
   let title: String
   let systemImage: String
@@ -94,12 +94,17 @@ struct ImageCollectionSortOption<Item>: Identifiable {
       compareOptionalValues(optionalValue(first), optionalValue(second))
     }
   }
+
+  static func == (
+    lhs: ImageCollectionSortOption<Item>,
+    rhs: ImageCollectionSortOption<Item>,
+  ) -> Bool {
+    lhs.id == rhs.id
+  }
 }
 
 struct ImageCollectionItemContext<Item> {
   let item: Item
-  let isSelected: Bool
-  let isSelecting: Bool
   let isHovered: Bool
   let viewMode: ImageCollectionViewMode
 }
@@ -127,8 +132,6 @@ struct ImageCollectionView<
   @State private var selectedSortID: String?
   @State private var sortDirection: ImageCollectionSortDirection?
   @State private var viewMode: ImageCollectionViewMode?
-  @State private var isSelecting = false
-  @State private var selectedItemIDs = Set<Item.ID>()
 
   private var visibleItems: [Item] {
     let filteredItems = if let searchableText = configuration.searchableText, !searchText.isEmpty {
@@ -159,10 +162,6 @@ struct ImageCollectionView<
       return currentSortDirection == .ascending ? result == .orderedAscending : result ==
         .orderedDescending
     }
-  }
-
-  private var selectedItems: [Item] {
-    visibleItems.filter { selectedItemIDs.contains($0.id) }
   }
 
   private var itemIDs: [Item.ID] {
@@ -222,7 +221,6 @@ struct ImageCollectionView<
 
       if visibleItems.isEmpty {
         emptyContent()
-          .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         ScrollView(.vertical) {
           switch currentViewMode {
@@ -234,13 +232,13 @@ struct ImageCollectionView<
         }
       }
     }
-    .onChange(of: itemIDs) { _, newValue in
-      selectedItemIDs.formIntersection(Set(newValue))
-    }
   }
 
+  private let collectionToolBarHeight: CGFloat = 32
+  private let collectionToolBarButtonHeight: CGFloat = 26
+
   private var collectionToolbar: some View {
-    HStack(spacing: 10) {
+    HStack(spacing: 2) {
       titleBlock
 
       Spacer()
@@ -248,60 +246,25 @@ struct ImageCollectionView<
       if configuration.searchableText != nil {
         SearchField("Search", text: $searchText)
           .foldable(true)
-          .frame(maxWidth: 220, fieldHeight: 26)
+          .frame(maxWidth: 220, fieldHeight: collectionToolBarButtonHeight)
       }
 
       sortMenu
 
-      Picker("View", selection: viewModeBinding) {
-        ForEach(ImageCollectionViewMode.allCases) { mode in
-          Label(mode.title, systemImage: mode.systemImage)
-            .labelStyle(.iconOnly)
-            .tag(mode)
-        }
+      MaterialSegmentedPicker(
+        selection: viewModeBinding,
+        items: ImageCollectionViewMode.allCases,
+      ) { mode in
+        Label(mode.title, systemImage: mode.systemImage)
+          .labelStyle(.iconOnly)
+          .font(.system(size: 13, weight: .medium))
       }
-      .pickerStyle(.segmented)
-      .labelStyle(.iconOnly)
-      .labelsHidden()
-      .frame(width: 72)
-      .help("View Mode")
+      .frame(height: collectionToolBarHeight - 4)
 
-      Button {
-        if isSelecting {
-          selectedItemIDs.removeAll()
-        }
-        isSelecting.toggle()
-      } label: {
-        Label("Select", systemImage: isSelecting ? "checkmark.circle.fill" : "checkmark.circle")
-      }
-      .labelStyle(.iconOnly)
-      .help("Select Items")
-
-      if configuration.hasSelectionActions, isSelecting, !selectedItems.isEmpty {
-        Menu {
-          selectionActionsContent(selectedItems)
-        } label: {
-          Label("Batch Actions", systemImage: "ellipsis.circle")
-        }
-        .menuStyle(.button)
-        .labelStyle(.iconOnly)
-        .help("Batch Actions")
-      }
-
-      if let clearTitle = configuration.clearTitle, let onClear = configuration.onClear {
-        Button(role: .destructive) {
-          onClear()
-        } label: {
-          Label(clearTitle, systemImage: "clear")
-        }
-        .labelStyle(.iconOnly)
-        .disabled(items.isEmpty)
-        .help(clearTitle)
-      }
+      clearButton
     }
-    .buttonStyle(.borderless)
     .padding(.horizontal, 12)
-    .frame(height: 32, alignment: .center)
+    .frame(height: collectionToolBarHeight, alignment: .center)
     .overlay(alignment: .bottom) {
       Rectangle()
         .fill(.separator.opacity(0.5))
@@ -333,49 +296,78 @@ struct ImageCollectionView<
   private var sortMenu: some View {
     if let currentSortOption {
       Menu {
-        Button {
-          sortDirection = currentSortDirection == .ascending ? .descending : .ascending
-        } label: {
-          Label(currentSortDirection.title, systemImage: currentSortDirection.systemImage)
-        }
-
-        Divider()
-
         ForEach(configuration.sortOptions) { sortOption in
           Button {
             selectedSortID = sortOption.id
           } label: {
-            Label(sortOption.title, systemImage: sortOption.systemImage)
+            Label(sortOption.title, systemImage: currentSortOption == sortOption ? "checkmark" : "")
           }
         }
+
+        Divider()
+
+        Button {
+          sortDirection = .ascending
+        } label: {
+          Label(
+            ImageCollectionSortDirection.ascending.title,
+            systemImage: currentSortDirection == .ascending ? "checkmark" : "",
+          )
+        }
+
+        Button {
+          sortDirection = .descending
+        } label: {
+          Label(
+            ImageCollectionSortDirection.descending.title,
+            systemImage: currentSortDirection == .descending ? "checkmark" : "",
+          )
+        }
       } label: {
-        Label("Sort", systemImage: currentSortOption.systemImage)
+        Label("Sort", systemImage: "arrow.up.arrow.down")
+          .labelStyle(.iconOnly)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(.secondary)
+          .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
       }
       .menuStyle(.button)
-      .labelStyle(.iconOnly)
+      .buttonStyle(.borderedOnHover(applyPressedEffect: false))
       .help("Sort by \(currentSortOption.title), \(currentSortDirection.title)")
     }
   }
 
+  @ViewBuilder
+  private var clearButton: some View {
+    if let clearTitle = configuration.clearTitle, let onClear = configuration.onClear {
+      Button(role: .destructive) {
+        onClear()
+      } label: {
+        Label(clearTitle, systemImage: "trash")
+          .labelStyle(.iconOnly)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(.secondary)
+          .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
+      }
+      .buttonStyle(.borderedOnHover)
+      .disabled(items.isEmpty)
+      .help(clearTitle)
+    }
+  }
+
   private var listContent: some View {
-    LazyVStack(spacing: 2) {
+    LazyVStack(spacing: 0) {
       ForEach(visibleItems) { item in
         ImageCollectionListRowContainer(
           item: item,
-          isSelected: selectedItemIDs.contains(item.id),
-          isSelecting: isSelecting,
           hasContextMenu: configuration.hasContextMenu,
           viewMode: currentViewMode,
-          rowHeight: configuration.listRowHeight,
           listRow: listRow,
           contextMenuContent: contextMenuContent,
-          onSelect: { select(item) },
           onOpen: { onOpen(item) },
         )
       }
     }
-    .padding(.horizontal, 24)
-    .padding(.vertical, 10)
+    .padding(3)
   }
 
   private var gridContent: some View {
@@ -396,30 +388,15 @@ struct ImageCollectionView<
       ForEach(visibleItems) { item in
         ImageCollectionGridItemContainer(
           item: item,
-          isSelected: selectedItemIDs.contains(item.id),
-          isSelecting: isSelecting,
           hasContextMenu: configuration.hasContextMenu,
           viewMode: currentViewMode,
           gridItem: gridItem,
           contextMenuContent: contextMenuContent,
-          onSelect: { select(item) },
           onOpen: { onOpen(item) },
         )
       }
     }
-    .padding(configuration.gridSpacing)
-  }
-
-  private func select(_ item: Item) {
-    if isSelecting {
-      if selectedItemIDs.contains(item.id) {
-        selectedItemIDs.remove(item.id)
-      } else {
-        selectedItemIDs.insert(item.id)
-      }
-    } else {
-      selectedItemIDs = [item.id]
-    }
+    .padding(3)
   }
 }
 
@@ -454,12 +431,6 @@ extension ImageCollectionView {
   func defaultViewMode(_ mode: ImageCollectionViewMode) -> Self {
     var view = self
     view.configuration.defaultViewMode = mode
-    return view
-  }
-
-  func listRowHeight(_ height: CGFloat) -> Self {
-    var view = self
-    view.configuration.listRowHeight = height
     return view
   }
 
@@ -594,10 +565,9 @@ private struct ImageCollectionConfiguration<Item> {
   var keepsFoldersFirst = false
   var isFolder: (Item) -> Bool = { _ in false }
   var tieBreaker: (Item, Item) -> ComparisonResult = { _, _ in .orderedSame }
-  var listRowHeight: CGFloat = 84
-  var gridMinimumItemWidth: CGFloat = 132
-  var gridMaximumItemWidth: CGFloat = 180
-  var gridSpacing: CGFloat = 16
+  var gridMinimumItemWidth: CGFloat = 82
+  var gridMaximumItemWidth: CGFloat = 120
+  var gridSpacing: CGFloat = 2
   var clearTitle: String?
   var onClear: (() -> Void)?
   var hasContextMenu = false
@@ -612,14 +582,10 @@ private struct ImageCollectionListRowContainer<
   ContextMenuContent: View,
 >: View {
   let item: Item
-  let isSelected: Bool
-  let isSelecting: Bool
   let hasContextMenu: Bool
   let viewMode: ImageCollectionViewMode
-  let rowHeight: CGFloat
   let listRow: (ImageCollectionItemContext<Item>) -> Content
   let contextMenuContent: (Item) -> ContextMenuContent
-  let onSelect: () -> Void
   let onOpen: () -> Void
 
   @State private var isHovered = false
@@ -627,13 +593,11 @@ private struct ImageCollectionListRowContainer<
   var body: some View {
     let row = listRow(context)
       .frame(maxWidth: .infinity)
-      .frame(height: rowHeight)
       .contentShape(Rectangle())
       .background(rowBackground)
       .clipShape(RoundedRectangle(cornerRadius: 9))
       .onHover { isHovered = $0 }
       .onTapGesture(count: 2, perform: onOpen)
-      .simultaneousGesture(TapGesture(count: 1).onEnded { onSelect() })
 
     if hasContextMenu {
       row.contextMenu {
@@ -647,18 +611,12 @@ private struct ImageCollectionListRowContainer<
   private var context: ImageCollectionItemContext<Item> {
     ImageCollectionItemContext(
       item: item,
-      isSelected: isSelected,
-      isSelecting: isSelecting,
       isHovered: isHovered,
       viewMode: viewMode,
     )
   }
 
   private var rowBackground: Color {
-    if isSelected {
-      return Color.accentColor.opacity(0.16)
-    }
-
     if isHovered {
       return Color.primary.opacity(0.055)
     }
@@ -675,13 +633,10 @@ private struct ImageCollectionGridItemContainer<
   ContextMenuContent: View,
 >: View {
   let item: Item
-  let isSelected: Bool
-  let isSelecting: Bool
   let hasContextMenu: Bool
   let viewMode: ImageCollectionViewMode
   let gridItem: (ImageCollectionItemContext<Item>) -> Content
   let contextMenuContent: (Item) -> ContextMenuContent
-  let onSelect: () -> Void
   let onOpen: () -> Void
 
   @State private var isHovered = false
@@ -693,7 +648,6 @@ private struct ImageCollectionGridItemContainer<
       .contentShape(Rectangle())
       .onHover { isHovered = $0 }
       .onTapGesture(count: 2, perform: onOpen)
-      .simultaneousGesture(TapGesture(count: 1).onEnded { onSelect() })
 
     if hasContextMenu {
       itemView.contextMenu {
@@ -707,8 +661,6 @@ private struct ImageCollectionGridItemContainer<
   private var context: ImageCollectionItemContext<Item> {
     ImageCollectionItemContext(
       item: item,
-      isSelected: isSelected,
-      isSelecting: isSelecting,
       isHovered: isHovered,
       viewMode: viewMode,
     )

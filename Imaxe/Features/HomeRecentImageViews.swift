@@ -17,13 +17,11 @@ struct HomeRecentImageListRow: View {
   }
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: 6) {
       HomeRecentImageThumbnailView(
         item: item,
-        isSelected: context.isSelected,
-        isSelecting: context.isSelecting,
       )
-      .frame(width: 58, height: 58)
+      .frame(width: 28, height: 28)
 
       VStack(alignment: .leading, spacing: 3) {
         Text(item.displayName)
@@ -37,24 +35,23 @@ struct HomeRecentImageListRow: View {
           .lineLimit(1)
           .truncationMode(.middle)
       }
-      .frame(minWidth: 150, maxWidth: .infinity, alignment: .leading)
+      .frame(minWidth: 120, maxWidth: .infinity, alignment: .leading)
 
-      Text(relativeDateDescription(for: item.lastOpenedAt))
+      Text(item.lastOpenedAt.relativeDateDescription)
         .font(.callout)
         .foregroundStyle(.secondary)
-        .frame(width: 116, alignment: .leading)
+        .frame(idealWidth: 116, alignment: .leading)
 
       Text(item.fileSizeDescription)
         .font(.callout)
         .monospacedDigit()
         .foregroundStyle(.secondary)
-        .frame(width: 88, alignment: .trailing)
+        .frame(width: 68, alignment: .trailing)
 
       HomeRecentImageActionsMenu(item: item, actions: actions)
-        .frame(width: 28)
     }
     .padding(.horizontal, 12)
-    .help(item.location)
+    .padding(.vertical, 4)
   }
 }
 
@@ -68,22 +65,21 @@ struct HomeRecentImageGridItem: View {
   var body: some View {
     HomeRecentImageThumbnailView(
       item: item,
-      isSelected: context.isSelected,
-      isSelecting: context.isSelecting,
     )
     .overlay(alignment: .bottom) {
       if context.isHovered {
         Text(item.displayName)
-          .font(.caption)
+          .font(.system(size: 9, weight: .light))
+          .foregroundStyle(.secondary)
           .lineLimit(1)
           .truncationMode(.middle)
           .frame(maxWidth: .infinity)
-          .padding(.horizontal, 7)
-          .padding(.vertical, 5)
+          .padding(.horizontal, 2)
+          .padding(.vertical, 2)
           .background(.regularMaterial)
       }
     }
-    .help(item.displayName)
+    .help(item.location)
   }
 }
 
@@ -132,8 +128,6 @@ struct RenameFileSheet: View {
 
 private struct HomeRecentImageThumbnailView: View {
   let item: HomeRecentImageItem
-  let isSelected: Bool
-  let isSelecting: Bool
 
   private var thumbnailImage: NSImage? {
     guard let thumbnailCacheKey = item.thumbnailCacheKey else { return nil }
@@ -143,40 +137,17 @@ private struct HomeRecentImageThumbnailView: View {
 
   var body: some View {
     ZStack {
-      RoundedRectangle(cornerRadius: 8)
-        .fill(Color.controlBackground)
+      RoundedRectangle(cornerRadius: 0)
+        .fill(Color.clear)
 
       if let thumbnailImage {
         Image(nsImage: thumbnailImage)
           .resizable()
-          .scaledToFill()
+          .scaledToFit()
       } else {
         Image(systemName: "photo")
-          .font(.system(size: 28))
           .foregroundStyle(.secondary)
       }
-
-      if isSelecting, isSelected {
-        VStack {
-          HStack {
-            Spacer()
-            Image(systemName: "checkmark.circle.fill")
-              .font(.system(size: 18))
-              .symbolRenderingMode(.palette)
-              .foregroundStyle(.white, Color.accentColor)
-              .padding(5)
-          }
-          Spacer()
-        }
-      }
-    }
-    .clipShape(RoundedRectangle(cornerRadius: 8))
-    .overlay {
-      RoundedRectangle(cornerRadius: 8)
-        .stroke(
-          isSelected ? Color.accentColor : Color.separator.opacity(0.5),
-          lineWidth: isSelected ? 2 : 1,
-        )
     }
   }
 }
@@ -189,10 +160,14 @@ private struct HomeRecentImageActionsMenu: View {
     Menu {
       HomeRecentImageActionsContent(item: item, actions: actions)
     } label: {
-      Label("More", systemImage: "ellipsis.circle")
+      Label("More", systemImage: "ellipsis")
+        .labelStyle(.iconOnly)
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.secondary)
+        .frame(width: 24, height: 24)
     }
     .menuStyle(.button)
-    .labelStyle(.iconOnly)
+    .buttonStyle(.borderedOnHover)
     .help("More")
   }
 }
@@ -237,12 +212,4 @@ struct HomeRecentImageActionsContent: View {
     }
     .disabled(item.url == nil)
   }
-}
-
-private func relativeDateDescription(for date: Date?) -> String {
-  guard let date else { return "--" }
-
-  let formatter = RelativeDateTimeFormatter()
-  formatter.unitsStyle = .full
-  return formatter.localizedString(for: date, relativeTo: .now)
 }

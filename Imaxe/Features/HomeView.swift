@@ -41,7 +41,7 @@ struct HomeView: View {
   }
 
   var body: some View {
-    VStack(spacing: 24) {
+    VStack(spacing: 48) {
       homeHero
       recentImagesCollection
     }
@@ -116,7 +116,7 @@ struct HomeView: View {
       .buttonStyle(.borderedProminent)
     }
     .padding(.horizontal, 32)
-    .padding(.top, 40)
+    .padding(.top, 80)
     .frame(maxWidth: .infinity)
   }
 
@@ -131,8 +131,7 @@ struct HomeView: View {
     .collectionTitle("Recent Images")
     .searchableText(\.searchableText)
     .sortOptions(recentSortOptions, default: "lastOpenedAt", direction: .descending)
-    .defaultViewMode(.list)
-    .listRowHeight(84)
+    .defaultViewMode(.grid)
     .tieBreaker { first, second in
       first.displayName.localizedStandardCompare(second.displayName)
     }
@@ -157,30 +156,16 @@ struct HomeView: View {
   }
 
   private var emptyRecentImagesView: some View {
-    VStack {
-      VStack(spacing: 22) {
-        Image(systemName: "photo.on.rectangle.angled")
-          .font(.system(size: 24, weight: .medium))
-          .foregroundStyle(.secondary)
-          .frame(width: 44, height: 44)
-          .background(.controlBackground)
-          .clipShape(RoundedRectangle(cornerRadius: 11))
+    VStack(spacing: 15) {
+      Image(systemName: "photo.on.rectangle.angled")
+        .resizable()
+        .scaledToFit()
+        .foregroundStyle(.secondary)
+        .frame(width: 64, height: 64)
 
-        Text("No recent images yet")
-          .font(.callout)
-          .foregroundStyle(.secondary)
-      }
-      .frame(maxWidth: .infinity)
-      .frame(height: 170)
-      .background(Color.windowBackground)
-      .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-      .overlay {
-        RoundedRectangle(cornerRadius: 12)
-          .stroke(.separator.opacity(0.35), lineWidth: 1)
-      }
-      .padding(24)
-
-      Spacer()
+      Text("No recent images yet")
+        .font(.callout)
+        .foregroundStyle(.secondary)
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
