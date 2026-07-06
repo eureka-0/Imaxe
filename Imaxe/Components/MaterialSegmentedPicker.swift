@@ -12,6 +12,8 @@ struct MaterialSegmentedPicker<SelectionItem: Hashable, Content: View>: View {
   let items: [SelectionItem]
   let content: (SelectionItem) -> Content
 
+  @Environment(\.appearsActive) private var appearsActive
+
   /// Namespace for matched geometry effect, used for the sliding background animation.
   @Namespace private var pickerTransition
 
@@ -26,7 +28,7 @@ struct MaterialSegmentedPicker<SelectionItem: Hashable, Content: View>: View {
           }
         } label: {
           content(item)
-            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+            .foregroundStyle(isSelected && appearsActive ? Color.accentColor : Color.secondary)
             .frame(maxHeight: .infinity)
             .padding(.horizontal, 8)
             .contentShape(.capsule)
@@ -36,7 +38,7 @@ struct MaterialSegmentedPicker<SelectionItem: Hashable, Content: View>: View {
           Group {
             if isSelected {
               Capsule()
-                .fill(.selectedControl.opacity(0.5))
+                .fill(appearsActive ? .selectedControl.opacity(0.5) : .secondary.opacity(0.1))
                 .matchedGeometryEffect(id: "pickerActiveBackground", in: pickerTransition)
             }
           },
