@@ -17,7 +17,33 @@ struct ImaxeApp: App {
 
   init() {
     do {
-      modelContainer = try ModelContainer(for: RecentImage.self)
+      guard let appSupportURL = FileManager.default.urls(
+        for: .applicationSupportDirectory,
+        in: .userDomainMask,
+      ).first else {
+        fatalError("Unable to locate Application Support directory.")
+      }
+
+      #if DEBUG
+        let directoryName = "Imaxe Debug"
+      #else
+        let directoryName = "Imaxe"
+      #endif
+      let modelFileURL = appSupportURL.appendingPathComponent("\(directoryName)/database.sqlite")
+      if !FileManager.default.fileExists(atPath: modelFileURL.deletingLastPathComponent().path) {
+        try FileManager.default.createDirectory(
+          at: modelFileURL.deletingLastPathComponent(),
+          withIntermediateDirectories: true,
+          attributes: nil,
+        )
+      }
+
+      #if DEBUG
+        debugPrint("Model file URL: \(modelFileURL.path)")
+      #endif
+
+      let modelConfiguration = ModelConfiguration(url: modelFileURL)
+      modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
     } catch {
       fatalError("Failed to create model container: \(error)")
     }
