@@ -45,12 +45,6 @@ struct SearchField: View {
     externalFocus?.wrappedValue ?? isFocused
   }
 
-  private var foldedButtonBackground: some View {
-    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-      .fill(isHoveringFoldedButton ? .controlBackground.opacity(0.85) : .clear)
-      .animation(.easeOut(duration: 0.12), value: isHoveringFoldedButton)
-  }
-
   var body: some View {
     ZStack(alignment: .trailing) {
       foldedField
@@ -88,9 +82,8 @@ struct SearchField: View {
         .frame(width: iconLength, height: iconLength)
         .frame(width: fieldHeight, height: fieldHeight)
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-        .background(foldedButtonBackground)
     }
-    .buttonStyle(.plain)
+    .buttonStyle(.borderedOnHover(cornerRadius: cornerRadius))
     .help("Search")
     .onHover { isHoveringFoldedButton = $0 }
   }

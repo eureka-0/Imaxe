@@ -1,0 +1,45 @@
+//
+//  Styles.swift
+//  Imaxe
+//
+//  Created by lxlong on 2026/7/5.
+//
+
+import SwiftUI
+
+struct BorderedOnHoverButtonStyle: ButtonStyle {
+  var cornerRadius: CGFloat = 8
+  var applyPressedEffect: Bool = true
+
+  @Environment(\.isEnabled) private var isEnabled
+  @State private var isHovering = false
+
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .foregroundStyle(isEnabled ? .primary : .tertiary)
+      .background(
+        configuration.isPressed && applyPressedEffect ? Color.primary.opacity(0.17)
+          : (isHovering && isEnabled ? .primary.opacity(0.1) : .clear),
+      )
+      .clipShape(.rect(cornerRadius: cornerRadius))
+      .contentShape(.rect(cornerRadius: cornerRadius))
+      .animation(.easeOut(duration: 0.12), value: isHovering)
+      .animation(.easeOut(duration: 0.08), value: configuration.isPressed && applyPressedEffect)
+      .onHover { isHovering in
+        self.isHovering = isHovering
+      }
+  }
+}
+
+extension ButtonStyle where Self == BorderedOnHoverButtonStyle {
+  static var borderedOnHover: Self {
+    BorderedOnHoverButtonStyle()
+  }
+
+  static func borderedOnHover(
+    cornerRadius: CGFloat = 7,
+    applyPressedEffect: Bool = true,
+  ) -> Self {
+    BorderedOnHoverButtonStyle(cornerRadius: cornerRadius, applyPressedEffect: applyPressedEffect)
+  }
+}

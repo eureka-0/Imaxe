@@ -115,6 +115,10 @@ extension ShapeStyle where Self == Color {
     Color(nsColor: .controlAccentColor)
   }
 
+  static var selectedControl: Color {
+    Color(nsColor: .selectedControlColor)
+  }
+
   static var controlText: Color {
     Color(nsColor: .controlTextColor)
   }
