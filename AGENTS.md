@@ -4,7 +4,7 @@ A file for [guiding coding agents](https://agents.md/).
 
 ## Project Scope
 
-Imaxe is a native macOS image viewer for fast everyday browsing on macOS 14+. Prioritize fast image opening and switching, smooth zooming and panning, low memory use for large images, common image formats, and light editing only when explicitly requested.
+Imaxe is a native macOS image viewer for fast everyday browsing on macOS 15+. Prioritize fast image opening and switching, smooth zooming and panning, low memory use for large images, common image formats, and light editing only when explicitly requested.
 
 Do not expand into RAW editing, professional color grading, layers, batch processing, cloud sync, or AI features unless explicitly requested.
 

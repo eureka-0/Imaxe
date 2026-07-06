@@ -68,7 +68,7 @@ struct ImaxeApp: App {
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
     .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
-    .restorationDisabledIfAvailable()
+    .restorationBehavior(.disabled)
     .commands {
       FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
@@ -121,14 +121,6 @@ private extension View {
       case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
       case .system: NSApp.appearance = nil
       }
-    }
-  }
-}
-
-private extension Scene {
-  @SceneBuilder func restorationDisabledIfAvailable() -> some Scene {
-    if #available(macOS 15.0, *) {
-      restorationBehavior(.disabled)
     }
   }
 }
