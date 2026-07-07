@@ -235,7 +235,7 @@ struct HomeView: View {
             .padding(.bottom, 2)
         }
       }
-      .onTapGesture(count: 2) {
+      .onTapGesture(count: 1) {
         imageSession.loadImage(from: item.url)
       }
       .help(item.path)
