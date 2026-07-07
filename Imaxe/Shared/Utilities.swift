@@ -8,6 +8,12 @@
 import AppKit
 import SwiftUI
 
+// MARK: - Functions
+
+func fileSizeDescription(for fileSize: Int) -> String {
+  ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
+}
+
 // MARK: - IntSize
 
 nonisolated struct IntSize: Hashable {

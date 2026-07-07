@@ -392,7 +392,7 @@ private struct ImageInfoPanel: View {
         infoRow(title: "File Name", value: info.fileName)
         infoRow(title: "Location", value: info.location)
         infoRow(title: "Format", value: info.typeDescription)
-        infoRow(title: "File Size", value: info.fileSizeDescription)
+        infoRow(title: "File Size", value: fileSizeDescription(for: info.fileSize))
 
         Divider()
 

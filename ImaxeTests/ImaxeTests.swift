@@ -307,6 +307,28 @@ struct ImaxeTests {
     #expect(!FileManager.default.fileExists(atPath: thumbnailURL.path))
   }
 
+  @Test func `thumbnail cache total size sums regular files`() throws {
+    let testDirectory = ImageThumbnailCache.cacheDirectory
+      .appending(path: "test-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
+    defer {
+      try? FileManager.default.removeItem(at: testDirectory)
+    }
+
+    let initialSize = ImageThumbnailCache.totalCacheSizeInBytes()
+    let firstFile = testDirectory.appending(path: "first.png")
+    let nestedDirectory = testDirectory.appending(path: "nested", directoryHint: .isDirectory)
+    let nestedFile = nestedDirectory.appending(path: "second.png")
+    try FileManager.default.createDirectory(at: nestedDirectory, withIntermediateDirectories: true)
+    try Data(repeating: 1, count: 13).write(to: firstFile)
+    try Data(repeating: 2, count: 29).write(to: nestedFile)
+
+    #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize + 42)
+
+    try FileManager.default.removeItem(at: testDirectory)
+    #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize)
+  }
+
   @Test func `color hex serializes grayscale colors as rgba`() {
     let color = Color(.sRGB, white: 0.5, opacity: 0.25)
 

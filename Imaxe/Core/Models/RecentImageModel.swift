@@ -41,10 +41,6 @@ final class RecentImage {
   var location: String {
     url.deletingLastPathComponent().path
   }
-
-  var fileSizeDescription: String {
-    ByteCountFormatter.string(fromByteCount: Int64(url.fileSize), countStyle: .file)
-  }
 }
 
 enum RecentImagesStore {

@@ -97,6 +97,28 @@ nonisolated enum ImageThumbnailCache {
     }
   }
 
+  static func totalCacheSizeInBytes() -> Int64 {
+    guard let fileEnumerator = FileManager.default.enumerator(
+      at: cacheDirectory,
+      includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
+    ) else {
+      return 0
+    }
+
+    var totalSize = Int64(0)
+    for case let fileURL as URL in fileEnumerator {
+      guard let resourceValues = try? fileURL.resourceValues(forKeys: [
+        .fileSizeKey,
+        .isRegularFileKey,
+      ]),
+        resourceValues.isRegularFile == true
+      else { continue }
+
+      totalSize += Int64(resourceValues.fileSize ?? 0)
+    }
+    return totalSize
+  }
+
   private static func thumbnailCacheKey(for url: URL) -> String {
     let modifiedAt = lastModifiedAt(url)?.timeIntervalSince1970 ?? 0
     let source = [

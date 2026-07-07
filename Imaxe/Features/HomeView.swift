@@ -210,7 +210,7 @@ struct HomeView: View {
         .foregroundStyle(.secondary)
         .frame(idealWidth: 116, alignment: .leading)
 
-      Text(item.fileSizeDescription)
+      Text(fileSizeDescription(for: item.url.fileSize))
         .font(.callout)
         .monospacedDigit()
         .foregroundStyle(.secondary)

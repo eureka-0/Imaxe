@@ -21,10 +21,6 @@ nonisolated struct ImageInfo: Hashable {
     url.deletingLastPathComponent().path
   }
 
-  var fileSizeDescription: String {
-    ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
-  }
-
   var typeDescription: String {
     type?.preferredFilenameExtension?.uppercased() ?? "Unknown"
   }
