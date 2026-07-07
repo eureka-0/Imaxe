@@ -1,6 +1,8 @@
 #!/bin/bash
 
-OUTPUT_FILE="./SampleImages/updating_example.png"
+set -o pipefail
+
+OUTPUT_FILE="./Images/sample_updating.png"
 WAITING_SECONDS=20
 
 echo "==== Stage 1: Drawing Sine Function ===="

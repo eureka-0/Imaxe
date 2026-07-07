@@ -6,8 +6,141 @@
 //
 
 import AppKit
-import OSLog
 import SwiftUI
+
+// MARK: - Functions
+
+func fileSizeDescription(for fileSize: Int) -> String {
+  ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
+}
+
+// MARK: - IntSize
+
+nonisolated struct IntSize: Hashable {
+  let width: Int
+  let height: Int
+
+  var isValid: Bool {
+    width > 0 && height > 0
+  }
+
+  var nsSize: NSSize {
+    NSSize(width: width, height: height)
+  }
+
+  init(width: Int = 0, height: Int = 0) {
+    self.width = width
+    self.height = height
+  }
+
+  init(nsSize: NSSize) {
+    if !nsSize.isApproximatelyInt {
+      debugPrint("Warning: NSSize \(nsSize) is not approximately integer.")
+    }
+
+    width = Int(nsSize.width.rounded())
+    height = Int(nsSize.height.rounded())
+  }
+}
+
+// MARK: - Color extensions.
+
+extension Color {
+  init(hex: String) {
+    let (r, g, b, a) = rgbaValueFromHex(hex)
+    self.init(red: r, green: g, blue: b, opacity: a)
+  }
+
+  var hex: String {
+    guard let cgColor, let color = NSColor(cgColor: cgColor)?.usingColorSpace(.sRGB) else {
+      return "#00000000"
+    }
+
+    return hexStringFromRGBA(
+      red: color.redComponent,
+      green: color.greenComponent,
+      blue: color.blueComponent,
+      alpha: color.alphaComponent,
+    )
+  }
+
+  /// Creates a context-dependent color with different values for light and dark appearances.
+  /// - Parameters:
+  ///   - light: The light appearance color value.
+  ///   - dark: The dark appearance color value.
+  init(light: @escaping @autoclosure () -> Color, dark: @escaping @autoclosure () -> Color) {
+    #if os(watchOS)
+      self = dark()
+    #elseif canImport(UIKit)
+      self.init(
+        uiColor: .init { traitCollection in
+          switch traitCollection.userInterfaceStyle {
+          case .unspecified, .light:
+            return UIColor(light())
+          case .dark:
+            return UIColor(dark())
+          @unknown default:
+            return UIColor(light())
+          }
+        },
+      )
+    #elseif canImport(AppKit)
+      self.init(
+        nsColor: .init(name: nil) { appearance in
+          if appearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua {
+            NSColor(light())
+          } else {
+            NSColor(dark())
+          }
+        },
+      )
+    #endif
+  }
+}
+
+extension NSColor {
+  convenience init(hex: String) {
+    let (r, g, b, a) = rgbaValueFromHex(hex)
+    self.init(red: r, green: g, blue: b, alpha: a)
+  }
+}
+
+extension ShapeStyle where Self == Color {
+  static var windowBackground: Color {
+    Color(nsColor: .windowBackgroundColor)
+  }
+
+  static var controlBackground: Color {
+    Color(
+      light: Color(white: 0.9),
+      dark: Color(nsColor: .controlBackgroundColor),
+    )
+  }
+
+  static var controlAccent: Color {
+    Color(nsColor: .controlAccentColor)
+  }
+
+  static var selectedControl: Color {
+    Color(nsColor: .selectedControlColor)
+  }
+
+  static var controlText: Color {
+    Color(nsColor: .controlTextColor)
+  }
+
+  static var keyboardFocusIndicator: Color {
+    Color(nsColor: .keyboardFocusIndicatorColor)
+  }
+
+  static var separator: Color {
+    Color(nsColor: .separatorColor)
+  }
+
+  static var textBackground: Color {
+    Color(nsColor: .textBackgroundColor)
+  }
+}
 
 private func rgbaByte(_ component: CGFloat) -> Int {
   Int((component.clamped(to: 0 ... 1) * 255).rounded())
@@ -49,52 +182,7 @@ private func rgbaValueFromHex(_ hex: String) -> (r: CGFloat, g: CGFloat, b: CGFl
   return (r, g, b, a)
 }
 
-nonisolated struct IntSize: Hashable {
-  let width: Int
-  let height: Int
-
-  var isValid: Bool {
-    width > 0 && height > 0
-  }
-
-  var nsSize: NSSize {
-    NSSize(width: width, height: height)
-  }
-
-  init(width: Int = 0, height: Int = 0) {
-    self.width = width
-    self.height = height
-  }
-
-  init(nsSize: NSSize) {
-    if !nsSize.isApproximatelyInt {
-      debugPrint("Warning: NSSize \(nsSize) is not approximately integer.")
-    }
-
-    width = Int(nsSize.width.rounded())
-    height = Int(nsSize.height.rounded())
-  }
-}
-
-extension Color {
-  init(hex: String) {
-    let (r, g, b, a) = rgbaValueFromHex(hex)
-    self.init(red: r, green: g, blue: b, opacity: a)
-  }
-
-  var hex: String {
-    guard let cgColor, let color = NSColor(cgColor: cgColor)?.usingColorSpace(.sRGB) else {
-      return "#00000000"
-    }
-
-    return hexStringFromRGBA(
-      red: color.redComponent,
-      green: color.greenComponent,
-      blue: color.blueComponent,
-      alpha: color.alphaComponent,
-    )
-  }
-}
+// MARK: - Comparable extensions.
 
 extension Comparable {
   func clamped(to range: ClosedRange<Self>) -> Self {
@@ -102,31 +190,91 @@ extension Comparable {
   }
 }
 
-extension NSBitmapImageRep {
-  var gifFrameCount: Int? {
-    (value(forProperty: .frameCount) as? NSNumber)?.intValue
+// MARK: - Date extensions.
+
+extension Date {
+  var relativeDateDescription: String {
+    let formatter = RelativeDateTimeFormatter()
+    formatter.unitsStyle = .full
+    return formatter.localizedString(for: self, relativeTo: .now)
+  }
+}
+
+// MARK: - FileManager extensions.
+
+extension FileManager {
+  nonisolated var cachesDirectory: URL {
+    (
+      urls(for: .cachesDirectory, in: .userDomainMask).first ?? URL(
+        fileURLWithPath: NSTemporaryDirectory(),
+        isDirectory: true,
+      ),
+    ).appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
   }
 
-  var currentGIFFrame: Int? {
-    (value(forProperty: .currentFrame) as? NSNumber)?.intValue
+  var applicationSupportDirectory: URL {
+    guard let appSupportURL = urls(
+      for: .applicationSupportDirectory,
+      in: .userDomainMask,
+    ).first else {
+      fatalError("Unable to locate Application Support directory.")
+    }
+
+    return appSupportURL
   }
 
-  func currentGIFFrameDuration(fallback: Double = 0.1) -> Double {
-    let duration = (value(forProperty: .currentFrameDuration) as? NSNumber)?.doubleValue
-    if let duration, duration > 0 {
-      return duration
-    } else {
-      return fallback
+  var dataDirectory: URL {
+    #if DEBUG
+      let directoryName = "Imaxe Debug"
+    #else
+      let directoryName = "Imaxe"
+    #endif
+
+    let url = applicationSupportDirectory.appendingPathComponent(
+      "\(directoryName)",
+      isDirectory: true,
+    )
+
+    do {
+      try ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create data directory: \(error)")
+    }
+
+    return url
+  }
+
+  func ensureExists(for directoryURL: URL) throws {
+    if !fileExists(atPath: directoryURL.path) {
+      try createDirectory(
+        at: directoryURL,
+        withIntermediateDirectories: true,
+        attributes: nil,
+      )
     }
   }
 }
 
-extension NSColor {
-  convenience init(hex: String) {
-    let (r, g, b, a) = rgbaValueFromHex(hex)
-    self.init(red: r, green: g, blue: b, alpha: a)
+// MARK: - NSApplication extensions.
+
+extension NSApplication {
+  var appIcon: NSImage {
+    if let icon = applicationIconImage {
+      return icon
+    }
+
+    guard let bundleIcons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+          let primaryIcon = bundleIcons["CFBundlePrimaryIcon"] as? [String: Any],
+          let iconFiles = primaryIcon["CFBundleIconFiles"] as? [String],
+          let iconName = iconFiles.last
+    else {
+      return NSImage()
+    }
+    return NSImage(named: iconName) ?? NSImage()
   }
 }
+
+// MARK: - NSImage extensions.
 
 extension NSImage {
   nonisolated var pixelSize: NSSize {
@@ -161,6 +309,27 @@ extension NSImage {
   }
 }
 
+extension NSBitmapImageRep {
+  var gifFrameCount: Int? {
+    (value(forProperty: .frameCount) as? NSNumber)?.intValue
+  }
+
+  var currentGIFFrame: Int? {
+    (value(forProperty: .currentFrame) as? NSNumber)?.intValue
+  }
+
+  func currentGIFFrameDuration(fallback: Double = 0.1) -> Double {
+    let duration = (value(forProperty: .currentFrameDuration) as? NSNumber)?.doubleValue
+    if let duration, duration > 0 {
+      return duration
+    } else {
+      return fallback
+    }
+  }
+}
+
+// MARK: - NSRect extensions.
+
 extension NSRect {
   func constrained(to visibleFrame: NSRect) -> NSRect {
     var rect = self
@@ -184,6 +353,8 @@ extension NSRect {
   }
 }
 
+// MARK: - NSScreen extensions.
+
 extension NSScreen {
   func getPPI() -> (width: CGFloat, height: CGFloat)? {
     guard let displayID =
@@ -203,6 +374,8 @@ extension NSScreen {
     return (width: ppiWidth, height: ppiHeight)
   }
 }
+
+// MARK: - NSSize extensions.
 
 extension NSSize {
   nonisolated var validSize: NSSize {
@@ -226,19 +399,7 @@ extension NSSize {
   }
 }
 
-extension NSView {
-  func backingAlignedSize(
-    _ size: NSSize, options: AlignmentOptions = [.alignAllEdgesNearest],
-  ) -> NSSize {
-    backingAlignedRect(NSRect(origin: .zero, size: size), options: options).size
-  }
-
-  func backingAlignedPoint(
-    _ point: NSPoint, options: AlignmentOptions = [.alignAllEdgesNearest],
-  ) -> NSPoint {
-    backingAlignedRect(NSRect(origin: point, size: .zero), options: options).origin
-  }
-}
+// MARK: - NSWindow extensions.
 
 extension NSWindow {
   var titlebarHeight: CGFloat {
@@ -282,27 +443,31 @@ extension NSWindow {
   }
 }
 
-extension ShapeStyle where Self == Color {
-  static var windowBackground: Color {
-    Color(nsColor: .windowBackgroundColor)
+// MARK: - URL extensions.
+
+extension URL {
+  nonisolated var filePath: String {
+    if isFileURL {
+      return standardizedFileURL.path
+    }
+
+    return absoluteString
   }
 
-  static var controlBackground: Color {
-    Color(nsColor: .controlBackgroundColor)
+  nonisolated var isDirectory: Bool {
+    (try? resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
   }
 
-  static var controlAccent: Color {
-    Color(nsColor: .controlAccentColor)
+  nonisolated var fileSize: Int {
+    (try? resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
   }
 
-  static var controlText: Color {
-    Color(nsColor: .controlTextColor)
-  }
-
-  static var separator: Color {
-    Color(nsColor: .separatorColor)
+  var lastModifiedAt: Date? {
+    (try? resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
   }
 }
+
+// MARK: - UserDefaults extensions.
 
 extension UserDefaults {
   @objc dynamic var imageActualSizeStrategy: String? {
@@ -321,5 +486,167 @@ extension UserDefaults {
   var imageInterpolationStrategyValue: ImageInterpolationStrategy {
     imageInterpolationStrategy.flatMap { ImageInterpolationStrategy(rawValue: $0) }
       ?? AppSettings.Defaults.imageInterpolationStrategy
+  }
+}
+
+// MARK: - View extensions.
+
+extension View {
+  func dismissTextFocusOnClickOutside() -> some View {
+    background(DismissTextFocusOnClickOutside().frame(width: 0, height: 0))
+  }
+
+  func preservesTextFocusOnClick() -> some View {
+    overlay {
+      TextFocusPreservingArea()
+        .allowsHitTesting(false)
+    }
+  }
+}
+
+extension NSView {
+  var preservesTextFocus: Bool {
+    if self is TextFocusPreservingView {
+      return true
+    }
+
+    return superview?.preservesTextFocus ?? false
+  }
+
+  var isInsideTextInput: Bool {
+    if self is NSTextField || self is NSTextView || self is NSSearchField {
+      return true
+    }
+
+    return superview?.isInsideTextInput ?? false
+  }
+
+  func backingAlignedSize(
+    _ size: NSSize,
+    options: AlignmentOptions = [.alignAllEdgesNearest],
+  ) -> NSSize {
+    backingAlignedRect(NSRect(origin: .zero, size: size), options: options).size
+  }
+
+  func backingAlignedPoint(
+    _ point: NSPoint,
+    options: AlignmentOptions = [.alignAllEdgesNearest],
+  ) -> NSPoint {
+    backingAlignedRect(NSRect(origin: point, size: .zero), options: options).origin
+  }
+}
+
+private struct DismissTextFocusOnClickOutside: NSViewRepresentable {
+  func makeCoordinator() -> Coordinator {
+    Coordinator()
+  }
+
+  func makeNSView(context: Context) -> NSView {
+    let view = WindowTrackingView(frame: .zero)
+    view.onWindowChange = { [weak coordinator = context.coordinator] window in
+      coordinator?.trackedWindow = window
+    }
+    context.coordinator.install()
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context: Context) {
+    context.coordinator.trackedWindow = nsView.window
+  }
+
+  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
+    if let view = nsView as? WindowTrackingView {
+      view.onWindowChange = nil
+    }
+    coordinator.trackedWindow = nil
+    coordinator.uninstall()
+  }
+
+  final class Coordinator {
+    private var monitor: Any?
+    weak var trackedWindow: NSWindow?
+
+    func install() {
+      guard monitor == nil else { return }
+
+      monitor = NSEvent.addLocalMonitorForEvents(matching: [
+        .leftMouseDown,
+        .rightMouseDown,
+      ]) { [weak self] event in
+        guard
+          let self,
+          let window = event.window,
+          window === trackedWindow,
+          let contentView = window.contentView
+        else {
+          return event
+        }
+
+        let location = contentView.convert(event.locationInWindow, from: nil)
+        if let hitView = contentView.hitTest(location),
+           !TextFocusPreservingRegistry.shared.contains(event.locationInWindow, in: window),
+           !hitView.preservesTextFocus,
+           !hitView.isInsideTextInput
+        {
+          window.makeFirstResponder(nil)
+        }
+
+        return event
+      }
+    }
+
+    func uninstall() {
+      if let monitor {
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+      }
+    }
+  }
+}
+
+private final class WindowTrackingView: NSView {
+  var onWindowChange: ((NSWindow?) -> Void)?
+
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    onWindowChange?(window)
+  }
+}
+
+private struct TextFocusPreservingArea: NSViewRepresentable {
+  func makeNSView(context _: Context) -> NSView {
+    let view = TextFocusPreservingView(frame: .zero)
+    view.autoresizingMask = [.width, .height]
+    return view
+  }
+
+  func updateNSView(_ nsView: NSView, context _: Context) {
+    nsView.needsLayout = true
+  }
+}
+
+private final class TextFocusPreservingView: NSView {
+  override func viewDidMoveToWindow() {
+    super.viewDidMoveToWindow()
+    TextFocusPreservingRegistry.shared.register(self)
+  }
+}
+
+private final class TextFocusPreservingRegistry {
+  static let shared = TextFocusPreservingRegistry()
+
+  private let views = NSHashTable<TextFocusPreservingView>.weakObjects()
+
+  func register(_ view: TextFocusPreservingView) {
+    views.add(view)
+  }
+
+  func contains(_ locationInWindow: NSPoint, in window: NSWindow) -> Bool {
+    views.allObjects.contains { view in
+      guard view.window === window else { return false }
+
+      let locationInView = view.convert(locationInWindow, from: nil)
+      return view.bounds.contains(locationInView)
+    }
   }
 }

@@ -18,11 +18,7 @@ nonisolated struct ImageInfo: Hashable {
   let DPI: IntSize
 
   var location: String {
-    url.deletingLastPathComponent().path()
-  }
-
-  var fileSizeDescription: String {
-    ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
+    url.deletingLastPathComponent().path
   }
 
   var typeDescription: String {

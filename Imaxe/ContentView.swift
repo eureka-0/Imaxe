@@ -5,10 +5,14 @@
 //  Created by lxlong on 2026/6/14.
 //
 
+import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+  @Environment(\.modelContext) private var modelContext
+  @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
+
   @State private var imageSession = ImageSession()
   @State private var isTargetedForDrop = false
 
@@ -26,7 +30,10 @@ struct ContentView: View {
       if imageSession.currentImage != nil || imageSession.isLoading {
         ImageView(imageSession: imageSession)
       } else {
-        HomeView()
+        HomeView(
+          imageSession: imageSession,
+          recentImages: recentImages,
+        )
       }
     }
     .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
@@ -38,10 +45,22 @@ struct ContentView: View {
         ),
     )
     .focusedSceneValue(imageSession)
+    .dismissTextFocusOnClickOutside()
     .onAppear {
       imageSession.topBarHideDelay = topBarHideDelay
       imageSession.enableLoopBrowsing = enableLoopBrowsing
       imageSession.actionOnImageFileChange = actionOnImageFileChange
+      imageSession.recordRecentImage = { url in
+        try? RecentImagesStore.recordOpened(url, in: modelContext)
+      }
+      imageSession.recentImages = Array(
+        recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu),
+      )
+    }
+    .onChange(of: recentImages) { _, newValue in
+      imageSession.recentImages = Array(
+        newValue.prefix(Constants.maximumRecentImagesToDisplayInMenu),
+      )
     }
     .onChange(of: topBarHideDelay) { _, newValue in
       imageSession.topBarHideDelay = newValue
@@ -76,4 +95,5 @@ struct ContentView: View {
 
 #Preview {
   ContentView()
+    .modelContainer(for: [RecentImage.self], inMemory: true)
 }

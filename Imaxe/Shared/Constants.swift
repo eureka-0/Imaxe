@@ -23,7 +23,7 @@ nonisolated enum Constants {
   static let minimumWindowContentWidth: CGFloat = 520
   static let minimumWindowContentHeight: CGFloat = 360
   static let defaultWindowWidth: CGFloat = 680
-  static let defaultWindowHeight: CGFloat = 520
+  static let defaultWindowHeight: CGFloat = 640
 
   static let imageZoomScaleRange: ClosedRange<CGFloat> = 0.05 ... 20.0
   static let zoomScaleUpdateTolerance: CGFloat = 0.0001
@@ -34,4 +34,9 @@ nonisolated enum Constants {
 
   static let stableFileCheckDeadline: DispatchTimeInterval = .seconds(10)
   static let pollingIntervalOnFileChange: DispatchTimeInterval = .milliseconds(150)
+
+  static let maximumRecentImagesCount = 100
+  static let maximumRecentImagesToDisplayInMenu = 20
+
+  static let recentImagesGridItemSizeRange: ClosedRange<CGFloat> = 72 ... 260
 }

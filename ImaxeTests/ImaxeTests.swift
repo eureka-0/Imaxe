@@ -7,6 +7,7 @@
 
 import AppKit
 @testable import Imaxe
+import SwiftData
 import SwiftUI
 import Testing
 
@@ -149,7 +150,55 @@ struct ImaxeTests {
     #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
   }
 
-  @Test func `folder navigator starts with current image and can load directory asynchronously`() async throws {
+  @Test func `file change reload keeps current image while loading`() throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-session-reload-\(UUID().uuidString).png")
+    try pngData(width: 10, height: 20).write(to: url)
+    let initialImage = ImageContainer(url: url, nsImage: bitmapImage())
+    let session = ImageSession(imageContainer: initialImage)
+
+    session.loadImage(from: url, preservingViewportOnReload: true)
+
+    #expect(session.currentImage === initialImage)
+    #expect(!session.shouldApplyLoadedImageWindowSize)
+  }
+
+  @Test func `always fit to window still applies after viewport-preserving image change`() {
+    var reportedZoomScale: CGFloat?
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { reportedZoomScale = $0 },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
+    )
+    let imageView = NSView(frame: NSRect(
+      origin: .zero,
+      size: NSSize(width: 200, height: 100),
+    ))
+    let imageContainer = ImageContainer(
+      url: URL(fileURLWithPath: "/tmp/example.png"),
+      nsImage: bitmapImage(width: 200, height: 100),
+    )
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = imageView
+    coordinator.updateAlwaysFitToWindowFromBinding(true)
+    coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: false,
+    )
+
+    coordinator.scrollViewDidLayout(scrollView)
+
+    #expect(!coordinator.hasPendingCommands)
+    #expect(scrollView.magnification.isApproximatelyEqual(to: 0.5))
+    #expect(reportedZoomScale?.isApproximatelyEqual(to: 0.5) == true)
+  }
+
+  @Test func `folder navigator starts with current image and can load directory asynchronously`(
+  ) async throws {
     let directory = URL.temporaryDirectory
       .appending(path: "imaxe-folder-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -191,6 +240,95 @@ struct ImaxeTests {
     _ = watcher
   }
 
+  @Test func `recent images are updated sorted and cleared`() throws {
+    let container = try ModelContainer(
+      for: RecentImage.self,
+      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+    )
+    let context = ModelContext(container)
+    let firstURL = URL(fileURLWithPath: "/tmp/first.png")
+    let secondURL = URL(fileURLWithPath: "/tmp/second.png")
+
+    try RecentImagesStore.recordOpened(
+      firstURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 1),
+    )
+    try RecentImagesStore.recordOpened(
+      secondURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 2),
+    )
+    try RecentImagesStore.recordOpened(
+      firstURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 3),
+    )
+
+    let descriptor = FetchDescriptor<RecentImage>(
+      sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
+    )
+    let recentImages = try context.fetch(descriptor)
+
+    #expect(recentImages.compactMap(\.url).map(\.lastPathComponent) == ["first.png", "second.png"])
+    #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
+
+    try RecentImagesStore.clear(in: context)
+
+    #expect(try context.fetch(descriptor).isEmpty)
+  }
+
+  @Test func `recent images store file metadata and cleanup thumbnail cache`() throws {
+    let container = try ModelContainer(
+      for: RecentImage.self,
+      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+    )
+    let context = ModelContext(container)
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
+    try pngData(width: 80, height: 40).write(to: url)
+
+    try RecentImagesStore.recordOpened(url, in: context)
+
+    let recentDescriptor = FetchDescriptor<RecentImage>()
+    let recent = try #require(context.fetch(recentDescriptor).first)
+    let thumbnailKey = try #require(recent.thumbnailCacheKey)
+    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+
+    let resourceValues = try recent.url.resourceValues(forKeys: [
+      .contentModificationDateKey,
+      .fileSizeKey,
+    ])
+    #expect((resourceValues.fileSize ?? 0) > 0)
+    #expect(resourceValues.contentModificationDate != nil)
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.path))
+
+    try RecentImagesStore.remove(path: url.filePath, in: context)
+    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.path))
+  }
+
+  @Test func `thumbnail cache total size sums regular files`() throws {
+    let testDirectory = ImageThumbnailCache.cacheDirectory
+      .appending(path: "test-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
+    defer {
+      try? FileManager.default.removeItem(at: testDirectory)
+    }
+
+    let initialSize = ImageThumbnailCache.totalCacheSizeInBytes()
+    let firstFile = testDirectory.appending(path: "first.png")
+    let nestedDirectory = testDirectory.appending(path: "nested", directoryHint: .isDirectory)
+    let nestedFile = nestedDirectory.appending(path: "second.png")
+    try FileManager.default.createDirectory(at: nestedDirectory, withIntermediateDirectories: true)
+    try Data(repeating: 1, count: 13).write(to: firstFile)
+    try Data(repeating: 2, count: 29).write(to: nestedFile)
+
+    #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize + 42)
+
+    try FileManager.default.removeItem(at: testDirectory)
+    #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize)
+  }
+
   @Test func `color hex serializes grayscale colors as rgba`() {
     let color = Color(.sRGB, white: 0.5, opacity: 0.25)
 
@@ -207,14 +345,14 @@ struct ImaxeTests {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appending(path: "SampleImages/\(fileName)")
+      .appending(path: "Images/\(fileName)")
   }
 
-  private func bitmapImage() -> NSImage {
+  private func bitmapImage(width: Int = 10, height: Int = 20) -> NSImage {
     let representation = NSBitmapImageRep(
       bitmapDataPlanes: nil,
-      pixelsWide: 10,
-      pixelsHigh: 20,
+      pixelsWide: width,
+      pixelsHigh: height,
       bitsPerSample: 8,
       samplesPerPixel: 4,
       hasAlpha: true,
@@ -224,7 +362,7 @@ struct ImaxeTests {
       bitsPerPixel: 0,
     )
 
-    let image = NSImage(size: NSSize(width: 10, height: 20))
+    let image = NSImage(size: NSSize(width: width, height: height))
     if let representation {
       image.addRepresentation(representation)
     }
@@ -253,5 +391,11 @@ struct ImaxeTests {
     NSGraphicsContext.restoreGraphicsState()
 
     return try #require(representation.representation(using: .png, properties: [:]))
+  }
+}
+
+private extension CGFloat {
+  func isApproximatelyEqual(to other: CGFloat) -> Bool {
+    abs(self - other) < Constants.zoomScaleUpdateTolerance
   }
 }

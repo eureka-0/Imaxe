@@ -13,7 +13,7 @@ build/
 *.af~lock~
 
 ## Built applications
-Builds/
+Build/
 
 ## Example image for file updating demonstration
 SampleImages/updating_example.png

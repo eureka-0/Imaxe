@@ -59,7 +59,7 @@ struct ImageView: View {
           .frame(height: Constants.topBarHoverStripHeight)
         }
       } else {
-        HomeView()
+        HomeView(imageSession: imageSession, recentImages: [])
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -84,14 +84,30 @@ struct ImageView: View {
         loadedImageWindowSizeMode: loadedImageWindowSizeMode,
         fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
         fixedLoadedImageWindowSizeUnit: fixedLoadedImageWindowSizeUnit,
+        shouldApplyLoadedImageWindowSize: imageSession.shouldApplyLoadedImageWindowSize,
         zoomScale: $imageSession.zoomScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
     } else if imageSession.isLoading {
-      LoadingImageView()
+      loadingImageView
     } else {
-      HomeView()
+      HomeView(imageSession: imageSession, recentImages: [])
     }
+  }
+
+  private var loadingImageView: some View {
+    VStack(spacing: 12) {
+      ProgressView()
+        .controlSize(.large)
+
+      Text("Loading...")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.secondary)
+    }
+    .padding(24)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(Text("Loading..."))
   }
 
   private var topBar: some View {
@@ -116,7 +132,6 @@ struct ImageView: View {
         .frame(height: 1)
     }
     .frame(height: Constants.topBarHeight)
-    .buttonStyle(TopBarButtonStyle())
     .controlSize(.small)
   }
 
@@ -149,6 +164,7 @@ struct ImageView: View {
       Button(action: imageSession.navigateToPreviousImage) {
         topBarIconLabel("Previous Image", systemImage: "chevron.left")
       }
+      .buttonStyle(.borderedOnHover)
       .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
       .help(Text("Previous image"))
 
@@ -169,6 +185,7 @@ struct ImageView: View {
       Button(action: imageSession.navigateToNextImage) {
         topBarIconLabel("Next Image", systemImage: "chevron.right")
       }
+      .buttonStyle(.borderedOnHover)
       .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
       .help(Text("Next image"))
     }
@@ -179,6 +196,7 @@ struct ImageView: View {
     Button(action: imageSession.fitToWindow) {
       topBarIconLabel("Fit to Window", systemImage: "arrow.up.left.and.arrow.down.right.rectangle")
     }
+    .buttonStyle(.borderedOnHover)
     .disabled(imageSession.isLoading)
     .help(Text("Fit the image to the window"))
   }
@@ -188,6 +206,7 @@ struct ImageView: View {
       Button(action: imageSession.zoomOut) {
         topBarIconLabel("Zoom Out", systemImage: "minus.magnifyingglass")
       }
+      .buttonStyle(.borderedOnHover)
       .disabled(imageSession.isLoading || imageSession.zoomScale <= Constants.imageZoomScaleRange
         .lowerBound)
       .help(Text("Zoom out"))
@@ -214,12 +233,14 @@ struct ImageView: View {
           onApplyCustomZoomScale: applyCustomZoom,
         )
       }
+      .buttonStyle(.borderedOnHover(isActive: isZoomPickerPresented))
       .disabled(imageSession.isLoading)
       .help(Text("Choose zoom level"))
 
       Button(action: imageSession.zoomIn) {
         topBarIconLabel("Zoom In", systemImage: "plus.magnifyingglass")
       }
+      .buttonStyle(.borderedOnHover)
       .disabled(imageSession.isLoading || imageSession.zoomScale >= Constants.imageZoomScaleRange
         .upperBound)
       .help(Text("Zoom in"))
@@ -234,6 +255,7 @@ struct ImageView: View {
         systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
       )
     }
+    .buttonStyle(.borderedOnHover)
     .disabled(imageSession.isLoading)
     .help(Text("Resize the window to fit the image"))
   }
@@ -249,6 +271,7 @@ struct ImageView: View {
         ImageInfoPanel(info: currentImageInfo)
       }
     }
+    .buttonStyle(.borderedOnHover(isActive: isImageInfoPresented))
     .disabled(imageSession.currentImageInfo == nil)
     .help(Text("Show image info"))
   }
@@ -257,6 +280,7 @@ struct ImageView: View {
     Button(action: imageSession.toggleWindowPinning) {
       topBarIconLabel("Pin Window", systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin")
     }
+    .buttonStyle(.borderedOnHover)
     .help(Text("Toggle window pinning"))
   }
 
@@ -276,60 +300,6 @@ struct ImageView: View {
 
   private func updateTopBarVisibility(in window: NSWindow? = nil) {
     imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
-  }
-}
-
-private struct LoadingImageView: View {
-  var body: some View {
-    VStack(spacing: 12) {
-      ProgressView()
-        .controlSize(.large)
-
-      Text("Loading...")
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(.secondary)
-    }
-    .padding(24)
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .accessibilityElement(children: .combine)
-    .accessibilityLabel(Text("Loading..."))
-  }
-}
-
-private struct TopBarButtonStyle: ButtonStyle {
-  func makeBody(configuration: Configuration) -> some View {
-    TopBarButton(configuration: configuration)
-  }
-
-  private struct TopBarButton: View {
-    let configuration: Configuration
-    @Environment(\.isEnabled) private var isEnabled
-    @State private var isHovering = false
-
-    var body: some View {
-      configuration.label
-        .font(.system(size: 13, weight: .medium))
-        .foregroundStyle(isEnabled ? .primary : .tertiary)
-        .background(background)
-        .clipShape(.rect(cornerRadius: 7))
-        .contentShape(.rect(cornerRadius: 7))
-        .opacity(configuration.isPressed ? 0.72 : 1)
-        .animation(.easeOut(duration: 0.12), value: isHovering)
-        .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
-        .onHover { isHovering in
-          self.isHovering = isHovering
-        }
-    }
-
-    private var background: some ShapeStyle {
-      if configuration.isPressed {
-        return Color.primary.opacity(0.16)
-      }
-      if isHovering, isEnabled {
-        return Color.primary.opacity(0.10)
-      }
-      return Color.clear
-    }
   }
 }
 
@@ -395,11 +365,11 @@ private struct ZoomScalePickerPopover: View {
         .frame(maxWidth: .infinity)
         .padding(.vertical, 5)
         .background {
-          RoundedRectangle(cornerRadius: 7, style: .continuous)
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
             .fill(isSelected ? Color.accentColor.opacity(0.14) : .controlBackground)
         }
         .overlay {
-          RoundedRectangle(cornerRadius: 7, style: .continuous)
+          RoundedRectangle(cornerRadius: 8, style: .continuous)
             .stroke(
               isSelected ? Color.accentColor.opacity(0.38) : .separator.opacity(0.3),
               lineWidth: 0.5,
@@ -419,28 +389,23 @@ private struct ImageInfoPanel: View {
         .font(.headline)
 
       VStack(alignment: .leading, spacing: 8) {
-        ImageInfoRow(title: "File Name", value: info.fileName)
-        ImageInfoRow(title: "Location", value: info.location)
-        ImageInfoRow(title: "Format", value: info.typeDescription)
-        ImageInfoRow(title: "File Size", value: info.fileSizeDescription)
+        infoRow(title: "File Name", value: info.fileName)
+        infoRow(title: "Location", value: info.location)
+        infoRow(title: "Format", value: info.typeDescription)
+        infoRow(title: "File Size", value: fileSizeDescription(for: info.fileSize))
 
         Divider()
 
-        ImageInfoRow(title: "Pixel Width", value: String(info.pixelSize.width))
-        ImageInfoRow(title: "Pixel Height", value: String(info.pixelSize.height))
-        ImageInfoRow(title: "Image DPI", value: info.DPIDescription)
+        infoRow(title: "Pixel Width", value: String(info.pixelSize.width))
+        infoRow(title: "Pixel Height", value: String(info.pixelSize.height))
+        infoRow(title: "Image DPI", value: info.DPIDescription)
       }
     }
     .padding(14)
     .frame(width: 360, alignment: .leading)
   }
-}
 
-private struct ImageInfoRow: View {
-  let title: String
-  let value: String
-
-  var body: some View {
+  private func infoRow(title: String, value: String) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 10) {
       Text(title)
         .font(.system(size: 12))
@@ -465,11 +430,11 @@ private extension View {
       .padding(Constants.topBarControlGroupPadding)
       .frame(height: Constants.topBarButtonHeight + Constants.topBarControlGroupPadding * 2)
       .background {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(.controlBackground.opacity(0.8))
       }
       .overlay {
-        RoundedRectangle(cornerRadius: 7, style: .continuous)
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
           .stroke(.separator.opacity(0.24), lineWidth: 0.5)
       }
   }

@@ -15,6 +15,7 @@ struct ImageScrollView: NSViewRepresentable {
   let loadedImageWindowSizeMode: LoadedImageWindowSizeMode
   let fixedLoadedImageWindowSize: NSSize
   let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit
+  let shouldApplyLoadedImageWindowSize: Bool
   @Binding var zoomScale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
@@ -74,7 +75,10 @@ struct ImageScrollView: NSViewRepresentable {
       fixedSize: fixedLoadedImageWindowSize,
       fixedSizeUnit: fixedLoadedImageWindowSizeUnit,
     )
-    context.coordinator.prepareForImage(imageContainer)
+    context.coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
+    )
     context.coordinator.bind(to: viewportController)
     context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
     scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
@@ -127,7 +131,10 @@ struct ImageScrollView: NSViewRepresentable {
       )
     }
 
-    context.coordinator.prepareForImage(imageContainer)
+    context.coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
+    )
     if !context.coordinator.isLiveMagnifying || context.coordinator.hasPendingCommands {
       scrollView.layoutSubtreeIfNeeded()
     }
@@ -327,14 +334,21 @@ struct ImageScrollView: NSViewRepresentable {
       alwaysFitToWindow = newAlwaysFitToWindow
     }
 
-    func prepareForImage(_ imageContainer: ImageContainer) {
+    func prepareForImage(
+      _ imageContainer: ImageContainer,
+      shouldApplyLoadedImageWindowSize: Bool,
+    ) {
       let newIdentifier = ObjectIdentifier(imageContainer.nsImage)
       if imageIdentifier != newIdentifier {
         imageIdentifier = newIdentifier
         pendingFitToWindow = false
         pendingFitWindowToImage = false
         cancelProgrammaticZoomAnimation()
-        queueLoadedImageWindowSize()
+        if shouldApplyLoadedImageWindowSize {
+          queueLoadedImageWindowSize()
+        } else {
+          pendingLoadedImageWindowSize = false
+        }
       }
     }
 
@@ -449,7 +463,8 @@ struct ImageScrollView: NSViewRepresentable {
       else { return false }
 
       let fitZoomScale = min(
-        viewportSize.width / imageSize.width, viewportSize.height / imageSize.height,
+        viewportSize.width / imageSize.width,
+        viewportSize.height / imageSize.height,
       )
       applyZoomScale(fitZoomScale, to: scrollView, animated: animated)
       return true
@@ -495,7 +510,8 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     private func loadedImageWindowSizeTarget(
-      in sizingContext: WindowSizingContext, scrollView: NSScrollView,
+      in sizingContext: WindowSizingContext,
+      scrollView: NSScrollView,
     ) -> (frame: NSRect, zoomScale: CGFloat)? {
       let imageSize = sizingContext.imageSize
       let fitZoomScale = min(

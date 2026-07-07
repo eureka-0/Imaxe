@@ -122,7 +122,9 @@ actor ImageLoader {
     ].compactMap(\.self)
 
     #if DEBUG
-      print("Supported image types: \(supportedTypes.map(\.identifier).joined(separator: ", "))")
+      debugPrint(
+        "Supported image types: \(supportedTypes.map(\.identifier).joined(separator: ", "))",
+      )
     #endif
 
     return supportedTypes
@@ -411,7 +413,8 @@ actor ImageLoader {
   }
 
   private nonisolated static func rasterizedSVGImage(
-    from sourceImage: NSImage, pixelSize: NSSize,
+    from sourceImage: NSImage,
+    pixelSize: NSSize,
   ) -> NSImage? {
     let pixelsWide = max(1, Int(pixelSize.width.rounded(.up)))
     let pixelsHigh = max(1, Int(pixelSize.height.rounded(.up)))

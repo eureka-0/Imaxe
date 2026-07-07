@@ -5,6 +5,7 @@
 //  Created by lxlong on 2026/6/14.
 //
 
+import SwiftData
 import SwiftUI
 
 @main
@@ -12,11 +13,28 @@ struct ImaxeApp: App {
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance: Appearance = AppSettings.Defaults.appearance
 
+  private let modelContainer: ModelContainer
+
+  init() {
+    do {
+      let modelFileURL = FileManager.default.dataDirectory.appendingPathComponent("database.sqlite")
+
+      #if DEBUG
+        debugPrint("Model file URL: \(modelFileURL.path)")
+      #endif
+
+      let modelConfiguration = ModelConfiguration(url: modelFileURL)
+      modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
+    } catch {
+      fatalError("Failed to create model container: \(error)")
+    }
+  }
+
   var body: some Scene {
     WindowGroup {
       ContentView()
-        .applyAppearance(appearance)
         .ignoresSafeArea()
+        .applyAppearance(appearance)
         .frame(
           minWidth: Constants.minimumWindowContentWidth,
           minHeight: Constants.minimumWindowContentHeight,
@@ -27,12 +45,13 @@ struct ImaxeApp: App {
           window.titlebarAppearsTransparent = true
         }
     }
+    .modelContainer(modelContainer)
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
     .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
-    .restorationDisabledIfAvailable()
+    .restorationBehavior(.disabled)
     .commands {
-      FileOperationCommands()
+      FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
     }
 
@@ -83,14 +102,6 @@ private extension View {
       case .dark: NSApp.appearance = NSAppearance(named: .darkAqua)
       case .system: NSApp.appearance = nil
       }
-    }
-  }
-}
-
-extension Scene {
-  @SceneBuilder func restorationDisabledIfAvailable() -> some Scene {
-    if #available(macOS 15.0, *) {
-      restorationBehavior(.disabled)
     }
   }
 }

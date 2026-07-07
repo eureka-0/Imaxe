@@ -5,10 +5,13 @@
 //  Created by lxlong on 2026/6/17.
 //
 
+import SwiftData
 import SwiftUI
 
 struct FileOperationCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
+
+  let modelContainer: ModelContainer
 
   var body: some Commands {
     CommandGroup(after: .newItem) {
@@ -26,14 +29,44 @@ struct FileOperationCommands: Commands {
       .keyboardShortcut("v", modifiers: .command)
       .disabled(imageSession == nil)
 
+      Menu("Open Recent") {
+        if recentImages.isEmpty {
+          Button("No Recent Items") {}
+            .disabled(true)
+        } else {
+          ForEach(recentImages) { recentImage in
+            Button(recentImage.fileName) {
+              guard let imageSession else {
+                NSSound.beep()
+                return
+              }
+
+              imageSession.loadImage(from: recentImage.url)
+            }
+            .disabled(imageSession == nil)
+          }
+
+          Divider()
+
+          Button("Clear Menu") {
+            try? RecentImagesStore.clear(in: modelContainer.mainContext)
+          }
+        }
+      }
+      .disabled(false)
+
       Divider()
 
       Button("Reveal in Finder") {
-        imageSession?.revealCurrentImageInFinder()
+        imageSession?.revealInFinder()
       }
       .keyboardShortcut("r", modifiers: [.command, .shift])
       .disabled(imageSession?.currentImageInfo == nil && imageSession?.currentImage == nil)
     }
+  }
+
+  private var recentImages: [RecentImage] {
+    imageSession?.recentImages ?? []
   }
 }
 
