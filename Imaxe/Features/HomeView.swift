@@ -139,25 +139,22 @@ struct HomeView: View {
     configuration.searchableText = { "\($0.fileName)\n\($0.location)" }
     configuration.defaultViewMode = .grid
     configuration.sortOptions = [
-      ImageCollectionSortOption("name", title: "Name", systemImage: "textformat") { first, second in
+      ImageCollectionSortOption("name", title: "Name") { first, second in
         first.fileName.localizedStandardCompare(second.fileName)
       },
       ImageCollectionSortOption(
         "lastOpenedAt",
         title: "Last Opened",
-        systemImage: "clock",
         value: \.lastOpenedAt,
       ),
       ImageCollectionSortOption(
         "modifiedAt",
         title: "Modified",
-        systemImage: "calendar",
         optionalValue: \.url.lastModifiedAt,
       ),
       ImageCollectionSortOption(
         "fileSize",
         title: "Size",
-        systemImage: "externaldrive",
         value: \.url.fileSize,
       ),
     ]

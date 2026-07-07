@@ -7,42 +7,67 @@
 
 import Foundation
 
+struct ImageCollectionSortValue {
+  private let value: Any
+  private let compareValue: (Any) -> ComparisonResult
+
+  init<Value: Comparable>(_ value: Value) {
+    self.value = value
+    compareValue = { otherValue in
+      guard let otherValue = otherValue as? Value else {
+        return .orderedSame
+      }
+      if value < otherValue {
+        return .orderedAscending
+      }
+      if value > otherValue {
+        return .orderedDescending
+      }
+      return .orderedSame
+    }
+  }
+
+  func compare(to other: ImageCollectionSortValue) -> ComparisonResult {
+    compareValue(other.value)
+  }
+}
+
 struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
   let id: String
   let title: String
-  let systemImage: String
   let compare: (Item, Item) -> ComparisonResult
+  let sortValue: ((Item) -> ImageCollectionSortValue?)?
 
   init(
     _ id: String,
     title: String,
-    systemImage: String,
     compare: @escaping (Item, Item) -> ComparisonResult,
+    sortValue: ((Item) -> ImageCollectionSortValue?)? = nil,
   ) {
     self.id = id
     self.title = title
-    self.systemImage = systemImage
     self.compare = compare
+    self.sortValue = sortValue
   }
 
   init(
     _ id: String,
     title: String,
-    systemImage: String,
     value: @escaping (Item) -> some Comparable,
   ) {
-    self.init(id, title: title, systemImage: systemImage) { first, second in
+    self.init(id, title: title) { first, second in
       Self.compareValues(value(first), value(second))
+    } sortValue: { item in
+      ImageCollectionSortValue(value(item))
     }
   }
 
   init(
     _ id: String,
     title: String,
-    systemImage: String,
     optionalValue: @escaping (Item) -> (some Comparable)?,
   ) {
-    self.init(id, title: title, systemImage: systemImage) { first, second in
+    self.init(id, title: title) { first, second in
       let firstValue = optionalValue(first)
       let secondValue = optionalValue(second)
 
@@ -56,6 +81,9 @@ struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
       case (_, nil):
         return .orderedDescending
       }
+    } sortValue: { item in
+      guard let value = optionalValue(item) else { return nil }
+      return ImageCollectionSortValue(value)
     }
   }
 
@@ -63,8 +91,12 @@ struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
     _ first: Value,
     _ second: Value,
   ) -> ComparisonResult {
-    if first < second { return .orderedAscending }
-    if first > second { return .orderedDescending }
+    if first < second {
+      return .orderedAscending
+    }
+    if first > second {
+      return .orderedDescending
+    }
     return .orderedSame
   }
 

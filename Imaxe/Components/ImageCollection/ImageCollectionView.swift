@@ -63,6 +63,7 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
   var defaultSortAscending: Bool = false
   var defaultGridItemSize: CGFloat = 120
   var gridSpacing: CGFloat = 2
+  var gridMagnificationSensitivity: CGFloat = 0.3
 }
 
 @Observable
@@ -101,14 +102,57 @@ private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: 
       return filteredItems
     }
 
-    return filteredItems.sorted { first, second in
-      let result = selectedSortOption.compare(first, second)
-      if result == .orderedSame {
-        return String(describing: first.id)
-          .localizedCompare(String(describing: second.id)) == .orderedAscending
-      }
+    if let sortValue = selectedSortOption.sortValue {
+      return filteredItems
+        .map { item in
+          (
+            item: item,
+            sortValue: sortValue(item),
+            tieBreaker: String(describing: item.id),
+          )
+        }
+        .sorted { first, second in
+          let result = compareSortValues(first.sortValue, second.sortValue)
+          if result == .orderedSame {
+            return first.tieBreaker.localizedCompare(second.tieBreaker) == .orderedAscending
+          }
 
-      return sortAscending ? result == .orderedAscending : result == .orderedDescending
+          return sortAscending ? result == .orderedAscending : result == .orderedDescending
+        }
+        .map(\.item)
+    }
+
+    return filteredItems
+      .map { item in
+        (
+          item: item,
+          tieBreaker: String(describing: item.id),
+        )
+      }
+      .sorted { first, second in
+        let result = selectedSortOption.compare(first.item, second.item)
+        if result == .orderedSame {
+          return first.tieBreaker.localizedCompare(second.tieBreaker) == .orderedAscending
+        }
+
+        return sortAscending ? result == .orderedAscending : result == .orderedDescending
+      }
+      .map(\.item)
+  }
+
+  private func compareSortValues(
+    _ first: ImageCollectionSortValue?,
+    _ second: ImageCollectionSortValue?,
+  ) -> ComparisonResult {
+    switch (first, second) {
+    case let (first?, second?):
+      first.compare(to: second)
+    case (nil, nil):
+      .orderedSame
+    case (nil, _):
+      .orderedAscending
+    case (_, nil):
+      .orderedDescending
     }
   }
 
@@ -147,9 +191,20 @@ struct ImageCollectionView<
   @State private var viewModel = ImageCollectionViewModel<Item>()
   @State private var magnifyBaseGridItemSize: CGFloat?
 
-  private var visibleItems: [Item] {
-    viewModel.visibleItems(from: items)
-  }
+  // UI layout constants
+  private let collectionToolBarHeight: CGFloat = 32
+  private let collectionToolBarButtonHeight: CGFloat = 26
+  private let viewModeAnimation = Animation.spring(response: 0.32, dampingFraction: 0.84)
+  private let itemLayoutAnimation = Animation.spring(
+    response: 0.34,
+    dampingFraction: 0.86,
+    blendDuration: 0.05,
+  )
+  private let gridItemSizeAnimation = Animation.interactiveSpring(
+    response: 0.22,
+    dampingFraction: 0.88,
+    blendDuration: 0.08,
+  )
 
   private var itemIDs: [Item.ID] {
     items.map(\.id)
@@ -181,10 +236,26 @@ struct ImageCollectionView<
     Binding {
       effectiveViewMode
     } set: { newValue in
-      if let viewMode {
-        viewMode.wrappedValue = newValue
-      } else {
-        viewModel.viewMode = newValue
+      guard newValue != effectiveViewMode else { return }
+
+      withAnimation(viewModeAnimation) {
+        if let viewMode {
+          viewMode.wrappedValue = newValue
+        } else {
+          viewModel.viewMode = newValue
+        }
+      }
+    }
+  }
+
+  private var animatedSearchText: Binding<String> {
+    Binding {
+      viewModel.searchText
+    } set: { newValue in
+      guard newValue != viewModel.searchText else { return }
+
+      withAnimation(itemLayoutAnimation) {
+        viewModel.searchText = newValue
       }
     }
   }
@@ -200,9 +271,19 @@ struct ImageCollectionView<
     )
   }
 
-  // UI layout constants
-  private let collectionToolBarHeight: CGFloat = 32
-  private let collectionToolBarButtonHeight: CGFloat = 26
+  private var viewModeTransition: AnyTransition {
+    .asymmetric(
+      insertion: .scale(scale: 0.98, anchor: .top).combined(with: .opacity),
+      removal: .scale(scale: 1.01, anchor: .top).combined(with: .opacity),
+    )
+  }
+
+  private var itemVisibilityTransition: AnyTransition {
+    .asymmetric(
+      insertion: .scale(scale: 0.96, anchor: .center).combined(with: .opacity),
+      removal: .scale(scale: 0.92, anchor: .center).combined(with: .opacity),
+    )
+  }
 
   init(
     _ items: [Item],
@@ -221,32 +302,28 @@ struct ImageCollectionView<
   }
 
   var body: some View {
-    ScrollView(.vertical) {
-      if visibleItems.isEmpty {
-        VStack(spacing: 15) {
-          Image(systemName: "photo.on.rectangle.angled")
-            .resizable()
-            .scaledToFit()
-            .foregroundStyle(.secondary)
-            .frame(width: 64, height: 64)
+    let visibleItems = viewModel.visibleItems(from: items)
+    let visibleItemIDs = visibleItems.map(\.id)
 
-          Text(configuration.emptyDescription ?? "No images yet")
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-        .containerRelativeFrame(.vertical, alignment: .center)
-      } else {
-        switch effectiveViewMode {
-        case .list:
-          listContent
-        case .grid:
-          gridContent
+    ScrollView(.vertical) {
+      Group {
+        if visibleItems.isEmpty {
+          emptyContent
+            .transition(itemVisibilityTransition)
+        } else {
+          collectionContent(
+            visibleItems: visibleItems,
+            visibleItemIDs: visibleItemIDs,
+          )
+          .id(effectiveViewMode)
+          .transition(viewModeTransition)
         }
       }
+      .animation(itemLayoutAnimation, value: visibleItemIDs)
     }
+    .animation(viewModeAnimation, value: effectiveViewMode)
     .safeAreaInset(edge: .top, spacing: 0) {
-      collectionToolbar
+      collectionToolbar(visibleItemCount: visibleItems.count)
     }
     .onAppear {
       viewModel.update(from: configuration)
@@ -257,9 +334,38 @@ struct ImageCollectionView<
     }
   }
 
-  private var collectionToolbar: some View {
+  private var emptyContent: some View {
+    VStack(spacing: 15) {
+      Image(systemName: "photo.on.rectangle.angled")
+        .resizable()
+        .scaledToFit()
+        .foregroundStyle(.secondary)
+        .frame(width: 64, height: 64)
+
+      Text(configuration.emptyDescription ?? "No images yet")
+        .font(.callout)
+        .foregroundStyle(.secondary)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    .containerRelativeFrame(.vertical, alignment: .center)
+  }
+
+  @ViewBuilder
+  private func collectionContent(
+    visibleItems: [Item],
+    visibleItemIDs: [Item.ID],
+  ) -> some View {
+    switch effectiveViewMode {
+    case .list:
+      listContent(visibleItems: visibleItems, visibleItemIDs: visibleItemIDs)
+    case .grid:
+      gridContent(visibleItems: visibleItems, visibleItemIDs: visibleItemIDs)
+    }
+  }
+
+  private func collectionToolbar(visibleItemCount: Int) -> some View {
     HStack(spacing: 2) {
-      titleBlock
+      titleBlock(visibleItemCount: visibleItemCount)
 
       Spacer()
 
@@ -276,7 +382,7 @@ struct ImageCollectionView<
   }
 
   @ViewBuilder
-  private var titleBlock: some View {
+  private func titleBlock(visibleItemCount: Int) -> some View {
     if let title = configuration.title {
       VStack(alignment: .leading, spacing: 0) {
         Text(title)
@@ -286,7 +392,7 @@ struct ImageCollectionView<
 
         Group {
           if configuration.useDefaultSubtitle {
-            Text("\(visibleItems.count) image\(visibleItems.count == 1 ? "" : "s")")
+            Text("\(visibleItemCount) image\(visibleItemCount == 1 ? "" : "s")")
           } else if let subtitle = configuration.subtitle {
             Text(subtitle)
           }
@@ -302,7 +408,7 @@ struct ImageCollectionView<
   @ViewBuilder
   private var searchField: some View {
     if viewModel.searchableText != nil {
-      SearchField("Search", text: $viewModel.searchText)
+      SearchField("Search", text: animatedSearchText)
         .foldable(true)
         .frame(maxWidth: 220, fieldHeight: collectionToolBarButtonHeight)
     }
@@ -314,7 +420,7 @@ struct ImageCollectionView<
       Menu {
         ForEach(configuration.sortOptions) { sortOption in
           Button {
-            viewModel.selectedSortOption = sortOption
+            setSortOption(sortOption)
           } label: {
             Label(sortOption.title, systemImage: currentSortOption == sortOption ? "checkmark" : "")
           }
@@ -323,7 +429,7 @@ struct ImageCollectionView<
         Divider()
 
         Button {
-          viewModel.sortAscending = true
+          setSortAscending(true)
         } label: {
           Label(
             "Ascending",
@@ -332,7 +438,7 @@ struct ImageCollectionView<
         }
 
         Button {
-          viewModel.sortAscending = false
+          setSortAscending(false)
         } label: {
           Label(
             "Descending",
@@ -354,6 +460,22 @@ struct ImageCollectionView<
     }
   }
 
+  private func setSortOption(_ sortOption: ImageCollectionSortOption<Item>) {
+    guard viewModel.selectedSortOption != sortOption else { return }
+
+    withAnimation(itemLayoutAnimation) {
+      viewModel.selectedSortOption = sortOption
+    }
+  }
+
+  private func setSortAscending(_ sortAscending: Bool) {
+    guard viewModel.sortAscending != sortAscending else { return }
+
+    withAnimation(itemLayoutAnimation) {
+      viewModel.sortAscending = sortAscending
+    }
+  }
+
   private var viewModePicker: some View {
     MaterialSegmentedPicker(
       selection: effectiveViewModeBinding,
@@ -370,7 +492,9 @@ struct ImageCollectionView<
   private var clearButton: some View {
     if let clearHelpText = configuration.clearHelpText, let onClear = configuration.onClear {
       Button {
-        onClear()
+        withAnimation(itemLayoutAnimation) {
+          onClear()
+        }
       } label: {
         Label(clearHelpText, systemImage: "trash")
           .labelStyle(.iconOnly)
@@ -384,7 +508,10 @@ struct ImageCollectionView<
     }
   }
 
-  private var listContent: some View {
+  private func listContent(
+    visibleItems: [Item],
+    visibleItemIDs: [Item.ID],
+  ) -> some View {
     LazyVStack(spacing: 0) {
       ForEach(visibleItems) { item in
         let itemState = viewModel.state(for: item)
@@ -397,12 +524,17 @@ struct ImageCollectionView<
           .contextMenu {
             contextMenu(item)
           }
+          .transition(itemVisibilityTransition)
       }
     }
     .padding(3)
+    .animation(itemLayoutAnimation, value: visibleItemIDs)
   }
 
-  private var gridContent: some View {
+  private func gridContent(
+    visibleItems: [Item],
+    visibleItemIDs: [Item.ID],
+  ) -> some View {
     LazyVGrid(
       columns: [effectiveGridItem],
       alignment: .center,
@@ -419,14 +551,20 @@ struct ImageCollectionView<
           .contextMenu {
             contextMenu(item)
           }
+          .transition(itemVisibilityTransition)
       }
     }
+    .animation(gridItemSizeAnimation, value: effectiveGridItemSize)
+    .animation(itemLayoutAnimation, value: visibleItemIDs)
     .simultaneousGesture(
       MagnifyGesture()
         .onChanged { value in
           let baseSize = magnifyBaseGridItemSize ?? effectiveGridItemSize
           magnifyBaseGridItemSize = baseSize
-          effectiveGridItemSizeBinding.wrappedValue = baseSize * value.magnification
+          let adjustedMagnification = 1 + (
+            (value.magnification - 1) * configuration.gridMagnificationSensitivity
+          )
+          effectiveGridItemSizeBinding.wrappedValue = baseSize * adjustedMagnification
         }
         .onEnded { _ in
           magnifyBaseGridItemSize = nil
@@ -505,6 +643,7 @@ extension ImageCollectionView {
     size: Binding<CGFloat>? = nil,
     defaultSize: CGFloat? = nil,
     spacing: CGFloat? = nil,
+    magnificationSensitivity: CGFloat? = nil,
   ) -> Self {
     var view = self
     view.gridItemSize = size
@@ -514,6 +653,10 @@ extension ImageCollectionView {
     }
     if let spacing {
       view.configuration.gridSpacing = spacing
+    }
+    if let magnificationSensitivity {
+      view.configuration.gridMagnificationSensitivity = magnificationSensitivity
+        .clamped(to: 0.05 ... 1.0)
     }
     return view
   }
