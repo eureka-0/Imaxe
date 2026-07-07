@@ -37,4 +37,6 @@ nonisolated enum Constants {
 
   static let maximumRecentImagesCount = 100
   static let maximumRecentImagesToDisplayInMenu = 20
+
+  static let recentImagesGridItemSizeRange: ClosedRange<CGFloat> = 72 ... 260
 }

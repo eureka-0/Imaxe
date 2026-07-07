@@ -37,9 +37,7 @@ final class ImageCollectionItemState {
   var isHovered = false
 }
 
-struct ImageCollectionConfiguration<Item: Identifiable>
-  where Item.ID: Hashable
-{
+struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable {
   var title: String?
   var subtitle: String?
   var useDefaultSubtitle: Bool = true
@@ -80,14 +78,6 @@ private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: 
   var itemStates: [Item.ID: ImageCollectionItemState] = [:]
 
   @ObservationIgnored var searchableText: ((Item) -> String)?
-
-  var gridItem: GridItem {
-    GridItem(
-      .adaptive(minimum: gridItemSize - 15, maximum: gridItemSize + 15),
-      spacing: gridSpacing,
-      alignment: .center,
-    )
-  }
 
   func update(from configuration: ImageCollectionConfiguration<Item>) {
     selectedSortOption = configuration.defaultSortOption
@@ -151,8 +141,11 @@ struct ImageCollectionView<
   private let listRow: (Item, ImageCollectionItemState) -> ListRowContent
   private let gridItem: (Item, ImageCollectionItemState) -> GridItemContent
   private let contextMenu: (Item) -> ContextMenuContent
+  private var viewMode: Binding<ImageCollectionViewMode>?
+  private var gridItemSize: Binding<CGFloat>?
 
   @State private var viewModel = ImageCollectionViewModel<Item>()
+  @State private var magnifyBaseGridItemSize: CGFloat?
 
   private var visibleItems: [Item] {
     viewModel.visibleItems(from: items)
@@ -160,6 +153,51 @@ struct ImageCollectionView<
 
   private var itemIDs: [Item.ID] {
     items.map(\.id)
+  }
+
+  private var effectiveViewMode: ImageCollectionViewMode {
+    viewMode?.wrappedValue ?? viewModel.viewMode
+  }
+
+  private var effectiveGridItemSize: CGFloat {
+    (gridItemSize?.wrappedValue ?? viewModel.gridItemSize)
+      .clamped(to: Constants.recentImagesGridItemSizeRange)
+  }
+
+  private var effectiveGridItemSizeBinding: Binding<CGFloat> {
+    Binding {
+      effectiveGridItemSize
+    } set: { newValue in
+      let clampedValue = newValue.clamped(to: Constants.recentImagesGridItemSizeRange)
+      if let gridItemSize {
+        gridItemSize.wrappedValue = clampedValue
+      } else {
+        viewModel.gridItemSize = clampedValue
+      }
+    }
+  }
+
+  private var effectiveViewModeBinding: Binding<ImageCollectionViewMode> {
+    Binding {
+      effectiveViewMode
+    } set: { newValue in
+      if let viewMode {
+        viewMode.wrappedValue = newValue
+      } else {
+        viewModel.viewMode = newValue
+      }
+    }
+  }
+
+  private var effectiveGridItem: GridItem {
+    GridItem(
+      .adaptive(
+        minimum: effectiveGridItemSize - 15,
+        maximum: effectiveGridItemSize + 15,
+      ),
+      spacing: viewModel.gridSpacing,
+      alignment: .center,
+    )
   }
 
   // UI layout constants
@@ -178,6 +216,8 @@ struct ImageCollectionView<
     self.listRow = listRow
     self.gridItem = gridItem
     self.contextMenu = contextMenu
+    viewMode = nil
+    gridItemSize = nil
   }
 
   var body: some View {
@@ -197,7 +237,7 @@ struct ImageCollectionView<
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
         .containerRelativeFrame(.vertical, alignment: .center)
       } else {
-        switch viewModel.viewMode {
+        switch effectiveViewMode {
         case .list:
           listContent
         case .grid:
@@ -316,7 +356,7 @@ struct ImageCollectionView<
 
   private var viewModePicker: some View {
     MaterialSegmentedPicker(
-      selection: $viewModel.viewMode,
+      selection: effectiveViewModeBinding,
       items: ImageCollectionViewMode.allCases,
     ) { mode in
       Label(mode.title, systemImage: mode.systemImage)
@@ -364,7 +404,7 @@ struct ImageCollectionView<
 
   private var gridContent: some View {
     LazyVGrid(
-      columns: [viewModel.gridItem],
+      columns: [effectiveGridItem],
       alignment: .center,
       spacing: viewModel.gridSpacing,
     ) {
@@ -381,6 +421,17 @@ struct ImageCollectionView<
           }
       }
     }
+    .simultaneousGesture(
+      MagnifyGesture()
+        .onChanged { value in
+          let baseSize = magnifyBaseGridItemSize ?? effectiveGridItemSize
+          magnifyBaseGridItemSize = baseSize
+          effectiveGridItemSizeBinding.wrappedValue = baseSize * value.magnification
+        }
+        .onEnded { _ in
+          magnifyBaseGridItemSize = nil
+        },
+    )
   }
 }
 
@@ -444,14 +495,22 @@ extension ImageCollectionView {
     return view
   }
 
+  func viewMode(_ mode: Binding<ImageCollectionViewMode>) -> Self {
+    var view = self
+    view.viewMode = mode
+    return view
+  }
+
   func gridItemLayout(
-    size _: Binding<CGFloat>? = nil,
+    size: Binding<CGFloat>? = nil,
     defaultSize: CGFloat? = nil,
     spacing: CGFloat? = nil,
   ) -> Self {
     var view = self
+    view.gridItemSize = size
     if let defaultSize {
       view.configuration.defaultGridItemSize = defaultSize
+        .clamped(to: Constants.recentImagesGridItemSizeRange)
     }
     if let spacing {
       view.configuration.gridSpacing = spacing

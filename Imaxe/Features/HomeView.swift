@@ -20,6 +20,10 @@ struct HomeView: View {
   @Bindable var imageSession: ImageSession
   let recentImages: [RecentImage]
 
+  @AppStorage("recentImagesViewMode")
+  private var recentImagesViewModeRawValue = ImageCollectionViewMode.grid.rawValue
+  @AppStorage("recentImagesGridItemSize") private var recentImagesGridItemSize = 120.0
+
   @Environment(\.modelContext) private var modelContext
   @State private var deleteTargetURL: URL?
   @State private var renameTarget: RecentImage?
@@ -33,6 +37,25 @@ struct HomeView: View {
       if !isPresented {
         deleteTargetURL = nil
       }
+    }
+  }
+
+  private var recentImagesViewMode: Binding<ImageCollectionViewMode> {
+    Binding {
+      ImageCollectionViewMode(rawValue: recentImagesViewModeRawValue) ?? .grid
+    } set: { newValue in
+      recentImagesViewModeRawValue = newValue.rawValue
+    }
+  }
+
+  private var recentImagesGridItemSizeBinding: Binding<CGFloat> {
+    Binding {
+      CGFloat(recentImagesGridItemSize)
+        .clamped(to: Constants.recentImagesGridItemSizeRange)
+    } set: { newValue in
+      recentImagesGridItemSize = Double(
+        newValue.clamped(to: Constants.recentImagesGridItemSizeRange),
+      )
     }
   }
 
@@ -152,6 +175,8 @@ struct HomeView: View {
       gridItem: recentImageGridItem,
       contextMenu: recentImageActionsMenu,
     )
+    .viewMode(recentImagesViewMode)
+    .gridItemLayout(size: recentImagesGridItemSizeBinding)
     .background(.controlBackground.opacity(0.5))
     .clipShape(ContainerRelativeShape())
     .overlay(
