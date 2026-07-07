@@ -21,11 +21,7 @@ final class RecentImage {
     thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
   }
 
-  func update(
-    from url: URL,
-    lastOpenedAt: Date = .now,
-    thumbnailCacheKey: String? = nil,
-  ) {
+  func update(from url: URL, lastOpenedAt: Date = .now, thumbnailCacheKey: String? = nil) {
     path = url.filePath
     self.lastOpenedAt = lastOpenedAt
     self.thumbnailCacheKey = thumbnailCacheKey ?? ImageThumbnailCache.ensureThumbnail(for: url)
@@ -35,12 +31,19 @@ final class RecentImage {
     if path.hasPrefix("/") {
       return URL(fileURLWithPath: path)
     }
-
     return URL(string: path) ?? URL(fileURLWithPath: path)
   }
 
   var fileName: String {
     url.lastPathComponent
+  }
+
+  var location: String {
+    url.deletingLastPathComponent().path
+  }
+
+  var fileSizeDescription: String {
+    ByteCountFormatter.string(fromByteCount: Int64(url.fileSize), countStyle: .file)
   }
 }
 

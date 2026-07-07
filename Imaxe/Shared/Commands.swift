@@ -58,7 +58,7 @@ struct FileOperationCommands: Commands {
       Divider()
 
       Button("Reveal in Finder") {
-        imageSession?.revealCurrentImageInFinder()
+        imageSession?.revealInFinder()
       }
       .keyboardShortcut("r", modifiers: [.command, .shift])
       .disabled(imageSession?.currentImageInfo == nil && imageSession?.currentImage == nil)

@@ -114,8 +114,10 @@ final class ImageSession {
     owningWindow?.level = isWindowPinned ? .floating : .normal
   }
 
-  func revealCurrentImageInFinder() {
-    if let url = currentImageInfo?.url ?? currentImage?.url {
+  func revealInFinder(for urls: [URL]? = nil) {
+    if let urls {
+      NSWorkspace.shared.activateFileViewerSelecting(urls)
+    } else if let url = currentImageInfo?.url ?? currentImage?.url {
       NSWorkspace.shared.activateFileViewerSelecting([url])
     }
   }

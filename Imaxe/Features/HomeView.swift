@@ -22,36 +22,18 @@ struct HomeView: View {
 
   @Environment(\.modelContext) private var modelContext
   @State private var deleteTargetURL: URL?
-  @State private var renameTarget: ImageCollectionItem?
+  @State private var renameTarget: RecentImage?
   @State private var renameText = ""
   @State private var operationAlert: HomeOperationAlert?
 
-  private var recentImageItems: [ImageCollectionItem] {
-    recentImages.map { recentImage in
-      ImageCollectionItem(
-        url: recentImage.url,
-        lastOpenedAt: recentImage.lastOpenedAt,
-        thumbnailCacheKey: recentImage.thumbnailCacheKey,
-      )
+  private var isDeleteConfirmationPresented: Binding<Bool> {
+    Binding {
+      deleteTargetURL != nil
+    } set: { isPresented in
+      if !isPresented {
+        deleteTargetURL = nil
+      }
     }
-  }
-
-  private struct RecentImageActions {
-    let onOpen: (URL) -> Void
-    let onRemove: (String) -> Void
-    let onReveal: (URL) -> Void
-    let onDeleteFile: (URL) -> Void
-    let onRename: (ImageCollectionItem) -> Void
-  }
-
-  private var recentImageActions: RecentImageActions {
-    RecentImageActions(
-      onOpen: { imageSession.loadImage(from: $0) },
-      onRemove: remove,
-      onReveal: revealInFinder,
-      onDeleteFile: confirmDelete,
-      onRename: beginRename,
-    )
   }
 
   var body: some View {
@@ -79,7 +61,7 @@ struct HomeView: View {
         deleteTargetURL = nil
       }
     } message: {
-      Text(deleteTargetURL?.lastPathComponent ?? "")
+      Text(deleteTargetURL?.path ?? "")
     }
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
@@ -126,45 +108,63 @@ struct HomeView: View {
     .frame(maxWidth: .infinity)
   }
 
-  private var recentImagesCollection: some View {
-    ImageCollectionView(recentImageItems) {
-      imageSession.loadImage(from: $0.url)
-    } emptyContent: {
-      VStack(spacing: 15) {
-        Image(systemName: "photo.on.rectangle.angled")
-          .resizable()
-          .scaledToFit()
-          .foregroundStyle(.secondary)
-          .frame(width: 64, height: 64)
-
-        Text("No recent images yet")
-          .font(.callout)
-          .foregroundStyle(.secondary)
-      }
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-    } listRow: { item in
-      recentImageListRow(item)
-    } gridItem: { item in
-      recentImageGridItem(item)
-    }
-    .collectionTitle("Recent Images")
-    .searchableText(\.searchableText)
-    .sortOptions(recentSortOptions, default: "lastOpenedAt")
-    .defaultViewMode(.grid)
-    .clearAction("Clear Recent Images", clearRecentImages)
-    .contextMenu { item in
-      recentImageActionsMenu(item)
-    }
-    .background(.controlBackground.opacity(0.5))
-    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-    .overlay(
-      RoundedRectangle(cornerRadius: 12, style: .continuous)
-        .stroke(Color(.separatorColor), lineWidth: 0.5),
-    )
-    .padding([.horizontal, .bottom], 8)
+  private var imageCollectionConfiguration: ImageCollectionConfiguration<RecentImage> {
+    var configuration = ImageCollectionConfiguration<RecentImage>()
+    configuration.title = "Recent Images"
+    configuration.useDefaultSubtitle = true
+    configuration.emptyDescription = "No recent images yet"
+    configuration.searchableText = { "\($0.fileName)\n\($0.location)" }
+    configuration.defaultViewMode = .grid
+    configuration.sortOptions = [
+      ImageCollectionSortOption("name", title: "Name", systemImage: "textformat") { first, second in
+        first.fileName.localizedStandardCompare(second.fileName)
+      },
+      ImageCollectionSortOption(
+        "lastOpenedAt",
+        title: "Last Opened",
+        systemImage: "clock",
+        value: \.lastOpenedAt,
+      ),
+      ImageCollectionSortOption(
+        "modifiedAt",
+        title: "Modified",
+        systemImage: "calendar",
+        optionalValue: \.url.lastModifiedAt,
+      ),
+      ImageCollectionSortOption(
+        "fileSize",
+        title: "Size",
+        systemImage: "externaldrive",
+        value: \.url.fileSize,
+      ),
+    ]
+    configuration.defaultSortOptionID = "lastOpenedAt"
+    configuration.clearHelpText = "Clear Recent Images"
+    configuration.onClear = clearRecentImages
+    return configuration
   }
 
-  private func recentImageListRow(_ item: ImageCollectionItem) -> some View {
+  private var recentImagesCollection: some View {
+    ImageCollectionView(
+      recentImages,
+      configuration: imageCollectionConfiguration,
+      listRow: recentImageListRow,
+      gridItem: recentImageGridItem,
+      contextMenu: recentImageActionsMenu,
+    )
+    .background(.controlBackground.opacity(0.5))
+    .clipShape(ContainerRelativeShape())
+    .overlay(
+      ContainerRelativeShape()
+        .strokeBorder(Color.separator, lineWidth: 0.5),
+    )
+    .padding([.horizontal, .bottom], 4)
+  }
+
+  private func recentImageListRow(
+    _ item: RecentImage,
+    state: ImageCollectionItemState,
+  ) -> some View {
     HStack(spacing: 6) {
       ImageThumbnailView(url: item.url)
         .frame(width: 28, height: 28)
@@ -209,62 +209,64 @@ struct HomeView: View {
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 2)
-  }
-
-  @ViewBuilder
-  private func recentImageActionsMenu(_ item: ImageCollectionItem) -> some View {
-    Button {
-      recentImageActions.onOpen(item.url)
-    } label: {
-      Label("Open", systemImage: "photo")
-    }
-
-    Button {
-      recentImageActions.onRename(item)
-    } label: {
-      Label("Rename", systemImage: "pencil")
-    }
-
-    Button(role: .destructive) {
-      recentImageActions.onDeleteFile(item.url)
-    } label: {
-      Label("Move to Trash", systemImage: "trash")
-    }
-
-    Divider()
-
-    Button {
-      recentImageActions.onRemove(item.path)
-    } label: {
-      Label("Remove from Recents", systemImage: "minus.circle")
-    }
-
-    Button {
-      recentImageActions.onReveal(item.url)
-    } label: {
-      Label("Show in Finder", systemImage: "folder")
+    .background(state.isHovered ? Color.primary.opacity(0.07) : .clear)
+    .clipShape(RoundedRectangle(cornerRadius: 8))
+    .onTapGesture(count: 2) {
+      imageSession.loadImage(from: item.url)
     }
   }
 
-  private func recentImageGridItem(_ item: ImageCollectionItem) -> some View {
+  private func recentImageGridItem(
+    _ item: RecentImage,
+    state: ImageCollectionItemState,
+  ) -> some View {
     ImageThumbnailView(url: item.url)
       .overlay(alignment: .bottom) {
-        if item.isHovered {
+        if state.isHovered {
           Text(item.fileName)
-            .font(.system(size: 9, weight: .light))
-            .foregroundStyle(.secondary)
+            .font(.system(size: 10, weight: .light))
+            .foregroundStyle(.primary)
             .lineLimit(1)
             .truncationMode(.middle)
-            .frame(maxWidth: .infinity)
-            .padding(.horizontal, 2)
-            .padding(.vertical, 2)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
             .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .padding(.bottom, 2)
         }
+      }
+      .onTapGesture(count: 2) {
+        imageSession.loadImage(from: item.url)
       }
       .help(item.path)
   }
 
-  private func fileRenameSheet(for item: ImageCollectionItem) -> some View {
+  @ViewBuilder
+  private func recentImageActionsMenu(_ item: RecentImage) -> some View {
+    Button("Open", systemImage: "photo") {
+      imageSession.loadImage(from: item.url)
+    }
+
+    Button("Rename", systemImage: "pencil") {
+      beginRename(item)
+    }
+
+    Button("Move to Trash", systemImage: "trash", role: .destructive) {
+      confirmDelete(item.url)
+    }
+
+    Divider()
+
+    Button("Remove from Recents", systemImage: "minus.circle") {
+      remove(path: item.path)
+    }
+
+    Button("Reveal in Finder", systemImage: "folder") {
+      imageSession.revealInFinder(for: [item.url])
+    }
+  }
+
+  private func fileRenameSheet(for item: RecentImage) -> some View {
     VStack(alignment: .leading, spacing: 14) {
       Text("Rename")
         .font(.headline)
@@ -293,42 +295,6 @@ struct HomeView: View {
     .frame(width: 380)
   }
 
-  private var recentSortOptions: [ImageCollectionSortOption] {
-    [
-      ImageCollectionSortOption("name", title: "Name", systemImage: "textformat") { first, second in
-        first.fileName.localizedStandardCompare(second.fileName)
-      },
-      ImageCollectionSortOption(
-        "lastOpenedAt",
-        title: "Last Opened",
-        systemImage: "clock",
-        value: \.lastOpenedAt,
-      ),
-      ImageCollectionSortOption(
-        "modifiedAt",
-        title: "Modified",
-        systemImage: "calendar",
-        optionalValue: \.url.lastModifiedAt,
-      ),
-      ImageCollectionSortOption(
-        "fileSize",
-        title: "Size",
-        systemImage: "externaldrive",
-        value: \.url.fileSize,
-      ),
-    ]
-  }
-
-  private var isDeleteConfirmationPresented: Binding<Bool> {
-    Binding {
-      deleteTargetURL != nil
-    } set: { isPresented in
-      if !isPresented {
-        deleteTargetURL = nil
-      }
-    }
-  }
-
   private func remove(path: String) {
     do {
       try RecentImagesStore.remove(path: path, in: modelContext)
@@ -338,16 +304,6 @@ struct HomeView: View {
         message: error.localizedDescription,
       )
     }
-  }
-
-  private func remove(_ items: [ImageCollectionItem]) {
-    for item in items {
-      remove(path: item.path)
-    }
-  }
-
-  private func revealInFinder(_ url: URL) {
-    NSWorkspace.shared.activateFileViewerSelecting([url])
   }
 
   private func confirmDelete(_ url: URL) {
@@ -367,7 +323,7 @@ struct HomeView: View {
     }
   }
 
-  private func beginRename(_ item: ImageCollectionItem) {
+  private func beginRename(_ item: RecentImage) {
     renameText = item.url.lastPathComponent
     renameTarget = item
   }

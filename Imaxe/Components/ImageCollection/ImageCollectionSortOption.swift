@@ -7,17 +7,17 @@
 
 import Foundation
 
-struct ImageCollectionSortOption: Identifiable, Equatable {
+struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
   let id: String
   let title: String
   let systemImage: String
-  let compare: (ImageCollectionItem, ImageCollectionItem) -> ComparisonResult
+  let compare: (Item, Item) -> ComparisonResult
 
   init(
     _ id: String,
     title: String,
     systemImage: String,
-    compare: @escaping (ImageCollectionItem, ImageCollectionItem) -> ComparisonResult,
+    compare: @escaping (Item, Item) -> ComparisonResult,
   ) {
     self.id = id
     self.title = title
@@ -29,7 +29,7 @@ struct ImageCollectionSortOption: Identifiable, Equatable {
     _ id: String,
     title: String,
     systemImage: String,
-    value: @escaping (ImageCollectionItem) -> some Comparable,
+    value: @escaping (Item) -> some Comparable,
   ) {
     self.init(id, title: title, systemImage: systemImage) { first, second in
       Self.compareValues(value(first), value(second))
@@ -40,7 +40,7 @@ struct ImageCollectionSortOption: Identifiable, Equatable {
     _ id: String,
     title: String,
     systemImage: String,
-    optionalValue: @escaping (ImageCollectionItem) -> (some Comparable)?,
+    optionalValue: @escaping (Item) -> (some Comparable)?,
   ) {
     self.init(id, title: title, systemImage: systemImage) { first, second in
       let firstValue = optionalValue(first)
@@ -69,8 +69,8 @@ struct ImageCollectionSortOption: Identifiable, Equatable {
   }
 
   static func == (
-    lhs: ImageCollectionSortOption,
-    rhs: ImageCollectionSortOption,
+    lhs: ImageCollectionSortOption<Item>,
+    rhs: ImageCollectionSortOption<Item>,
   ) -> Bool {
     lhs.id == rhs.id
   }

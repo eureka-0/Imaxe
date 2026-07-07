@@ -16,7 +16,9 @@ struct BorderedOnHoverButtonStyle: ButtonStyle {
 
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .foregroundStyle(isEnabled ? .primary : .tertiary)
+      .foregroundStyle(isEnabled
+        ? AnyShapeStyle(configuration.role == .destructive ? .red : .primary)
+        : AnyShapeStyle(.tertiary))
       .background(
         configuration.isPressed && applyPressedEffect ? Color.primary.opacity(0.17)
           : (isHovering && isEnabled ? .primary.opacity(0.1) : .clear),
