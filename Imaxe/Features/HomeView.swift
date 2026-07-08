@@ -59,7 +59,7 @@ struct HomeView: View {
   }
 
   var body: some View {
-    VStack(spacing: 48) {
+    VStack(spacing: 16) {
       homeHero
       recentImagesCollection
     }
@@ -113,6 +113,7 @@ struct HomeView: View {
       HStack(spacing: 12) {
         SettingsLink {
           Label("Settings", systemImage: "gearshape")
+            .padding(.vertical, 2)
         }
         .help("Open Settings")
 
@@ -120,14 +121,18 @@ struct HomeView: View {
           imageSession.isImporterPresented = true
         } label: {
           Label("Open Image", systemImage: "photo.badge.plus")
+            .padding(.vertical, 2)
         }
         .help("Open Image")
       }
       .buttonStyle(.borderedProminent)
+      .buttonBorderShape(.capsule)
     }
-    .padding(.horizontal, 32)
-    .padding(.top, 80)
+    .padding([.horizontal, .top], 32)
     .frame(maxWidth: .infinity)
+    .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
+      length * 0.4
+    }
   }
 
   private var imageCollectionConfiguration: ImageCollectionConfiguration<RecentImage> {
@@ -207,13 +212,13 @@ struct HomeView: View {
       Text(item.lastOpenedAt.relativeDateDescription)
         .font(.callout)
         .foregroundStyle(.secondary)
-        .frame(idealWidth: 116, alignment: .leading)
+        .frame(width: 90, alignment: .leading)
 
       Text(fileSizeDescription(for: item.url.fileSize))
         .font(.callout)
         .monospacedDigit()
         .foregroundStyle(.secondary)
-        .frame(width: 68, alignment: .trailing)
+        .frame(width: 56, alignment: .trailing)
 
       Menu {
         recentImageActionsMenu(item)

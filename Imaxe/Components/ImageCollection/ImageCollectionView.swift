@@ -193,7 +193,7 @@ struct ImageCollectionView<
   @State private var magnifyBaseGridItemSize: CGFloat?
 
   // UI layout constants
-  private let collectionToolBarHeight: CGFloat = 36
+  private let collectionToolBarHeight: CGFloat = 40
   private let collectionToolBarButtonHeight: CGFloat = 26
   private let viewModeAnimation = Animation.spring(response: 0.32, dampingFraction: 0.84)
   private let itemLayoutAnimation = Animation.spring(
@@ -430,33 +430,30 @@ struct ImageCollectionView<
   private var sortMenu: some View {
     if let currentSortOption = viewModel.selectedSortOption {
       Menu {
-        ForEach(configuration.sortOptions) { sortOption in
-          Button {
-            setSortOption(sortOption)
-          } label: {
-            Label(sortOption.title, systemImage: currentSortOption == sortOption ? "checkmark" : "")
+        Picker("Sort by", selection: Binding(
+          get: { currentSortOption.id },
+          set: { newValue in
+            setSortOption(newValue)
+          },
+        )) {
+          ForEach(configuration.sortOptions) { sortOption in
+            Text(sortOption.title).tag(sortOption.id)
           }
         }
+        .pickerStyle(.inline)
 
         Divider()
 
-        Button {
-          setSortAscending(true)
-        } label: {
-          Label(
-            "Ascending",
-            systemImage: viewModel.sortAscending ? "checkmark" : "",
-          )
+        Picker("Order", selection: Binding(
+          get: { viewModel.sortAscending },
+          set: { newValue in
+            setSortAscending(newValue)
+          },
+        )) {
+          Text("Ascending").tag(true)
+          Text("Descending").tag(false)
         }
-
-        Button {
-          setSortAscending(false)
-        } label: {
-          Label(
-            "Descending",
-            systemImage: !viewModel.sortAscending ? "checkmark" : "",
-          )
-        }
+        .pickerStyle(.inline)
       } label: {
         Label("Sort", systemImage: "arrow.up.arrow.down")
           .labelStyle(.iconOnly)
@@ -480,6 +477,13 @@ struct ImageCollectionView<
     }
   }
 
+  private func setSortOption(_ sortOptionID: ImageCollectionSortOption<Item>.ID) {
+    guard let sortOption = configuration.sortOptions.first(where: { $0.id == sortOptionID }) else {
+      return
+    }
+    setSortOption(sortOption)
+  }
+
   private func setSortAscending(_ sortAscending: Bool) {
     guard viewModel.sortAscending != sortAscending else { return }
 
@@ -498,7 +502,7 @@ struct ImageCollectionView<
         .labelStyle(.iconOnly)
         .font(.system(size: 13, weight: .medium))
     }
-    .frame(height: collectionToolBarHeight - 8)
+    .frame(height: collectionToolBarButtonHeight + 2)
   }
 
   @ViewBuilder
