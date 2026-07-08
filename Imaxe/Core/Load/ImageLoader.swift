@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 
 enum ImageLoadingError: Error, LocalizedError {
   case unsupportedImageType(URL)
+  case fileNotFound(URL)
   case failedToLoad(URL)
 
   var errorDescription: String? {
@@ -20,6 +21,8 @@ enum ImageLoadingError: Error, LocalizedError {
       Unsupported image type for: \(url.fileSystemPath).
       Supported types: \(ImageLoader.supportedImageExtensionsDescription).
       """
+    case let .fileNotFound(url):
+      "The file no longer exists: \(url.fileSystemPath)"
     case let .failedToLoad(url):
       "Failed to load image from URL: \(url.fileSystemPath)"
     }
@@ -137,6 +140,8 @@ actor ImageLoader {
   }
 
   func loadInfo(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageInfo {
+    try validateFileExists(at: url)
+
     guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
@@ -199,6 +204,8 @@ actor ImageLoader {
   }
 
   func loadImage(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageContainer {
+    try validateFileExists(at: url)
+
     guard Self.isSupportedImage(url) else {
       throw ImageLoadingError.unsupportedImageType(url)
     }
@@ -340,6 +347,23 @@ actor ImageLoader {
         cost: imageContainer.cacheCost,
       )
     }
+  }
+
+  private func validateFileExists(at url: URL) throws {
+    guard url.fileExists else {
+      removeCachedValues(for: url)
+      throw ImageLoadingError.fileNotFound(url)
+    }
+  }
+
+  private func removeCachedValues(for url: URL) {
+    let cacheKey = url as NSURL
+    infoCache.removeObject(forKey: cacheKey)
+    imageCache.removeObject(forKey: cacheKey)
+    infoLoadTasks[url]?.task.cancel()
+    infoLoadTasks[url] = nil
+    imageLoadTasks[url]?.task.cancel()
+    imageLoadTasks[url] = nil
   }
 
   private func shouldRemoveInfoTask(at url: URL, id: UUID, after error: Error) -> Bool {

@@ -193,7 +193,7 @@ struct ImageCollectionView<
   @State private var magnifyBaseGridItemSize: CGFloat?
 
   // UI layout constants
-  private let collectionToolBarHeight: CGFloat = 32
+  private let collectionToolBarHeight: CGFloat = 36
   private let collectionToolBarButtonHeight: CGFloat = 26
   private let viewModeAnimation = Animation.spring(response: 0.32, dampingFraction: 0.84)
   private let itemLayoutAnimation = Animation.spring(
@@ -474,14 +474,15 @@ struct ImageCollectionView<
 
   private var viewModePicker: some View {
     MaterialSegmentedPicker(
-      selection: effectiveViewModeBinding,
+      effectiveViewModeBinding,
       items: ImageCollectionViewMode.allCases,
+      background: .controlBackground,
     ) { mode in
       Label(mode.title, systemImage: mode.systemImage)
         .labelStyle(.iconOnly)
         .font(.system(size: 13, weight: .medium))
     }
-    .frame(height: collectionToolBarHeight - 4)
+    .frame(height: collectionToolBarHeight - 8)
   }
 
   @ViewBuilder

@@ -74,8 +74,7 @@ struct ImaxeTests {
   }
 
   @Test func `complex SVG rasterizes to bitmap`() async throws {
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-svg-with-paint-server.svg")
+    let url = URL.temporaryDirectory.appending(path: "imaxe-svg-with-paint-server.svg")
     let svg = """
     <svg width="100%" height="100%" viewBox="0 0 4267 4267" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -108,6 +107,21 @@ struct ImaxeTests {
     let secondImage = try await ImageLoader.shared.loadImage(from: url)
 
     #expect(firstImage === secondImage)
+  }
+
+  @Test func `image loader reports missing files as file not found`() async throws {
+    let url = URL.temporaryDirectory.appending(path: "imaxe-missing-image-\(UUID().uuidString).png")
+
+    do {
+      _ = try await ImageLoader.shared.loadImage(from: url)
+      Issue.record("Expected loading a missing image to throw.")
+    } catch let error as ImageLoadingError {
+      if case let .fileNotFound(missingURL) = error {
+        #expect(missingURL == url)
+      } else {
+        Issue.record("Expected fileNotFound, got \(error).")
+      }
+    }
   }
 
   @Test func `image loader cancellation does not poison later loads`() async throws {
@@ -192,6 +206,28 @@ struct ImaxeTests {
     #expect(!coordinator.hasPendingCommands)
     #expect(scrollView.magnification.isApproximatelyEqual(to: 0.5))
     #expect(reportedZoomScale?.isApproximatelyEqual(to: 0.5) == true)
+  }
+
+  @Test func `restoring standard window buttons shows hidden titlebar controls`() {
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let session = ImageSession()
+
+    session.bindWindow(window)
+
+    #expect(window.standardWindowButton(.closeButton)?.isHidden == true)
+    #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == true)
+    #expect(window.standardWindowButton(.zoomButton)?.isHidden == true)
+
+    session.restoreStandardWindowButtons()
+
+    #expect(window.standardWindowButton(.closeButton)?.isHidden == false)
+    #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == false)
+    #expect(window.standardWindowButton(.zoomButton)?.isHidden == false)
   }
 
   @Test func `folder navigator starts with current image and load asynchronously`() async throws {
@@ -301,6 +337,90 @@ struct ImaxeTests {
 
     try RecentImagesStore.remove(path: url.filePath, in: context)
     #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+  }
+
+  @Test func `missing recent images are pruned with thumbnail cache`() throws {
+    let container = try ModelContainer(
+      for: RecentImage.self,
+      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+    )
+    let context = ModelContext(container)
+    let existingURL = URL.temporaryDirectory
+      .appending(path: "imaxe-existing-recent-\(UUID().uuidString).png")
+    let missingURL = URL.temporaryDirectory
+      .appending(path: "imaxe-pruned-recent-\(UUID().uuidString).png")
+    defer {
+      try? FileManager.default.removeItem(at: existingURL)
+      try? FileManager.default.removeItem(at: missingURL)
+    }
+
+    try pngData(width: 80, height: 40).write(to: existingURL)
+    try pngData(width: 80, height: 40).write(to: missingURL)
+    try RecentImagesStore.recordOpened(
+      existingURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 1),
+    )
+    try RecentImagesStore.recordOpened(
+      missingURL,
+      in: context,
+      openedAt: Date(timeIntervalSince1970: 2),
+    )
+
+    var missingDescriptor = FetchDescriptor<RecentImage>(
+      predicate: #Predicate<RecentImage> { recentImage in
+        recentImage.path == missingURL.filePath
+      },
+    )
+    missingDescriptor.fetchLimit = 1
+    let missingRecent = try #require(context.fetch(missingDescriptor).first)
+    let missingThumbnailKey = try #require(missingRecent.thumbnailCacheKey)
+    let missingThumbnailURL = ImageThumbnailCache.thumbnailURL(for: missingThumbnailKey)
+    try FileManager.default.removeItem(at: missingURL)
+
+    let removedCount = try RecentImagesStore.removeMissingFiles(in: context)
+
+    let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+    #expect(removedCount == 1)
+    #expect(recentImages.map(\.path) == [existingURL.filePath])
+    #expect(!FileManager.default.fileExists(atPath: missingThumbnailURL.fileSystemPath))
+
+    try RecentImagesStore.clear(in: context)
+  }
+
+  @Test func `opening missing recent image removes recent item and thumbnail cache`() async throws {
+    let container = try ModelContainer(
+      for: RecentImage.self,
+      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+    )
+    let context = ModelContext(container)
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-missing-recent-\(UUID().uuidString).png")
+    try pngData(width: 80, height: 40).write(to: url)
+    try RecentImagesStore.recordOpened(url, in: context)
+
+    let descriptor = FetchDescriptor<RecentImage>()
+    let recent = try #require(context.fetch(descriptor).first)
+    let thumbnailKey = try #require(recent.thumbnailCacheKey)
+    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+    try FileManager.default.removeItem(at: url)
+
+    let session = ImageSession()
+    session.removeRecentImage = { path in
+      try RecentImagesStore.remove(path: path, in: context)
+    }
+    session.openRecentImage(recent)
+
+    for _ in 0 ..< 20 {
+      if try context.fetch(descriptor).isEmpty {
+        break
+      }
+      await Task.yield()
+    }
+
+    #expect(try context.fetch(descriptor).isEmpty)
+    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+    #expect(session.alert?.title == "Recent Image Removed")
   }
 
   @Test func `thumbnail cache total size sums regular files`() throws {

@@ -50,7 +50,8 @@ final class ImageSession {
   @ObservationIgnored private var folderLoadTask: Task<Void, Never>?
   @ObservationIgnored private var activeImageLoad = ImageLoadOperation()
   @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
-  @ObservationIgnored var recordRecentImage: ((URL) -> Void)?
+  @ObservationIgnored var recordRecentImage: ((URL) throws -> Void)?
+  @ObservationIgnored var removeRecentImage: ((String) throws -> Void)?
 
   init(imageContainer: ImageContainer? = nil) {
     if let imageContainer {
@@ -102,6 +103,13 @@ final class ImageSession {
     if !showTopBar {
       window.setStandardButtonsVisibility(to: false)
     }
+  }
+
+  func restoreStandardWindowButtons() {
+    topBarHideTask?.cancel()
+    topBarHideTask = nil
+    showTopBar = false
+    owningWindow?.setStandardButtonsVisibility(to: true)
   }
 
   private func applyTopBarVisibility(_ isVisible: Bool) {
@@ -213,6 +221,14 @@ final class ImageSession {
     loadImage(from: folderNavigator.currentImageURL)
   }
 
+  func openRecentImage(_ recentImage: RecentImage) {
+    loadImage(
+      from: recentImage.url,
+      failureTitle: "Failed to Open Recent Image",
+      recentImagePathToRemoveOnFileNotFound: recentImage.path,
+    )
+  }
+
   func navigateToPreviousImage() {
     let success = folderNavigator?.moveToPrevious() ?? false
     if success {
@@ -232,6 +248,7 @@ final class ImageSession {
     failureTitle: String? = nil,
     addToRecent: Bool = true,
     preservingViewportOnReload: Bool = false,
+    recentImagePathToRemoveOnFileNotFound: String? = nil,
   ) {
     let previousImage = currentImage
     let previousImageInfo = currentImageInfo
@@ -297,7 +314,14 @@ final class ImageSession {
             currentImage = imageContainer
             updateImageFileWatcher()
             if addToRecent {
-              recordRecentImage?(url)
+              do {
+                try recordRecentImage?(url)
+              } catch {
+                alert = ImageAlert(
+                  title: "Failed to Update Recent Images",
+                  message: error.localizedDescription,
+                )
+              }
             }
 
           case let .image(.failure(error)):
@@ -307,9 +331,11 @@ final class ImageSession {
             currentImageInfo = previousImageInfo
             folderNavigator = previousFolderNavigator
             updateImageFileWatcher()
-            alert = ImageAlert(
-              title: failureTitle ?? "Failed to Load Image",
-              message: error.localizedDescription,
+            handleImageLoadFailure(
+              error,
+              url: url,
+              failureTitle: failureTitle,
+              recentImagePathToRemoveOnFileNotFound: recentImagePathToRemoveOnFileNotFound,
             )
             return
           }
@@ -325,6 +351,54 @@ final class ImageSession {
 
   private final class ImageLoadOperation {
     let requestID = ImageLoader.LoadRequestID()
+  }
+
+  private func handleImageLoadFailure(
+    _ error: Error,
+    url: URL,
+    failureTitle: String?,
+    recentImagePathToRemoveOnFileNotFound: String?,
+  ) {
+    if let recentImagePathToRemoveOnFileNotFound, Self.isFileNotFound(error) {
+      guard let removeRecentImage else {
+        alert = ImageAlert(
+          title: "Recent Image Missing",
+          message: "The file no longer exists:\n\(url.fileSystemPath)",
+        )
+        return
+      }
+
+      do {
+        try removeRecentImage(recentImagePathToRemoveOnFileNotFound)
+        alert = ImageAlert(
+          title: "Recent Image Removed",
+          message: "The file no longer exists and was removed from Recent Images:\n\(url.fileSystemPath)",
+        )
+      } catch {
+        alert = ImageAlert(
+          title: "Failed to Remove Recent Image",
+          message: error.localizedDescription,
+        )
+      }
+      return
+    }
+
+    alert = ImageAlert(
+      title: failureTitle ?? "Failed to Load Image",
+      message: error.localizedDescription,
+    )
+  }
+
+  private static func isFileNotFound(_ error: Error) -> Bool {
+    guard let imageLoadingError = error as? ImageLoadingError else {
+      return false
+    }
+
+    if case .fileNotFound = imageLoadingError {
+      return true
+    }
+
+    return false
   }
 
   private func cancelCurrentImageLoad() {

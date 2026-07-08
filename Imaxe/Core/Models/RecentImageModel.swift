@@ -110,6 +110,38 @@ enum RecentImagesStore {
     }
   }
 
+  @discardableResult
+  static func removeMissingFiles(in modelContext: ModelContext) throws -> Int {
+    let descriptor = FetchDescriptor<RecentImage>()
+    let recentImages = try modelContext.fetch(descriptor)
+    var thumbnailKeysToCleanup = Set<String>()
+    var removedCount = 0
+
+    for recentImage in recentImages where !recentImage.url.fileExists {
+      if let thumbnailCacheKey = recentImage.thumbnailCacheKey {
+        thumbnailKeysToCleanup.insert(thumbnailCacheKey)
+      }
+      modelContext.delete(recentImage)
+      removedCount += 1
+    }
+
+    guard removedCount > 0 else { return 0 }
+
+    try modelContext.save()
+    try LibraryThumbnailReferences.removeThumbnailsIfUnused(
+      thumbnailKeysToCleanup,
+      in: modelContext,
+    )
+    return removedCount
+  }
+
+  static func fetchRecentImages(in modelContext: ModelContext) throws -> [RecentImage] {
+    let descriptor = FetchDescriptor<RecentImage>(
+      sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
+    )
+    return try modelContext.fetch(descriptor)
+  }
+
   static func updateLocation(
     from oldPath: String,
     to url: URL,

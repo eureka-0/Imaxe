@@ -25,15 +25,16 @@ struct ContentView: View {
   @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue)
   private var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange
 
+  private var isShowingImageInterface: Bool {
+    imageSession.currentImage != nil || imageSession.isLoading
+  }
+
   var body: some View {
     Group {
-      if imageSession.currentImage != nil || imageSession.isLoading {
+      if isShowingImageInterface {
         ImageView(imageSession: imageSession)
       } else {
-        HomeView(
-          imageSession: imageSession,
-          recentImages: recentImages,
-        )
+        HomeView(imageSession: imageSession)
       }
     }
     .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
@@ -51,16 +52,15 @@ struct ContentView: View {
       imageSession.enableLoopBrowsing = enableLoopBrowsing
       imageSession.actionOnImageFileChange = actionOnImageFileChange
       imageSession.recordRecentImage = { url in
-        try? RecentImagesStore.recordOpened(url, in: modelContext)
+        try RecentImagesStore.recordOpened(url, in: modelContext)
       }
-      imageSession.recentImages = Array(
-        recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu),
-      )
+      imageSession.removeRecentImage = { path in
+        try RecentImagesStore.remove(path: path, in: modelContext)
+      }
+      refreshRecentImages()
     }
     .onChange(of: recentImages) { _, newValue in
-      imageSession.recentImages = Array(
-        newValue.prefix(Constants.maximumRecentImagesToDisplayInMenu),
-      )
+      imageSession.recentImages = newValue
     }
     .onChange(of: topBarHideDelay) { _, newValue in
       imageSession.topBarHideDelay = newValue
@@ -70,6 +70,11 @@ struct ContentView: View {
     }
     .onChange(of: actionOnImageFileChange) { _, newValue in
       imageSession.actionOnImageFileChange = newValue
+    }
+    .onChange(of: isShowingImageInterface) { _, newValue in
+      if !newValue {
+        imageSession.restoreStandardWindowButtons()
+      }
     }
     .fileImporter(
       isPresented: $imageSession.isImporterPresented,
@@ -89,6 +94,23 @@ struct ContentView: View {
     }
     .onOpenURL { url in
       imageSession.loadImage(from: url)
+    }
+  }
+
+  private func refreshRecentImages() {
+    do {
+      let removedCount = try RecentImagesStore.removeMissingFiles(in: modelContext)
+      if removedCount > 0 {
+        imageSession.recentImages = try RecentImagesStore.fetchRecentImages(in: modelContext)
+      } else {
+        imageSession.recentImages = recentImages
+      }
+    } catch {
+      imageSession.recentImages = recentImages
+      imageSession.alert = ImageAlert(
+        title: "Failed to Refresh Recent Images",
+        message: error.localizedDescription,
+      )
     }
   }
 }

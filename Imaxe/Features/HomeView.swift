@@ -18,7 +18,6 @@ private struct HomeOperationAlert: Identifiable {
 
 struct HomeView: View {
   @Bindable var imageSession: ImageSession
-  let recentImages: [RecentImage]
 
   @AppStorage("recentImagesViewMode")
   private var recentImagesViewModeRawValue = ImageCollectionViewMode.grid.rawValue
@@ -166,7 +165,7 @@ struct HomeView: View {
 
   private var recentImagesCollection: some View {
     ImageCollectionView(
-      recentImages,
+      imageSession.recentImages,
       configuration: imageCollectionConfiguration,
       listRow: recentImageListRow,
       gridItem: recentImageGridItem,
@@ -234,7 +233,7 @@ struct HomeView: View {
     .background(state.isHovered ? Color.primary.opacity(0.07) : .clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .onTapGesture(count: 2) {
-      imageSession.loadImage(from: item.url)
+      openRecentImage(item)
     }
   }
 
@@ -258,7 +257,7 @@ struct HomeView: View {
         }
       }
       .onTapGesture(count: 1) {
-        imageSession.loadImage(from: item.url)
+        openRecentImage(item)
       }
       .help(item.path)
   }
@@ -266,7 +265,7 @@ struct HomeView: View {
   @ViewBuilder
   private func recentImageActionsMenu(_ item: RecentImage) -> some View {
     Button("Open", systemImage: "photo") {
-      imageSession.loadImage(from: item.url)
+      openRecentImage(item)
     }
 
     Button("Rename", systemImage: "pencil") {
@@ -286,6 +285,10 @@ struct HomeView: View {
     Button("Reveal in Finder", systemImage: "folder") {
       imageSession.revealInFinder(for: [item.url])
     }
+  }
+
+  private func openRecentImage(_ item: RecentImage) {
+    imageSession.openRecentImage(item)
   }
 
   private func fileRenameSheet(for item: RecentImage) -> some View {

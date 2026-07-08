@@ -7,15 +7,28 @@
 
 import SwiftUI
 
-struct MaterialSegmentedPicker<SelectionItem: Hashable, Content: View>: View {
-  @Binding var selection: SelectionItem
-  let items: [SelectionItem]
-  let content: (SelectionItem) -> Content
+struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeStyle>: View {
+  @Binding var selection: Item
+  let items: [Item]
+  let content: (Item) -> Content
+  var background: Background
 
   @Environment(\.appearsActive) private var appearsActive
 
   /// Namespace for matched geometry effect, used for the sliding background animation.
   @Namespace private var pickerTransition
+
+  init(
+    _ selection: Binding<Item>,
+    items: [Item],
+    background: Background = .regularMaterial,
+    @ViewBuilder content: @escaping (Item) -> Content,
+  ) {
+    _selection = selection
+    self.items = items
+    self.content = content
+    self.background = background
+  }
 
   var body: some View {
     HStack(spacing: -4) {
@@ -46,6 +59,6 @@ struct MaterialSegmentedPicker<SelectionItem: Hashable, Content: View>: View {
       }
     }
     .padding(2)
-    .background(.regularMaterial, in: .capsule)
+    .background(background, in: .capsule)
   }
 }
