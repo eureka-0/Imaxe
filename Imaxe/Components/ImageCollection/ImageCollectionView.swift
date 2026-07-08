@@ -35,6 +35,7 @@ enum ImageCollectionViewMode: String, CaseIterable, Identifiable {
 @Observable
 final class ImageCollectionItemState {
   var isHovered = false
+  var searchText = ""
 }
 
 struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable {
@@ -80,6 +81,10 @@ private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: 
 
   @ObservationIgnored var searchableText: ((Item) -> String)?
 
+  private var effectiveSearchText: String {
+    searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
   func update(from configuration: ImageCollectionConfiguration<Item>) {
     selectedSortOption = configuration.defaultSortOption
     viewMode = configuration.defaultViewMode
@@ -90,6 +95,7 @@ private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: 
   }
 
   func visibleItems(from items: [Item]) -> [Item] {
+    let searchText = effectiveSearchText
     let filteredItems = if let searchableText, !searchText.isEmpty {
       items.filter {
         searchableText($0).localizedStandardContains(searchText)
@@ -157,13 +163,20 @@ private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: 
   }
 
   func state(for item: Item) -> ImageCollectionItemState {
-    if let state = itemStates[item.id] {
-      return state
+    let state: ImageCollectionItemState
+    if let existingState = itemStates[item.id] {
+      state = existingState
     } else {
       let newState = ImageCollectionItemState()
       itemStates[item.id] = newState
-      return newState
+      state = newState
     }
+
+    let searchText = searchableText == nil ? "" : effectiveSearchText
+    if state.searchText != searchText {
+      state.searchText = searchText
+    }
+    return state
   }
 
   func pruneItemStates(from itemIDs: [Item.ID]) {
