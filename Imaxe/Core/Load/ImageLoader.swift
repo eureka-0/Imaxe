@@ -127,12 +127,8 @@ actor ImageLoader {
     supportedImageExtensions.joined(separator: ", ")
   }
 
-  nonisolated static func getUTType(for url: URL) -> UTType? {
-    UTType(filenameExtension: url.pathExtension)
-  }
-
   nonisolated static func isSupportedImage(_ url: URL) -> Bool {
-    guard let fileType = getUTType(for: url) else {
+    guard let fileType = url.utType else {
       return false
     }
 
@@ -239,7 +235,7 @@ actor ImageLoader {
     let loadTaskID = UUID()
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageContainer in
       try Task.checkCancellation()
-      let imageContainer: ImageContainer? = if Self.getUTType(for: url) == .svg {
+      let imageContainer: ImageContainer? = if url.utType == .svg {
         Self.loadSVG(from: url)
       } else {
         Self.loadBitmap(from: url)

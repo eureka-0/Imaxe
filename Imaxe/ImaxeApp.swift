@@ -17,7 +17,7 @@ struct ImaxeApp: App {
 
   init() {
     do {
-      let modelFileURL = FileManager.default.dataDirectory.appendingPathComponent("database.sqlite")
+      let modelFileURL = URL.dataDirectory.appendingPathComponent("database.sqlite")
 
       #if DEBUG
         debugPrint("Model file URL: \(modelFileURL.fileSystemPath)")

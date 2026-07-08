@@ -73,6 +73,22 @@ struct ImaxeTests {
     #expect(bitmapRep.pixelsHigh == 853)
   }
 
+  @Test func `thumbnail cache generates svg thumbnail`() throws {
+    let url = sampleImageURL("sample_1280×853.svg")
+
+    let thumbnailKey = try #require(ImageThumbnailCache.ensureThumbnail(for: url))
+    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+    let thumbnailImage = try #require(NSImage(contentsOf: thumbnailURL))
+    let bitmapRep = try #require(thumbnailImage.representations.first as? NSBitmapImageRep)
+
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+    #expect(max(bitmapRep.pixelsWide, bitmapRep.pixelsHigh) <= ImageThumbnailCache.maxPixelSize)
+    #expect(bitmapRep.pixelsWide > 0)
+    #expect(bitmapRep.pixelsHigh > 0)
+    let thumbnailAspectRatio = CGFloat(bitmapRep.pixelsWide) / CGFloat(bitmapRep.pixelsHigh)
+    #expect(abs(thumbnailAspectRatio - 1280.0 / 853.0) < 0.02)
+  }
+
   @Test func `complex SVG rasterizes to bitmap`() async throws {
     let url = URL.temporaryDirectory.appending(path: "imaxe-svg-with-paint-server.svg")
     let svg = """

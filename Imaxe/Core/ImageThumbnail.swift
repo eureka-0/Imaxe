@@ -8,7 +8,9 @@
 import CryptoKit
 import Foundation
 import ImageIO
+import QuickLookThumbnailing
 import SwiftData
+import Synchronization
 import UniformTypeIdentifiers
 
 enum LibraryThumbnailReferences {
@@ -53,19 +55,16 @@ nonisolated enum ImageThumbnailCache {
 
   private static let cacheVersion = "v1"
 
-  static var cacheDirectory: URL {
-    FileManager.default.cachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
-  }
-
   /// Ensures that a thumbnail exists for the given image URL. If a thumbnail already exists in the
   /// cache, it returns the cache key. If not, it generates a new thumbnail, saves it to the cache,
   /// and returns the new cache key. Returns `nil` if the thumbnail cannot be created.
   static func ensureThumbnail(for url: URL) -> String? {
     let sourceURL = url.freshFileURL
-    guard sourceURL.isFileURL,
-          !sourceURL.isDirectory,
+    guard sourceURL.isFileURL, !sourceURL.isDirectory,
           ImageLoader.isSupportedImage(sourceURL)
-    else { return nil }
+    else {
+      return nil
+    }
 
     let key = thumbnailCacheKey(for: sourceURL)
     let outputURL = thumbnailURL(for: key)
@@ -74,10 +73,6 @@ nonisolated enum ImageThumbnailCache {
     }
 
     do {
-      try FileManager.default.createDirectory(
-        at: cacheDirectory,
-        withIntermediateDirectories: true,
-      )
       try writeThumbnail(from: sourceURL, to: outputURL)
       return key
     } catch {
@@ -87,7 +82,7 @@ nonisolated enum ImageThumbnailCache {
   }
 
   static func thumbnailURL(for key: String) -> URL {
-    cacheDirectory.appendingPathComponent("\(key).png", isDirectory: false)
+    URL.thumbnailCachesDirectory.appendingPathComponent("\(key).png", isDirectory: false)
   }
 
   static func removeThumbnail(for key: String) throws {
@@ -99,7 +94,7 @@ nonisolated enum ImageThumbnailCache {
 
   static func totalCacheSizeInBytes() -> Int64 {
     guard let fileEnumerator = FileManager.default.enumerator(
-      at: cacheDirectory,
+      at: URL.thumbnailCachesDirectory,
       includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
     ) else {
       return 0
@@ -139,6 +134,15 @@ nonisolated enum ImageThumbnailCache {
   }
 
   private static func writeThumbnail(from sourceURL: URL, to outputURL: URL) throws {
+    if sourceURL.utType == .svg {
+      try writeQuickLookThumbnail(from: sourceURL, to: outputURL)
+      return
+    }
+
+    try writeImageIOThumbnail(from: sourceURL, to: outputURL)
+  }
+
+  private static func writeImageIOThumbnail(from sourceURL: URL, to outputURL: URL) throws {
     let sourceOptions = [
       kCGImageSourceShouldCache: false,
     ] as CFDictionary
@@ -172,10 +176,48 @@ nonisolated enum ImageThumbnailCache {
     }
   }
 
+  private static func writeQuickLookThumbnail(from sourceURL: URL, to outputURL: URL) throws {
+    let request = QLThumbnailGenerator.Request(
+      fileAt: sourceURL,
+      size: CGSize(width: maxPixelSize, height: maxPixelSize),
+      scale: 1,
+      representationTypes: .thumbnail,
+    )
+    request.iconMode = false
+    request.contentType = .svg
+
+    let generationError = Mutex<Error?>(nil)
+    let semaphore = DispatchSemaphore(value: 0)
+    QLThumbnailGenerator.shared.saveBestRepresentation(
+      for: request,
+      to: outputURL,
+      as: .png,
+    ) { error in
+      generationError.withLock {
+        $0 = error
+      }
+      semaphore.signal()
+    }
+
+    if semaphore.wait(timeout: .now() + .seconds(10)) == .timedOut {
+      QLThumbnailGenerator.shared.cancel(request)
+      throw ThumbnailCacheError.quickLookGenerationTimedOut
+    }
+
+    if let error = generationError.withLock({ $0 }) {
+      throw error
+    }
+
+    guard outputURL.fileExists else {
+      throw ThumbnailCacheError.failedToWriteThumbnail
+    }
+  }
+
   private enum ThumbnailCacheError: Error {
     case failedToCreateImageSource
     case failedToCreateThumbnail
     case failedToCreateDestination
     case failedToWriteThumbnail
+    case quickLookGenerationTimedOut
   }
 }

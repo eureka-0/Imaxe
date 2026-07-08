@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Functions
 
@@ -203,56 +204,6 @@ extension Date {
 // MARK: - FileManager extensions.
 
 nonisolated extension FileManager {
-  var tempDirectory: URL? {
-    try? url(
-      for: .itemReplacementDirectory,
-      in: .userDomainMask,
-      appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-      create: true,
-    )
-  }
-
-  var cachesDirectory: URL {
-    (
-      urls(for: .cachesDirectory, in: .userDomainMask).first ?? URL(
-        fileURLWithPath: NSTemporaryDirectory(),
-        isDirectory: true,
-      ),
-    ).appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
-  }
-
-  var applicationSupportDirectory: URL {
-    guard let appSupportURL = urls(
-      for: .applicationSupportDirectory,
-      in: .userDomainMask,
-    ).first else {
-      fatalError("Unable to locate Application Support directory.")
-    }
-
-    return appSupportURL
-  }
-
-  var dataDirectory: URL {
-    #if DEBUG
-      let directoryName = "Imaxe Debug"
-    #else
-      let directoryName = "Imaxe"
-    #endif
-
-    let url = applicationSupportDirectory.appendingPathComponent(
-      "\(directoryName)",
-      isDirectory: true,
-    )
-
-    do {
-      try ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create data directory: \(error)")
-    }
-
-    return url
-  }
-
   func ensureExists(for directoryURL: URL) throws {
     try createDirectory(
       at: directoryURL,
@@ -453,9 +404,60 @@ extension NSWindow {
 // MARK: - URL extensions.
 
 nonisolated extension URL {
+  static var dataDirectory: URL {
+    #if DEBUG
+      let directoryName = "Imaxe Debug"
+    #else
+      let directoryName = "Imaxe"
+    #endif
+
+    let url = Self.applicationSupportDirectory.appendingPathComponent(
+      directoryName,
+      isDirectory: true,
+    )
+
+    do {
+      try FileManager.default.ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create data directory: \(error)")
+    }
+
+    return url
+  }
+
+  static var appCachesDirectory: URL {
+    let url = Self.cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
+
+    do {
+      try FileManager.default.ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create caches directory: \(error)")
+    }
+
+    return url
+  }
+
+  static var thumbnailCachesDirectory: URL {
+    let url = Self.appCachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
+
+    do {
+      try FileManager.default.ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create thumbnail cache directory: \(error)")
+    }
+
+    return url
+  }
+
   /// Returns the file system path without percent encoding.
   var fileSystemPath: String {
     path(percentEncoded: false)
+  }
+
+  var utType: UTType? {
+    guard isFileURL else { return nil }
+
+    return UTType(filenameExtension: pathExtension)
   }
 
   var freshFileURL: URL {

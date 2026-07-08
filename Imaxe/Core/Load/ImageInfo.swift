@@ -40,8 +40,7 @@ nonisolated struct ImageInfo: Hashable {
     self.url = newURL
     fileName = newURL.lastPathComponent
     fileSize = newURL.fileSize
-
-    type = ImageLoader.getUTType(for: newURL)
+    type = newURL.utType
 
     let properties = Self.getImageProperties(from: newURL)
     let imagePixelSize = Self.getImagePixelSize(from: properties)
@@ -94,7 +93,7 @@ nonisolated struct ImageInfo: Hashable {
   }
 
   private nonisolated static func getSVGPixelSize(from url: URL) -> IntSize? {
-    guard ImageLoader.getUTType(for: url) == .svg,
+    guard url.utType == .svg,
           let svgString = try? String(contentsOf: url, encoding: .utf8),
           let documentSize = SVGDocumentSize(svgString: svgString).bestSize
     else { return nil }

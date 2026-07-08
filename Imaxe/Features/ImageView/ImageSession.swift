@@ -162,19 +162,15 @@ final class ImageSession {
     if let imageType = pasteboard.availableType(from: [.fileURL, .URL, .png, .tiff]) {
       switch imageType {
       case .fileURL:
-        if let fileURLString = pasteboard.string(forType: .fileURL),
-           let fileURL = URL(string: fileURLString)
-        {
+        if let fileURLString = pasteboard.string(forType: .fileURL) {
           loadImage(
-            from: fileURL,
+            from: URL(fileURLWithPath: fileURLString),
             failureTitle: "Failed to Load Image from Pasteboard",
             addToRecent: false,
           )
         }
       case .URL:
-        if let urlString = pasteboard.string(forType: .URL),
-           let url = URL(string: urlString)
-        {
+        if let urlString = pasteboard.string(forType: .URL), let url = URL(string: urlString) {
           loadImage(
             from: url,
             failureTitle: "Failed to Load Image from Pasteboard",
@@ -182,10 +178,8 @@ final class ImageSession {
           )
         }
       case .png, .tiff:
-        if let data = pasteboard.data(forType: imageType),
-           let tempDirectory = FileManager.default.tempDirectory
-        {
-          let tempFileURL = tempDirectory.appendingPathComponent(UUID().uuidString)
+        if let data = pasteboard.data(forType: imageType) {
+          let tempFileURL = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(imageType == .png ? "png" : "tiff")
           do {
             try data.write(to: tempFileURL)
