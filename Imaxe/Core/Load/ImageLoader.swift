@@ -17,11 +17,11 @@ enum ImageLoadingError: Error, LocalizedError {
     switch self {
     case let .unsupportedImageType(url):
       """
-      Unsupported image type for: \(url.path).
+      Unsupported image type for: \(url.fileSystemPath).
       Supported types: \(ImageLoader.supportedImageExtensionsDescription).
       """
     case let .failedToLoad(url):
-      "Failed to load image from URL: \(url.path)"
+      "Failed to load image from URL: \(url.fileSystemPath)"
     }
   }
 }
@@ -29,27 +29,27 @@ enum ImageLoadingError: Error, LocalizedError {
 actor ImageLoader {
   private final nonisolated class ImageInfoBox {
     let info: ImageInfo
-    let fileSignature: ImageFileSignature
+    let fileSnapshot: FileSnapshot
 
-    init(info: ImageInfo, fileSignature: ImageFileSignature) {
+    init(info: ImageInfo, fileSnapshot: FileSnapshot) {
       self.info = info
-      self.fileSignature = fileSignature
+      self.fileSnapshot = fileSnapshot
     }
   }
 
   private final nonisolated class ImageContainerBox {
     let imageContainer: ImageContainer
-    let fileSignature: ImageFileSignature
+    let fileSnapshot: FileSnapshot
 
-    init(imageContainer: ImageContainer, fileSignature: ImageFileSignature) {
+    init(imageContainer: ImageContainer, fileSnapshot: FileSnapshot) {
       self.imageContainer = imageContainer
-      self.fileSignature = fileSignature
+      self.fileSnapshot = fileSnapshot
     }
   }
 
   private struct ImageInfoLoadTask {
     let id: UUID
-    let fileSignature: ImageFileSignature
+    let fileSnapshot: FileSnapshot
     let task: Task<ImageInfo, Error>
     var requestIDs: Set<LoadRequestID>
     var uncancellableWaiterCount: Int
@@ -61,7 +61,7 @@ actor ImageLoader {
 
   private struct ImageContainerLoadTask {
     let id: UUID
-    let fileSignature: ImageFileSignature
+    let fileSnapshot: FileSnapshot
     let task: Task<ImageContainer, Error>
     var requestIDs: Set<LoadRequestID>
     var uncancellableWaiterCount: Int
@@ -73,20 +73,6 @@ actor ImageLoader {
 
   nonisolated struct LoadRequestID: Hashable {
     private let value = UUID()
-  }
-
-  nonisolated struct ImageFileSignature: Equatable {
-    let contentModificationDate: Date?
-    let fileSize: Int?
-
-    init?(url: URL) {
-      guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else {
-        return nil
-      }
-
-      contentModificationDate = attributes[.modificationDate] as? Date
-      fileSize = (attributes[.size] as? NSNumber)?.intValue
-    }
   }
 
   static let shared = ImageLoader()
@@ -155,13 +141,13 @@ actor ImageLoader {
       throw ImageLoadingError.unsupportedImageType(url)
     }
 
-    guard let fileSignature = ImageFileSignature(url: url) else {
+    guard let fileSnapshot = FileSnapshot(url: url) else {
       throw ImageLoadingError.failedToLoad(url)
     }
 
     let cacheKey = url as NSURL
     if let cachedInfo = infoCache.object(forKey: cacheKey) {
-      if cachedInfo.fileSignature == fileSignature {
+      if cachedInfo.fileSnapshot == fileSnapshot {
         return cachedInfo.info
       }
 
@@ -169,11 +155,11 @@ actor ImageLoader {
     }
 
     if let existingTask = infoLoadTasks[url] {
-      if existingTask.fileSignature == fileSignature {
+      if existingTask.fileSnapshot == fileSnapshot {
         registerInfoWaiter(requestID, for: url)
         let info = try await value(of: existingTask.task, requestID: requestID)
         try Task.checkCancellation()
-        cacheInfo(info, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
+        cacheInfo(info, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
         return info
       }
 
@@ -190,7 +176,7 @@ actor ImageLoader {
     }
     infoLoadTasks[url] = ImageInfoLoadTask(
       id: loadTaskID,
-      fileSignature: fileSignature,
+      fileSnapshot: fileSnapshot,
       task: task,
       requestIDs: requestID.map { [$0] } ?? [],
       uncancellableWaiterCount: requestID == nil ? 1 : 0,
@@ -202,7 +188,7 @@ actor ImageLoader {
         infoLoadTasks[url] = nil
       }
       try Task.checkCancellation()
-      cacheInfo(info, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
+      cacheInfo(info, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
       return info
     } catch {
       if shouldRemoveInfoTask(at: url, id: loadTaskID, after: error) {
@@ -217,13 +203,13 @@ actor ImageLoader {
       throw ImageLoadingError.unsupportedImageType(url)
     }
 
-    guard let fileSignature = ImageFileSignature(url: url) else {
+    guard let fileSnapshot = FileSnapshot(url: url) else {
       throw ImageLoadingError.failedToLoad(url)
     }
 
     let cacheKey = url as NSURL
     if let cachedImage = imageCache.object(forKey: cacheKey) {
-      if cachedImage.fileSignature == fileSignature {
+      if cachedImage.fileSnapshot == fileSnapshot {
         return cachedImage.imageContainer
       }
 
@@ -231,11 +217,11 @@ actor ImageLoader {
     }
 
     if let existingTask = imageLoadTasks[url] {
-      if existingTask.fileSignature == fileSignature {
+      if existingTask.fileSnapshot == fileSnapshot {
         registerImageWaiter(requestID, for: url)
         let imageContainer = try await value(of: existingTask.task, requestID: requestID)
         try Task.checkCancellation()
-        cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
+        cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
         return imageContainer
       }
 
@@ -261,7 +247,7 @@ actor ImageLoader {
     }
     imageLoadTasks[url] = ImageContainerLoadTask(
       id: loadTaskID,
-      fileSignature: fileSignature,
+      fileSnapshot: fileSnapshot,
       task: task,
       requestIDs: requestID.map { [$0] } ?? [],
       uncancellableWaiterCount: requestID == nil ? 1 : 0,
@@ -273,7 +259,7 @@ actor ImageLoader {
         imageLoadTasks[url] = nil
       }
       try Task.checkCancellation()
-      cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSignature: fileSignature)
+      cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
       return imageContainer
     } catch {
       if shouldRemoveImageTask(at: url, id: loadTaskID, after: error) {
@@ -331,11 +317,11 @@ actor ImageLoader {
     _ info: ImageInfo,
     for url: URL,
     cacheKey: NSURL,
-    fileSignature: ImageFileSignature,
+    fileSnapshot: FileSnapshot,
   ) {
-    if ImageFileSignature(url: url) == fileSignature {
+    if FileSnapshot(url: url) == fileSnapshot {
       infoCache.setObject(
-        ImageInfoBox(info: info, fileSignature: fileSignature),
+        ImageInfoBox(info: info, fileSnapshot: fileSnapshot),
         forKey: cacheKey,
       )
     }
@@ -345,11 +331,11 @@ actor ImageLoader {
     _ imageContainer: ImageContainer,
     for url: URL,
     cacheKey: NSURL,
-    fileSignature: ImageFileSignature,
+    fileSnapshot: FileSnapshot,
   ) {
-    if ImageFileSignature(url: url) == fileSignature {
+    if FileSnapshot(url: url) == fileSnapshot {
       imageCache.setObject(
-        ImageContainerBox(imageContainer: imageContainer, fileSignature: fileSignature),
+        ImageContainerBox(imageContainer: imageContainer, fileSnapshot: fileSnapshot),
         forKey: cacheKey,
         cost: imageContainer.cacheCost,
       )

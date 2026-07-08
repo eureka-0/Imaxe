@@ -175,12 +175,7 @@ final class ImageSession {
         }
       case .png, .tiff:
         if let data = pasteboard.data(forType: imageType),
-           let tempDirectory = try? FileManager.default.url(
-             for: .itemReplacementDirectory,
-             in: .userDomainMask,
-             appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
-             create: true,
-           )
+           let tempDirectory = FileManager.default.tempDirectory
         {
           let tempFileURL = tempDirectory.appendingPathComponent(UUID().uuidString)
             .appendingPathExtension(imageType == .png ? "png" : "tiff")

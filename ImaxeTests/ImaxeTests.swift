@@ -6,11 +6,10 @@
 //
 
 import AppKit
+@testable import Imaxe
 import SwiftData
 import SwiftUI
 import Testing
-
-@testable import Imaxe
 
 @MainActor
 struct ImaxeTests {
@@ -138,7 +137,7 @@ struct ImaxeTests {
     try pngData(width: 12, height: 24).write(to: url)
     try FileManager.default.setAttributes(
       [.modificationDate: Date(timeIntervalSinceNow: 2)],
-      ofItemAtPath: url.path,
+      ofItemAtPath: url.fileSystemPath,
     )
 
     let secondImage = try await ImageLoader.shared.loadImage(from: url)
@@ -228,7 +227,7 @@ struct ImaxeTests {
         try? changedImageData.write(to: url)
         try? FileManager.default.setAttributes(
           [.modificationDate: Date(timeIntervalSinceNow: 2)],
-          ofItemAtPath: url.path,
+          ofItemAtPath: url.fileSystemPath,
         )
       }
     }
@@ -298,10 +297,10 @@ struct ImaxeTests {
     ])
     #expect((resourceValues.fileSize ?? 0) > 0)
     #expect(resourceValues.contentModificationDate != nil)
-    #expect(FileManager.default.fileExists(atPath: thumbnailURL.path))
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
 
     try RecentImagesStore.remove(path: url.filePath, in: context)
-    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.path))
+    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
   }
 
   @Test func `thumbnail cache total size sums regular files`() throws {

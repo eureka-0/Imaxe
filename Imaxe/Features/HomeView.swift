@@ -84,7 +84,7 @@ struct HomeView: View {
         deleteTargetURL = nil
       }
     } message: {
-      Text(deleteTargetURL?.path ?? "")
+      Text(deleteTargetURL?.fileSystemPath ?? "")
     }
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
@@ -150,7 +150,7 @@ struct HomeView: View {
       ImageCollectionSortOption(
         "modifiedAt",
         title: "Modified",
-        optionalValue: \.url.lastModifiedAt,
+        optionalValue: \.url.contentModificationDate,
       ),
       ImageCollectionSortOption(
         "fileSize",

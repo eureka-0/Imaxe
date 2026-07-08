@@ -18,7 +18,7 @@ nonisolated struct ImageInfo: Hashable {
   let DPI: IntSize
 
   var location: String {
-    url.deletingLastPathComponent().path
+    url.deletingLastPathComponent().fileSystemPath
   }
 
   var typeDescription: String {
@@ -34,25 +34,21 @@ nonisolated struct ImageInfo: Hashable {
   }
 
   init(url: URL) {
-    self.url = url
-    fileName = url.lastPathComponent
+    // Use a new URL instance to avoid cached resource values.
+    let newURL = url.freshFileURL
 
-    if let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-       let fileSize = attributes[.size] as? NSNumber
-    {
-      self.fileSize = fileSize.intValue
-    } else {
-      fileSize = 0
-    }
+    self.url = newURL
+    fileName = newURL.lastPathComponent
+    fileSize = newURL.fileSize
 
-    type = ImageLoader.getUTType(for: url)
+    type = ImageLoader.getUTType(for: newURL)
 
-    let properties = Self.getImageProperties(from: url)
+    let properties = Self.getImageProperties(from: newURL)
     let imagePixelSize = Self.getImagePixelSize(from: properties)
     pixelSize = if imagePixelSize.isValid {
       imagePixelSize
     } else {
-      Self.getSVGPixelSize(from: url) ?? imagePixelSize
+      Self.getSVGPixelSize(from: newURL) ?? imagePixelSize
     }
     DPI = Self.getImageDPI(from: properties)
   }

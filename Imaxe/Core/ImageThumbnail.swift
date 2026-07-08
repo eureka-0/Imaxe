@@ -54,22 +54,22 @@ nonisolated enum ImageThumbnailCache {
   private static let cacheVersion = "v1"
 
   static var cacheDirectory: URL {
-    FileManager.default.cachesDirectory
-      .appendingPathComponent("Thumbnails", isDirectory: true)
+    FileManager.default.cachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
   }
 
   /// Ensures that a thumbnail exists for the given image URL. If a thumbnail already exists in the
   /// cache, it returns the cache key. If not, it generates a new thumbnail, saves it to the cache,
   /// and returns the new cache key. Returns `nil` if the thumbnail cannot be created.
   static func ensureThumbnail(for url: URL) -> String? {
-    guard url.isFileURL,
-          !isDirectory(url),
-          ImageLoader.isSupportedImage(url)
+    let sourceURL = url.freshFileURL
+    guard sourceURL.isFileURL,
+          !sourceURL.isDirectory,
+          ImageLoader.isSupportedImage(sourceURL)
     else { return nil }
 
-    let key = thumbnailCacheKey(for: url)
+    let key = thumbnailCacheKey(for: sourceURL)
     let outputURL = thumbnailURL(for: key)
-    if FileManager.default.fileExists(atPath: outputURL.path) {
+    if outputURL.fileExists {
       return key
     }
 
@@ -78,7 +78,7 @@ nonisolated enum ImageThumbnailCache {
         at: cacheDirectory,
         withIntermediateDirectories: true,
       )
-      try writeThumbnail(from: url, to: outputURL)
+      try writeThumbnail(from: sourceURL, to: outputURL)
       return key
     } catch {
       try? FileManager.default.removeItem(at: outputURL)
@@ -92,7 +92,7 @@ nonisolated enum ImageThumbnailCache {
 
   static func removeThumbnail(for key: String) throws {
     let url = thumbnailURL(for: key)
-    if FileManager.default.fileExists(atPath: url.path) {
+    if url.fileExists {
       try FileManager.default.removeItem(at: url)
     }
   }
@@ -120,29 +120,22 @@ nonisolated enum ImageThumbnailCache {
   }
 
   private static func thumbnailCacheKey(for url: URL) -> String {
-    let modifiedAt = lastModifiedAt(url)?.timeIntervalSince1970 ?? 0
+    let resourceValues = try? url.freshResourceValues(forKeys: [
+      .contentModificationDateKey,
+      .fileSizeKey,
+    ])
+    let modifiedAt = resourceValues?.contentModificationDate?.timeIntervalSince1970 ?? 0
+    let fileSize = resourceValues?.fileSize ?? 0
     let source = [
       cacheVersion,
       url.filePath,
-      "\(fileSize(url))",
+      "\(fileSize)",
       "\(modifiedAt)",
       "\(maxPixelSize)",
     ].joined(separator: "|")
 
     let digest = SHA256.hash(data: Data(source.utf8))
     return digest.map { String(format: "%02x", $0) }.joined()
-  }
-
-  private static func isDirectory(_ url: URL) -> Bool {
-    (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-  }
-
-  private static func fileSize(_ url: URL) -> Int {
-    (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-  }
-
-  private static func lastModifiedAt(_ url: URL) -> Date? {
-    (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
   }
 
   private static func writeThumbnail(from sourceURL: URL, to outputURL: URL) throws {

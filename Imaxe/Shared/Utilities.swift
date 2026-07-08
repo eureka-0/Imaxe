@@ -202,8 +202,17 @@ extension Date {
 
 // MARK: - FileManager extensions.
 
-extension FileManager {
-  nonisolated var cachesDirectory: URL {
+nonisolated extension FileManager {
+  var tempDirectory: URL? {
+    try? url(
+      for: .itemReplacementDirectory,
+      in: .userDomainMask,
+      appropriateFor: URL(fileURLWithPath: NSTemporaryDirectory()),
+      create: true,
+    )
+  }
+
+  var cachesDirectory: URL {
     (
       urls(for: .cachesDirectory, in: .userDomainMask).first ?? URL(
         fileURLWithPath: NSTemporaryDirectory(),
@@ -245,13 +254,11 @@ extension FileManager {
   }
 
   func ensureExists(for directoryURL: URL) throws {
-    if !fileExists(atPath: directoryURL.path) {
-      try createDirectory(
-        at: directoryURL,
-        withIntermediateDirectories: true,
-        attributes: nil,
-      )
-    }
+    try createDirectory(
+      at: directoryURL,
+      withIntermediateDirectories: true,
+      attributes: nil,
+    )
   }
 }
 
@@ -445,25 +452,44 @@ extension NSWindow {
 
 // MARK: - URL extensions.
 
-extension URL {
-  nonisolated var filePath: String {
+nonisolated extension URL {
+  /// Returns the file system path without percent encoding.
+  var fileSystemPath: String {
+    path(percentEncoded: false)
+  }
+
+  var freshFileURL: URL {
+    guard isFileURL else { return self }
+
+    return URL(fileURLWithPath: fileSystemPath, isDirectory: hasDirectoryPath)
+  }
+
+  var filePath: String {
     if isFileURL {
-      return standardizedFileURL.path
+      return standardizedFileURL.fileSystemPath
     }
 
     return absoluteString
   }
 
-  nonisolated var isDirectory: Bool {
-    (try? resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+  func freshResourceValues(forKeys keys: Set<URLResourceKey>) throws -> URLResourceValues {
+    try freshFileURL.resourceValues(forKeys: keys)
   }
 
-  nonisolated var fileSize: Int {
-    (try? resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+  var isDirectory: Bool {
+    (try? freshResourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
   }
 
-  var lastModifiedAt: Date? {
-    (try? resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+  var fileExists: Bool {
+    (try? freshFileURL.checkResourceIsReachable()) == true
+  }
+
+  var fileSize: Int {
+    (try? freshResourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+  }
+
+  var contentModificationDate: Date? {
+    (try? freshResourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
   }
 }
 

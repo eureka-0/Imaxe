@@ -39,7 +39,7 @@ final class RecentImage {
   }
 
   var location: String {
-    url.deletingLastPathComponent().path
+    url.deletingLastPathComponent().fileSystemPath
   }
 }
 
