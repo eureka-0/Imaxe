@@ -328,6 +328,22 @@ struct ImageCollectionView<
       }
       .animation(itemLayoutAnimation, value: visibleItemIDs)
     }
+    .contentShape(Rectangle())
+    .simultaneousGesture(
+      MagnifyGesture()
+        .onChanged { value in
+          guard effectiveViewMode == .grid else { return }
+
+          let baseSize = magnifyBaseGridItemSize ?? effectiveGridItemSize
+          magnifyBaseGridItemSize = baseSize
+          let sensitivity = configuration.gridMagnificationSensitivity
+          let adjustedMagnification = 1 + ((value.magnification - 1) * sensitivity)
+          effectiveGridItemSizeBinding.wrappedValue = baseSize * adjustedMagnification
+        }
+        .onEnded { _ in
+          magnifyBaseGridItemSize = nil
+        },
+    )
     .animation(viewModeAnimation, value: effectiveViewMode)
     .safeAreaInset(edge: .top, spacing: 0) {
       collectionToolbar(visibleItemCount: visibleItems.count)
@@ -553,21 +569,7 @@ struct ImageCollectionView<
     }
     .animation(gridItemSizeAnimation, value: effectiveGridItemSize)
     .animation(itemLayoutAnimation, value: visibleItemIDs)
-    .containerRelativeFrame(.vertical, alignment: .top)
     .contentShape(Rectangle())
-    .simultaneousGesture(
-      MagnifyGesture()
-        .onChanged { value in
-          let baseSize = magnifyBaseGridItemSize ?? effectiveGridItemSize
-          magnifyBaseGridItemSize = baseSize
-          let sensitivity = configuration.gridMagnificationSensitivity
-          let adjustedMagnification = 1 + ((value.magnification - 1) * sensitivity)
-          effectiveGridItemSizeBinding.wrappedValue = baseSize * adjustedMagnification
-        }
-        .onEnded { _ in
-          magnifyBaseGridItemSize = nil
-        },
-    )
   }
 }
 
