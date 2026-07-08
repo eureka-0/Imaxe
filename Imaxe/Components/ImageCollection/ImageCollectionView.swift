@@ -62,14 +62,14 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
   var defaultViewMode: ImageCollectionViewMode = .grid
   var defaultSortAscending: Bool = false
   var defaultGridItemSize: CGFloat = 120
-  var gridSpacing: CGFloat = 2
+  var gridSpacing: CGFloat = 0
   var gridMagnificationSensitivity: CGFloat = 0.3
 }
 
 @Observable
 private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: Hashable {
   var gridItemSize: CGFloat = 120
-  var gridSpacing: CGFloat = 2
+  var gridSpacing: CGFloat = 0
 
   var searchText = ""
   var selectedSortOption: ImageCollectionSortOption<Item>?
@@ -186,6 +186,7 @@ struct ImageCollectionView<
   private let gridItem: (Item, ImageCollectionItemState) -> GridItemContent
   private let contextMenu: (Item) -> ContextMenuContent
   private var viewMode: Binding<ImageCollectionViewMode>?
+  private var fixedViewMode: ImageCollectionViewMode?
   private var gridItemSize: Binding<CGFloat>?
 
   @State private var viewModel = ImageCollectionViewModel<Item>()
@@ -211,7 +212,7 @@ struct ImageCollectionView<
   }
 
   private var effectiveViewMode: ImageCollectionViewMode {
-    viewMode?.wrappedValue ?? viewModel.viewMode
+    fixedViewMode ?? viewMode?.wrappedValue ?? viewModel.viewMode
   }
 
   private var effectiveGridItemSize: CGFloat {
@@ -236,6 +237,7 @@ struct ImageCollectionView<
     Binding {
       effectiveViewMode
     } set: { newValue in
+      guard fixedViewMode == nil else { return }
       guard newValue != effectiveViewMode else { return }
 
       withAnimation(viewModeAnimation) {
@@ -298,6 +300,7 @@ struct ImageCollectionView<
     self.gridItem = gridItem
     self.contextMenu = contextMenu
     viewMode = nil
+    fixedViewMode = nil
     gridItemSize = nil
   }
 
@@ -311,10 +314,14 @@ struct ImageCollectionView<
           emptyContent
             .transition(itemVisibilityTransition)
         } else {
-          collectionContent(
-            visibleItems: visibleItems,
-            visibleItemIDs: visibleItemIDs,
-          )
+          Group {
+            switch effectiveViewMode {
+            case .list:
+              listContent(visibleItems: visibleItems, visibleItemIDs: visibleItemIDs)
+            case .grid:
+              gridContent(visibleItems: visibleItems, visibleItemIDs: visibleItemIDs)
+            }
+          }
           .id(effectiveViewMode)
           .transition(viewModeTransition)
         }
@@ -350,19 +357,6 @@ struct ImageCollectionView<
     .containerRelativeFrame(.vertical, alignment: .center)
   }
 
-  @ViewBuilder
-  private func collectionContent(
-    visibleItems: [Item],
-    visibleItemIDs: [Item.ID],
-  ) -> some View {
-    switch effectiveViewMode {
-    case .list:
-      listContent(visibleItems: visibleItems, visibleItemIDs: visibleItemIDs)
-    case .grid:
-      gridContent(visibleItems: visibleItems, visibleItemIDs: visibleItemIDs)
-    }
-  }
-
   private func collectionToolbar(visibleItemCount: Int) -> some View {
     HStack(spacing: 2) {
       titleBlock(visibleItemCount: visibleItemCount)
@@ -371,7 +365,9 @@ struct ImageCollectionView<
 
       searchField
       sortMenu
-      viewModePicker
+      if fixedViewMode == nil {
+        viewModePicker
+      }
       clearButton
     }
     .padding(.horizontal, 12)
@@ -537,7 +533,7 @@ struct ImageCollectionView<
   ) -> some View {
     LazyVGrid(
       columns: [effectiveGridItem],
-      alignment: .center,
+      alignment: .leading,
       spacing: viewModel.gridSpacing,
     ) {
       ForEach(visibleItems) { item in
@@ -556,14 +552,15 @@ struct ImageCollectionView<
     }
     .animation(gridItemSizeAnimation, value: effectiveGridItemSize)
     .animation(itemLayoutAnimation, value: visibleItemIDs)
+    .containerRelativeFrame(.vertical, alignment: .top)
+    .contentShape(Rectangle())
     .simultaneousGesture(
       MagnifyGesture()
         .onChanged { value in
           let baseSize = magnifyBaseGridItemSize ?? effectiveGridItemSize
           magnifyBaseGridItemSize = baseSize
-          let adjustedMagnification = 1 + (
-            (value.magnification - 1) * configuration.gridMagnificationSensitivity
-          )
+          let sensitivity = configuration.gridMagnificationSensitivity
+          let adjustedMagnification = 1 + ((value.magnification - 1) * sensitivity)
           effectiveGridItemSizeBinding.wrappedValue = baseSize * adjustedMagnification
         }
         .onEnded { _ in
@@ -586,6 +583,82 @@ extension ImageCollectionView where ContextMenuContent == EmptyView {
       configuration: configuration,
       listRow: listRow,
       gridItem: gridItem,
+      contextMenu: { _ in EmptyView() },
+    )
+  }
+}
+
+/// A convenience initializer for grid-only collections.
+extension ImageCollectionView where ListRowContent == EmptyView {
+  init(
+    _ items: [Item],
+    configuration: ImageCollectionConfiguration<Item> = .init(),
+    @ViewBuilder gridItem: @escaping (Item, ImageCollectionItemState) -> GridItemContent,
+    @ViewBuilder contextMenu: @escaping (Item) -> ContextMenuContent,
+  ) {
+    var configuration = configuration
+    configuration.defaultViewMode = .grid
+
+    self.init(
+      items,
+      configuration: configuration,
+      listRow: { _, _ in EmptyView() },
+      gridItem: gridItem,
+      contextMenu: contextMenu,
+    )
+    fixedViewMode = .grid
+  }
+}
+
+/// A convenience initializer for grid-only collections with a default empty context menu.
+extension ImageCollectionView where ListRowContent == EmptyView, ContextMenuContent == EmptyView {
+  init(
+    _ items: [Item],
+    configuration: ImageCollectionConfiguration<Item> = .init(),
+    @ViewBuilder gridItem: @escaping (Item, ImageCollectionItemState) -> GridItemContent,
+  ) {
+    self.init(
+      items,
+      configuration: configuration,
+      gridItem: gridItem,
+      contextMenu: { _ in EmptyView() },
+    )
+  }
+}
+
+/// A convenience initializer for list-only collections.
+extension ImageCollectionView where GridItemContent == EmptyView {
+  init(
+    _ items: [Item],
+    configuration: ImageCollectionConfiguration<Item> = .init(),
+    @ViewBuilder listRow: @escaping (Item, ImageCollectionItemState) -> ListRowContent,
+    @ViewBuilder contextMenu: @escaping (Item) -> ContextMenuContent,
+  ) {
+    var configuration = configuration
+    configuration.defaultViewMode = .list
+
+    self.init(
+      items,
+      configuration: configuration,
+      listRow: listRow,
+      gridItem: { _, _ in EmptyView() },
+      contextMenu: contextMenu,
+    )
+    fixedViewMode = .list
+  }
+}
+
+/// A convenience initializer for list-only collections with a default empty context menu.
+extension ImageCollectionView where GridItemContent == EmptyView, ContextMenuContent == EmptyView {
+  init(
+    _ items: [Item],
+    configuration: ImageCollectionConfiguration<Item> = .init(),
+    @ViewBuilder listRow: @escaping (Item, ImageCollectionItemState) -> ListRowContent,
+  ) {
+    self.init(
+      items,
+      configuration: configuration,
+      listRow: listRow,
       contextMenu: { _ in EmptyView() },
     )
   }
@@ -648,15 +721,17 @@ extension ImageCollectionView {
     var view = self
     view.gridItemSize = size
     if let defaultSize {
-      view.configuration.defaultGridItemSize = defaultSize
-        .clamped(to: Constants.recentImagesGridItemSizeRange)
+      view.configuration.defaultGridItemSize =
+        defaultSize
+          .clamped(to: Constants.recentImagesGridItemSizeRange)
     }
     if let spacing {
       view.configuration.gridSpacing = spacing
     }
     if let magnificationSensitivity {
-      view.configuration.gridMagnificationSensitivity = magnificationSensitivity
-        .clamped(to: 0.05 ... 1.0)
+      view.configuration.gridMagnificationSensitivity =
+        magnificationSensitivity
+          .clamped(to: 0.05 ... 1.0)
     }
     return view
   }

@@ -6,10 +6,11 @@
 //
 
 import AppKit
-@testable import Imaxe
 import SwiftData
 import SwiftUI
 import Testing
+
+@testable import Imaxe
 
 @MainActor
 struct ImaxeTests {
@@ -172,10 +173,7 @@ struct ImaxeTests {
     let scrollView = NSScrollView(
       frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
     )
-    let imageView = NSView(frame: NSRect(
-      origin: .zero,
-      size: NSSize(width: 200, height: 100),
-    ))
+    let imageView = NSView(frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)))
     let imageContainer = ImageContainer(
       url: URL(fileURLWithPath: "/tmp/example.png"),
       nsImage: bitmapImage(width: 200, height: 100),
@@ -197,8 +195,7 @@ struct ImaxeTests {
     #expect(reportedZoomScale?.isApproximatelyEqual(to: 0.5) == true)
   }
 
-  @Test func `folder navigator starts with current image and can load directory asynchronously`(
-  ) async throws {
+  @Test func `folder navigator starts with current image and load asynchronously`() async throws {
     let directory = URL.temporaryDirectory
       .appending(path: "imaxe-folder-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -341,6 +338,44 @@ struct ImaxeTests {
     #expect(color.hex == "#33669980")
   }
 
+  @Test func `image collection single mode initializers compile`() {
+    let items = [CollectionInitializerTestItem(id: 1)]
+
+    _ = ImageCollectionView(
+      items,
+      listRow: { item, _ in
+        Text("Row \(item.id)")
+      },
+    )
+
+    _ = ImageCollectionView(
+      items,
+      gridItem: { item, _ in
+        Text("Grid \(item.id)")
+      },
+    )
+
+    _ = ImageCollectionView(
+      items,
+      listRow: { item, _ in
+        Text("Row \(item.id)")
+      },
+      contextMenu: { _ in
+        Button("Inspect") {}
+      },
+    )
+
+    _ = ImageCollectionView(
+      items,
+      gridItem: { item, _ in
+        Text("Grid \(item.id)")
+      },
+      contextMenu: { _ in
+        Button("Inspect") {}
+      },
+    )
+  }
+
   private func sampleImageURL(_ fileName: String) -> URL {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -370,18 +405,20 @@ struct ImaxeTests {
   }
 
   private func pngData(width: Int, height: Int) throws -> Data {
-    let representation = try #require(NSBitmapImageRep(
-      bitmapDataPlanes: nil,
-      pixelsWide: width,
-      pixelsHigh: height,
-      bitsPerSample: 8,
-      samplesPerPixel: 4,
-      hasAlpha: true,
-      isPlanar: false,
-      colorSpaceName: .deviceRGB,
-      bytesPerRow: 0,
-      bitsPerPixel: 0,
-    ))
+    let representation = try #require(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: width,
+        pixelsHigh: height,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0,
+      ),
+    )
 
     let rect = NSRect(x: 0, y: 0, width: width, height: height)
     NSGraphicsContext.saveGraphicsState()
@@ -392,6 +429,10 @@ struct ImaxeTests {
 
     return try #require(representation.representation(using: .png, properties: [:]))
   }
+}
+
+private struct CollectionInitializerTestItem: Identifiable {
+  let id: Int
 }
 
 private extension CGFloat {
