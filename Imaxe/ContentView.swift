@@ -25,6 +25,9 @@ struct ContentView: View {
   @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue)
   private var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange
 
+  @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue)
+  private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
+
   private var isShowingImageInterface: Bool {
     imageSession.currentImage != nil || imageSession.isLoading
   }
@@ -71,6 +74,9 @@ struct ContentView: View {
     .onChange(of: actionOnImageFileChange) { _, newValue in
       imageSession.actionOnImageFileChange = newValue
     }
+    .onChange(of: recentImagesCountLimit) { _, _ in
+      refreshRecentImages()
+    }
     .onChange(of: isShowingImageInterface) { _, newValue in
       if !newValue {
         imageSession.restoreStandardWindowButtons()
@@ -99,12 +105,8 @@ struct ContentView: View {
 
   private func refreshRecentImages() {
     do {
-      let removedCount = try RecentImagesStore.removeMissingFiles(in: modelContext)
-      if removedCount > 0 {
-        imageSession.recentImages = try RecentImagesStore.fetchRecentImages(in: modelContext)
-      } else {
-        imageSession.recentImages = recentImages
-      }
+      try RecentImagesStore.removeMissingFiles(in: modelContext)
+      imageSession.recentImages = try RecentImagesStore.fetchRecentImages(in: modelContext)
     } catch {
       imageSession.recentImages = recentImages
       imageSession.alert = ImageAlert(

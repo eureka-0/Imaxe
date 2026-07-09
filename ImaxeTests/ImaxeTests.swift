@@ -289,158 +289,285 @@ struct ImaxeTests {
   }
 
   @Test func `recent images are updated sorted and cleared`() throws {
-    let container = try ModelContainer(
-      for: RecentImage.self,
-      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-    )
-    let context = ModelContext(container)
-    let firstURL = URL(fileURLWithPath: "/tmp/first.png")
-    let secondURL = URL(fileURLWithPath: "/tmp/second.png")
+    try withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let firstURL = URL(fileURLWithPath: "/tmp/first.png")
+      let secondURL = URL(fileURLWithPath: "/tmp/second.png")
 
-    try RecentImagesStore.recordOpened(
-      firstURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 1),
-    )
-    try RecentImagesStore.recordOpened(
-      secondURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 2),
-    )
-    try RecentImagesStore.recordOpened(
-      firstURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 3),
-    )
+      try RecentImagesStore.recordOpened(
+        firstURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        secondURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+      try RecentImagesStore.recordOpened(
+        firstURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 3),
+      )
 
-    let descriptor = FetchDescriptor<RecentImage>(
-      sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
-    )
-    let recentImages = try context.fetch(descriptor)
+      let descriptor = FetchDescriptor<RecentImage>(
+        sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
+      )
+      let recentImages = try context.fetch(descriptor)
 
-    #expect(recentImages.compactMap(\.url).map(\.lastPathComponent) == ["first.png", "second.png"])
-    #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
+      #expect(recentImages.compactMap(\.url).map(\.lastPathComponent) == [
+        "first.png",
+        "second.png",
+      ])
+      #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
 
-    try RecentImagesStore.clear(in: context)
+      try RecentImagesStore.clear(in: context)
 
-    #expect(try context.fetch(descriptor).isEmpty)
+      #expect(try context.fetch(descriptor).isEmpty)
+    }
+  }
+
+  @Test func `recent images use default count limit when preference is unset`() throws {
+    try withRecentImagesCountLimit(nil) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/first.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/second.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+
+      #expect(recentImages.map(\.fileName) == ["second.png", "first.png"])
+    }
+  }
+
+  @Test func `recent images are trimmed to configured count limit`() throws {
+    try withRecentImagesCountLimit(3) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/first.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/second.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/third.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 3),
+      )
+
+      UserDefaults.standard.set(2, forKey: AppSettings.Keys.recentImagesCountLimit.rawValue)
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+
+      #expect(recentImages.map(\.fileName) == ["third.png", "second.png"])
+    }
   }
 
   @Test func `recent images store file metadata and cleanup thumbnail cache`() throws {
-    let container = try ModelContainer(
-      for: RecentImage.self,
-      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-    )
-    let context = ModelContext(container)
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
-    try pngData(width: 80, height: 40).write(to: url)
+    try withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let url = URL.temporaryDirectory
+        .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
+      try pngData(width: 80, height: 40).write(to: url)
 
-    try RecentImagesStore.recordOpened(url, in: context)
+      try RecentImagesStore.recordOpened(url, in: context)
 
-    let recentDescriptor = FetchDescriptor<RecentImage>()
-    let recent = try #require(context.fetch(recentDescriptor).first)
-    let thumbnailKey = try #require(recent.thumbnailCacheKey)
-    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+      let recentDescriptor = FetchDescriptor<RecentImage>()
+      let recent = try #require(context.fetch(recentDescriptor).first)
+      let thumbnailKey = try #require(recent.thumbnailCacheKey)
+      let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
 
-    let resourceValues = try recent.url.resourceValues(forKeys: [
-      .contentModificationDateKey,
-      .fileSizeKey,
-    ])
-    #expect((resourceValues.fileSize ?? 0) > 0)
-    #expect(resourceValues.contentModificationDate != nil)
-    #expect(FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+      let resourceValues = try recent.url.resourceValues(forKeys: [
+        .contentModificationDateKey,
+        .fileSizeKey,
+      ])
+      #expect((resourceValues.fileSize ?? 0) > 0)
+      #expect(resourceValues.contentModificationDate != nil)
+      #expect(FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
 
-    try RecentImagesStore.remove(path: url.filePath, in: context)
-    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+      try RecentImagesStore.remove(path: url.filePath, in: context)
+      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+    }
   }
 
   @Test func `missing recent images are pruned with thumbnail cache`() throws {
-    let container = try ModelContainer(
-      for: RecentImage.self,
-      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-    )
-    let context = ModelContext(container)
-    let existingURL = URL.temporaryDirectory
-      .appending(path: "imaxe-existing-recent-\(UUID().uuidString).png")
-    let missingURL = URL.temporaryDirectory
-      .appending(path: "imaxe-pruned-recent-\(UUID().uuidString).png")
-    defer {
-      try? FileManager.default.removeItem(at: existingURL)
-      try? FileManager.default.removeItem(at: missingURL)
+    try withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let existingURL = URL.temporaryDirectory
+        .appending(path: "imaxe-existing-recent-\(UUID().uuidString).png")
+      let missingURL = URL.temporaryDirectory
+        .appending(path: "imaxe-pruned-recent-\(UUID().uuidString).png")
+      defer {
+        try? FileManager.default.removeItem(at: existingURL)
+        try? FileManager.default.removeItem(at: missingURL)
+      }
+
+      try pngData(width: 80, height: 40).write(to: existingURL)
+      try pngData(width: 80, height: 40).write(to: missingURL)
+      try RecentImagesStore.recordOpened(
+        existingURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        missingURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+
+      var missingDescriptor = FetchDescriptor<RecentImage>(
+        predicate: #Predicate<RecentImage> { recentImage in
+          recentImage.path == missingURL.filePath
+        },
+      )
+      missingDescriptor.fetchLimit = 1
+      let missingRecent = try #require(context.fetch(missingDescriptor).first)
+      let missingThumbnailKey = try #require(missingRecent.thumbnailCacheKey)
+      let missingThumbnailURL = ImageThumbnailCache.thumbnailURL(for: missingThumbnailKey)
+      try FileManager.default.removeItem(at: missingURL)
+
+      let removedCount = try RecentImagesStore.removeMissingFiles(in: context)
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+      #expect(removedCount == 1)
+      #expect(recentImages.map(\.path) == [existingURL.filePath])
+      #expect(!FileManager.default.fileExists(atPath: missingThumbnailURL.fileSystemPath))
+
+      try RecentImagesStore.clear(in: context)
     }
-
-    try pngData(width: 80, height: 40).write(to: existingURL)
-    try pngData(width: 80, height: 40).write(to: missingURL)
-    try RecentImagesStore.recordOpened(
-      existingURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 1),
-    )
-    try RecentImagesStore.recordOpened(
-      missingURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 2),
-    )
-
-    var missingDescriptor = FetchDescriptor<RecentImage>(
-      predicate: #Predicate<RecentImage> { recentImage in
-        recentImage.path == missingURL.filePath
-      },
-    )
-    missingDescriptor.fetchLimit = 1
-    let missingRecent = try #require(context.fetch(missingDescriptor).first)
-    let missingThumbnailKey = try #require(missingRecent.thumbnailCacheKey)
-    let missingThumbnailURL = ImageThumbnailCache.thumbnailURL(for: missingThumbnailKey)
-    try FileManager.default.removeItem(at: missingURL)
-
-    let removedCount = try RecentImagesStore.removeMissingFiles(in: context)
-
-    let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
-    #expect(removedCount == 1)
-    #expect(recentImages.map(\.path) == [existingURL.filePath])
-    #expect(!FileManager.default.fileExists(atPath: missingThumbnailURL.fileSystemPath))
-
-    try RecentImagesStore.clear(in: context)
   }
 
   @Test func `opening missing recent image removes recent item and thumbnail cache`() async throws {
-    let container = try ModelContainer(
-      for: RecentImage.self,
-      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-    )
-    let context = ModelContext(container)
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-missing-recent-\(UUID().uuidString).png")
-    try pngData(width: 80, height: 40).write(to: url)
-    try RecentImagesStore.recordOpened(url, in: context)
+    try await withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let url = URL.temporaryDirectory
+        .appending(path: "imaxe-missing-recent-\(UUID().uuidString).png")
+      try pngData(width: 80, height: 40).write(to: url)
+      try RecentImagesStore.recordOpened(url, in: context)
 
-    let descriptor = FetchDescriptor<RecentImage>()
-    let recent = try #require(context.fetch(descriptor).first)
-    let thumbnailKey = try #require(recent.thumbnailCacheKey)
-    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
-    try FileManager.default.removeItem(at: url)
+      let descriptor = FetchDescriptor<RecentImage>()
+      let recent = try #require(context.fetch(descriptor).first)
+      let thumbnailKey = try #require(recent.thumbnailCacheKey)
+      let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+      try FileManager.default.removeItem(at: url)
 
-    let session = ImageSession()
-    session.removeRecentImage = { path in
-      try RecentImagesStore.remove(path: path, in: context)
-    }
-    session.openRecentImage(recent)
-
-    for _ in 0 ..< 20 {
-      if try context.fetch(descriptor).isEmpty {
-        break
+      let session = ImageSession()
+      session.removeRecentImage = { path in
+        try RecentImagesStore.remove(path: path, in: context)
       }
-      await Task.yield()
-    }
+      session.openRecentImage(recent)
 
-    #expect(try context.fetch(descriptor).isEmpty)
-    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
-    #expect(session.alert?.title == "Recent Image Removed")
+      for _ in 0 ..< 20 {
+        if try context.fetch(descriptor).isEmpty {
+          break
+        }
+        await Task.yield()
+      }
+
+      #expect(try context.fetch(descriptor).isEmpty)
+      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+      #expect(session.alert?.title == "Recent Image Removed")
+    }
+  }
+
+  @Test func `lowered recent images count limit removes trimmed thumbnail cache`() throws {
+    try withRecentImagesCountLimit(3) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let firstURL = URL.temporaryDirectory
+        .appending(path: "imaxe-trimmed-first-\(UUID().uuidString).png")
+      let secondURL = URL.temporaryDirectory
+        .appending(path: "imaxe-trimmed-second-\(UUID().uuidString).png")
+      let thirdURL = URL.temporaryDirectory
+        .appending(path: "imaxe-trimmed-third-\(UUID().uuidString).png")
+      defer {
+        try? FileManager.default.removeItem(at: firstURL)
+        try? FileManager.default.removeItem(at: secondURL)
+        try? FileManager.default.removeItem(at: thirdURL)
+        try? RecentImagesStore.clear(in: context)
+      }
+
+      try pngData(width: 80, height: 40).write(to: firstURL)
+      try pngData(width: 80, height: 40).write(to: secondURL)
+      try pngData(width: 80, height: 40).write(to: thirdURL)
+      try RecentImagesStore.recordOpened(
+        firstURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        secondURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+      try RecentImagesStore.recordOpened(
+        thirdURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 3),
+      )
+
+      var firstDescriptor = FetchDescriptor<RecentImage>(
+        predicate: #Predicate<RecentImage> { recentImage in
+          recentImage.path == firstURL.filePath
+        },
+      )
+      firstDescriptor.fetchLimit = 1
+      let firstRecent = try #require(context.fetch(firstDescriptor).first)
+      let firstThumbnailKey = try #require(firstRecent.thumbnailCacheKey)
+      let firstThumbnailURL = ImageThumbnailCache.thumbnailURL(for: firstThumbnailKey)
+      #expect(FileManager.default.fileExists(atPath: firstThumbnailURL.fileSystemPath))
+
+      UserDefaults.standard.set(2, forKey: AppSettings.Keys.recentImagesCountLimit.rawValue)
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+
+      #expect(recentImages.map(\.path) == [thirdURL.filePath, secondURL.filePath])
+      #expect(!FileManager.default.fileExists(atPath: firstThumbnailURL.fileSystemPath))
+    }
   }
 
   @Test func `thumbnail cache total size sums regular files`() throws {
-    let testDirectory = ImageThumbnailCache.cacheDirectory
+    let testDirectory = URL.thumbnailCachesDirectory
       .appending(path: "test-\(UUID().uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
     defer {
@@ -563,6 +690,50 @@ struct ImaxeTests {
     NSGraphicsContext.restoreGraphicsState()
 
     return try #require(representation.representation(using: .png, properties: [:]))
+  }
+
+  private func withRecentImagesCountLimit<T>(
+    _ limit: Int?,
+    operation: () throws -> T,
+  ) throws -> T {
+    let key = AppSettings.Keys.recentImagesCountLimit.rawValue
+    let previousValue = UserDefaults.standard.object(forKey: key)
+    defer {
+      restoreUserDefault(previousValue, forKey: key)
+    }
+
+    setRecentImagesCountLimit(limit, forKey: key)
+    return try operation()
+  }
+
+  private func withRecentImagesCountLimit<T>(
+    _ limit: Int?,
+    operation: () async throws -> T,
+  ) async throws -> T {
+    let key = AppSettings.Keys.recentImagesCountLimit.rawValue
+    let previousValue = UserDefaults.standard.object(forKey: key)
+    defer {
+      restoreUserDefault(previousValue, forKey: key)
+    }
+
+    setRecentImagesCountLimit(limit, forKey: key)
+    return try await operation()
+  }
+
+  private func setRecentImagesCountLimit(_ limit: Int?, forKey key: String) {
+    if let limit {
+      UserDefaults.standard.set(limit, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
+  }
+
+  private func restoreUserDefault(_ value: Any?, forKey key: String) {
+    if let value {
+      UserDefaults.standard.set(value, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
   }
 }
 

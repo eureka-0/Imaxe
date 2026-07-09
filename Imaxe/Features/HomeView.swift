@@ -59,7 +59,7 @@ struct HomeView: View {
   }
 
   var body: some View {
-    VStack(spacing: 16) {
+    VStack(spacing: 0) {
       homeHero
       recentImagesCollection
     }
@@ -113,7 +113,7 @@ struct HomeView: View {
       HStack(spacing: 12) {
         SettingsLink {
           Label("Settings", systemImage: "gearshape")
-            .padding(.vertical, 2)
+            .padding(.vertical, 3)
         }
         .help("Open Settings")
 
@@ -121,17 +121,18 @@ struct HomeView: View {
           imageSession.isImporterPresented = true
         } label: {
           Label("Open Image", systemImage: "photo.badge.plus")
-            .padding(.vertical, 2)
+            .padding(.vertical, 3)
         }
         .help("Open Image")
       }
       .buttonStyle(.borderedProminent)
-      .buttonBorderShape(.capsule)
+      .buttonBorderShape(.roundedRectangle)
     }
     .padding([.horizontal, .top], 32)
+    .padding(.bottom, 16)
     .frame(maxWidth: .infinity)
     .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
-      length * 0.4
+      length * 0.5
     }
   }
 

@@ -15,6 +15,7 @@ enum AppSettings {
     case topBarHideDelay
     case enableLoopBrowsing
     case actionOnImageFileChange
+    case recentImagesCountLimit
 
     case imageActualSizeStrategy
     case loadedImageWindowSizeMode
@@ -34,6 +35,7 @@ enum AppSettings {
     static let topBarHideDelay = 1.5
     static let enableLoopBrowsing = true
     static let actionOnImageFileChange: ActionOnImageFileChange = .reload
+    static let recentImagesCountLimit = 100
 
     static let imageActualSizeStrategy: ImageActualSizeStrategy = .pixelSize
     static let loadedImageWindowSizeMode: LoadedImageWindowSizeMode = .actualSizeLimitedToScreen

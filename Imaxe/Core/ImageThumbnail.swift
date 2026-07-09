@@ -52,6 +52,7 @@ enum LibraryThumbnailReferences {
 
 nonisolated enum ImageThumbnailCache {
   static let maxPixelSize = 320
+  static let didChangeNotification = Notification.Name("ImageThumbnailCacheDidChange")
 
   private static let cacheVersion = "v1"
 
@@ -74,6 +75,7 @@ nonisolated enum ImageThumbnailCache {
 
     do {
       try writeThumbnail(from: sourceURL, to: outputURL)
+      postDidChangeNotification()
       return key
     } catch {
       try? FileManager.default.removeItem(at: outputURL)
@@ -89,10 +91,19 @@ nonisolated enum ImageThumbnailCache {
     let url = thumbnailURL(for: key)
     if url.fileExists {
       try FileManager.default.removeItem(at: url)
+      postDidChangeNotification()
     }
   }
 
-  static func totalCacheSizeInBytes() -> Int64 {
+  static func removeAllThumbnails() throws {
+    let directoryURL = URL.thumbnailCachesDirectory
+    if directoryURL.fileExists {
+      try FileManager.default.removeItem(at: directoryURL)
+      postDidChangeNotification()
+    }
+  }
+
+  static func totalCacheSizeInBytes() -> Int {
     guard let fileEnumerator = FileManager.default.enumerator(
       at: URL.thumbnailCachesDirectory,
       includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
@@ -100,7 +111,7 @@ nonisolated enum ImageThumbnailCache {
       return 0
     }
 
-    var totalSize = Int64(0)
+    var totalSize = 0
     for case let fileURL as URL in fileEnumerator {
       guard let resourceValues = try? fileURL.resourceValues(forKeys: [
         .fileSizeKey,
@@ -109,9 +120,13 @@ nonisolated enum ImageThumbnailCache {
         resourceValues.isRegularFile == true
       else { continue }
 
-      totalSize += Int64(resourceValues.fileSize ?? 0)
+      totalSize += resourceValues.fileSize ?? 0
     }
     return totalSize
+  }
+
+  private static func postDidChangeNotification() {
+    NotificationCenter.default.post(name: didChangeNotification, object: nil)
   }
 
   private static func thumbnailCacheKey(for url: URL) -> String {
