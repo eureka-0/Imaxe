@@ -401,6 +401,33 @@ extension NSWindow {
   }
 }
 
+// MARK: - String extensions.
+
+nonisolated extension String {
+  static var defaultFuzzyMatchOptions: String.CompareOptions {
+    [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]
+  }
+
+  func fuzzyMatch(
+    _ other: String,
+    options: String.CompareOptions = String.defaultFuzzyMatchOptions,
+    range searchRange: Range<String.Index>? = nil,
+  ) -> Range<String.Index>? {
+    let other = other.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !other.isEmpty else { return startIndex ..< startIndex }
+
+    return range(of: other, options: options, range: searchRange, locale: .current)
+  }
+
+  func fuzzyContains(
+    _ other: String,
+    options: String.CompareOptions = String.defaultFuzzyMatchOptions,
+    range searchRange: Range<String.Index>? = nil,
+  ) -> Bool {
+    fuzzyMatch(other, options: options, range: searchRange) != nil
+  }
+}
+
 // MARK: - URL extensions.
 
 nonisolated extension URL {

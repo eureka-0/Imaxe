@@ -16,12 +16,6 @@ private struct HomeOperationAlert: Identifiable {
   let message: String
 }
 
-private let searchTextCompareOptions: String.CompareOptions = [
-  .caseInsensitive,
-  .diacriticInsensitive,
-  .widthInsensitive,
-]
-
 struct HomeView: View {
   @Bindable var imageSession: ImageSession
 
@@ -241,7 +235,7 @@ struct HomeView: View {
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 2)
-    .background(state.isHovered ? Color.primary.opacity(0.07) : .clear)
+    .background(state.isHovered ? Color.primary.opacity(0.1) : .clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .onTapGesture(count: 2) {
       openRecentImage(item)
@@ -255,39 +249,22 @@ struct HomeView: View {
     ImageThumbnailView(url: item.url)
       .overlay(alignment: .bottom) {
         if state.isHovered || !state.searchText.isEmpty {
-          Text(
-            recentImageGridCaption(
-              for: item,
-              searchText: state.searchText,
-            )
-            .searchHighlightedAttributedString(matching: state.searchText),
-          )
-          .font(.system(size: 10, weight: .light))
-          .foregroundStyle(.primary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .padding(.horizontal, 4)
-          .padding(.vertical, 1)
-          .background(.regularMaterial)
-          .clipShape(RoundedRectangle(cornerRadius: 3))
-          .padding(.bottom, 2)
+          Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
+            .font(.system(size: 10, weight: .light))
+            .foregroundStyle(.primary)
+            .lineLimit(1)
+            .truncationMode(.middle)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(.regularMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
+            .padding(.bottom, 2)
         }
       }
       .onTapGesture(count: 1) {
         openRecentImage(item)
       }
       .help(item.path)
-  }
-
-  private func recentImageGridCaption(for item: RecentImage, searchText: String) -> String {
-    if !searchText.isEmpty,
-       !item.fileName.containsSearchText(searchText),
-       item.location.containsSearchText(searchText)
-    {
-      return item.location
-    }
-
-    return item.fileName
   }
 
   @ViewBuilder
@@ -409,34 +386,27 @@ struct HomeView: View {
   }
 }
 
-private extension String {
-  func containsSearchText(_ searchText: String) -> Bool {
-    let searchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !searchText.isEmpty else { return false }
-
-    return range(
-      of: searchText,
-      options: searchTextCompareOptions,
-      locale: .current,
-    ) != nil
+private extension ShapeStyle where Self == Color {
+  static var searchHighlightBackground: Color {
+    Color(
+      light: .yellow.opacity(0.9),
+      dark: .yellow.mix(with: .black, by: 0.4).opacity(0.9),
+    )
   }
+}
 
+private extension String {
   func searchHighlightedAttributedString(matching searchText: String) -> AttributedString {
     var attributedString = AttributedString(self)
     let searchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !isEmpty, !searchText.isEmpty else { return attributedString }
 
     var remainingRange = startIndex ..< endIndex
-    while let matchRange = range(
-      of: searchText,
-      options: searchTextCompareOptions,
-      range: remainingRange,
-      locale: .current,
-    ) {
+    while let matchRange = fuzzyMatch(searchText, range: remainingRange) {
       if let lowerBound = AttributedString.Index(matchRange.lowerBound, within: attributedString),
          let upperBound = AttributedString.Index(matchRange.upperBound, within: attributedString)
       {
-        attributedString[lowerBound ..< upperBound].backgroundColor = .controlAccent.opacity(0.42)
+        attributedString[lowerBound ..< upperBound].backgroundColor = .searchHighlightBackground
       }
 
       guard matchRange.upperBound < endIndex else { break }

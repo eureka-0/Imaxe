@@ -98,7 +98,7 @@ private final class ImageCollectionViewModel<Item: Identifiable> where Item.ID: 
     let searchText = effectiveSearchText
     let filteredItems = if let searchableText, !searchText.isEmpty {
       items.filter {
-        searchableText($0).localizedStandardContains(searchText)
+        searchableText($0).fuzzyContains(searchText)
       }
     } else {
       items
@@ -359,7 +359,9 @@ struct ImageCollectionView<
     )
     .animation(viewModeAnimation, value: effectiveViewMode)
     .safeAreaInset(edge: .top, spacing: 0) {
-      collectionToolbar(visibleItemCount: visibleItems.count)
+      if showCollectionToolbar {
+        collectionToolbar(visibleItemCount: visibleItems.count)
+      }
     }
     .onAppear {
       viewModel.update(from: configuration)
@@ -386,100 +388,123 @@ struct ImageCollectionView<
     .containerRelativeFrame(.vertical, alignment: .center)
   }
 
+  private var showCollectionToolbar: Bool {
+    configuration.title != nil
+      || configuration.searchableText != nil
+      || !configuration.sortOptions.isEmpty
+      || fixedViewMode == nil
+      || (configuration.clearHelpText != nil && configuration.onClear != nil)
+  }
+
   private func collectionToolbar(visibleItemCount: Int) -> some View {
     HStack(spacing: 2) {
-      titleBlock(visibleItemCount: visibleItemCount)
+      // Title and subtitle (if provided)
+      if let title = configuration.title {
+        VStack(alignment: .leading, spacing: 0) {
+          Text(title)
+            .font(.headline)
+            .lineLimit(1)
+            .truncationMode(.middle)
+
+          Group {
+            if configuration.useDefaultSubtitle {
+              Text("\(visibleItemCount) image\(visibleItemCount == 1 ? "" : "s")")
+            } else if let subtitle = configuration.subtitle {
+              Text(subtitle)
+            }
+          }
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+        }
+      }
 
       Spacer()
 
-      searchField
-      sortMenu
-      if fixedViewMode == nil {
-        viewModePicker
+      // Search field (only if searchableText is provided)
+      if configuration.searchableText != nil {
+        SearchField("Search", text: animatedSearchText)
+          .foldable(true)
+          .frame(maxWidth: 220, fieldHeight: collectionToolBarButtonHeight)
       }
-      clearButton
+
+      // Sort menu (only if sortOptions are provided)
+      if !configuration.sortOptions.isEmpty, let currentSortOption = viewModel.selectedSortOption {
+        Menu {
+          Picker("Sort by", selection: Binding(
+            get: { currentSortOption.id },
+            set: { newValue in
+              setSortOption(newValue)
+            },
+          )) {
+            ForEach(configuration.sortOptions) { sortOption in
+              Text(sortOption.title).tag(sortOption.id)
+            }
+          }
+          .pickerStyle(.inline)
+
+          Divider()
+
+          Picker("Order", selection: Binding(
+            get: { viewModel.sortAscending },
+            set: { newValue in
+              setSortAscending(newValue)
+            },
+          )) {
+            Text("Ascending").tag(true)
+            Text("Descending").tag(false)
+          }
+          .pickerStyle(.inline)
+        } label: {
+          Label("Sort", systemImage: "arrow.up.arrow.down")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
+        }
+        .menuStyle(.button)
+        .buttonStyle(.borderedOnHover(applyPressedEffect: false))
+        .help("Sort menu.")
+      }
+
+      // View mode picker (only if not fixed)
+      if fixedViewMode == nil {
+        MaterialSegmentedPicker(
+          effectiveViewModeBinding,
+          items: ImageCollectionViewMode.allCases,
+          background: .controlBackground,
+        ) { mode in
+          Label(mode.title, systemImage: mode.systemImage)
+            .labelStyle(.iconOnly)
+            .font(.system(size: 13, weight: .medium))
+        }
+        .frame(height: collectionToolBarButtonHeight + 2)
+      }
+
+      // Clear button (only if clearHelpText and onClear are provided)
+      if let clearHelpText = configuration.clearHelpText, let onClear = configuration.onClear {
+        Button {
+          withAnimation(itemLayoutAnimation) {
+            onClear()
+          }
+        } label: {
+          Label(clearHelpText, systemImage: "trash")
+            .labelStyle(.iconOnly)
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.secondary)
+            .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
+        }
+        .buttonStyle(.borderedOnHover)
+        .disabled(items.isEmpty)
+        .help(clearHelpText)
+      }
     }
     .padding(.horizontal, 12)
     .frame(height: collectionToolBarHeight, alignment: .center)
     .background(
       .regularMaterial.opacity(0.9),
     )
-  }
-
-  @ViewBuilder
-  private func titleBlock(visibleItemCount: Int) -> some View {
-    if let title = configuration.title {
-      VStack(alignment: .leading, spacing: 0) {
-        Text(title)
-          .font(.headline)
-          .lineLimit(1)
-          .truncationMode(.middle)
-
-        Group {
-          if configuration.useDefaultSubtitle {
-            Text("\(visibleItemCount) image\(visibleItemCount == 1 ? "" : "s")")
-          } else if let subtitle = configuration.subtitle {
-            Text(subtitle)
-          }
-        }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .truncationMode(.middle)
-      }
-    }
-  }
-
-  @ViewBuilder
-  private var searchField: some View {
-    if viewModel.searchableText != nil {
-      SearchField("Search", text: animatedSearchText)
-        .foldable(true)
-        .frame(maxWidth: 220, fieldHeight: collectionToolBarButtonHeight)
-    }
-  }
-
-  @ViewBuilder
-  private var sortMenu: some View {
-    if let currentSortOption = viewModel.selectedSortOption {
-      Menu {
-        Picker("Sort by", selection: Binding(
-          get: { currentSortOption.id },
-          set: { newValue in
-            setSortOption(newValue)
-          },
-        )) {
-          ForEach(configuration.sortOptions) { sortOption in
-            Text(sortOption.title).tag(sortOption.id)
-          }
-        }
-        .pickerStyle(.inline)
-
-        Divider()
-
-        Picker("Order", selection: Binding(
-          get: { viewModel.sortAscending },
-          set: { newValue in
-            setSortAscending(newValue)
-          },
-        )) {
-          Text("Ascending").tag(true)
-          Text("Descending").tag(false)
-        }
-        .pickerStyle(.inline)
-      } label: {
-        Label("Sort", systemImage: "arrow.up.arrow.down")
-          .labelStyle(.iconOnly)
-          .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(.secondary)
-          .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
-      }
-      .menuStyle(.button)
-      .buttonStyle(.borderedOnHover(applyPressedEffect: false))
-      .help(
-        "Sort by \(currentSortOption.title), \(viewModel.sortAscending ? "ascending" : "descending")",
-      )
-    }
   }
 
   private func setSortOption(_ sortOption: ImageCollectionSortOption<Item>) {
@@ -502,39 +527,6 @@ struct ImageCollectionView<
 
     withAnimation(itemLayoutAnimation) {
       viewModel.sortAscending = sortAscending
-    }
-  }
-
-  private var viewModePicker: some View {
-    MaterialSegmentedPicker(
-      effectiveViewModeBinding,
-      items: ImageCollectionViewMode.allCases,
-      background: .controlBackground,
-    ) { mode in
-      Label(mode.title, systemImage: mode.systemImage)
-        .labelStyle(.iconOnly)
-        .font(.system(size: 13, weight: .medium))
-    }
-    .frame(height: collectionToolBarButtonHeight + 2)
-  }
-
-  @ViewBuilder
-  private var clearButton: some View {
-    if let clearHelpText = configuration.clearHelpText, let onClear = configuration.onClear {
-      Button {
-        withAnimation(itemLayoutAnimation) {
-          onClear()
-        }
-      } label: {
-        Label(clearHelpText, systemImage: "trash")
-          .labelStyle(.iconOnly)
-          .font(.system(size: 13, weight: .medium))
-          .foregroundStyle(.secondary)
-          .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
-      }
-      .buttonStyle(.borderedOnHover)
-      .disabled(items.isEmpty)
-      .help(clearHelpText)
     }
   }
 
