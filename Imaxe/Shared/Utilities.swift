@@ -381,19 +381,40 @@ extension NSWindow {
     convertFromBacking(NSRect(origin: .zero, size: size)).size
   }
 
-  func centeredConstrainedFrame(_ windowSize: NSSize) -> NSRect {
+  enum CenteringStrategy {
+    case remain
+    case centerOnScreen
+    case custom(NSPoint)
+  }
+
+  func constrainedFrame(_ windowSize: NSSize, centeringStrategy: CenteringStrategy) -> NSRect {
     let clampedWindowSize = NSSize(
       width: max(windowSize.width, Constants.minimumWindowContentWidth),
       height: max(windowSize.height, Constants.minimumWindowContentHeight + titlebarHeight),
     )
+    let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+
+    var centerPoint = NSPoint(x: frame.midX, y: frame.midY)
+    switch centeringStrategy {
+    case .remain:
+      break
+    case .centerOnScreen:
+      if let visibleFrame {
+        centerPoint.x = visibleFrame.midX
+        centerPoint.y = visibleFrame.midY
+      }
+    case let .custom(point):
+      centerPoint = point
+    }
+
     let frame = NSRect(
-      x: frame.midX - clampedWindowSize.width / 2.0,
-      y: frame.midY - clampedWindowSize.height / 2.0,
+      x: centerPoint.x - clampedWindowSize.width / 2.0,
+      y: centerPoint.y - clampedWindowSize.height / 2.0,
       width: clampedWindowSize.width,
       height: clampedWindowSize.height,
     )
 
-    if let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+    if let visibleFrame {
       return frame.constrained(to: visibleFrame)
     }
 
