@@ -84,6 +84,11 @@ actor AppLogger {
 
   private init() {}
 
+  deinit {
+    try? logFileHandle?.close()
+    logFileHandle = nil
+  }
+
   nonisolated func log(
     _ message: String,
     level: AppLogLevel = .notice,
@@ -168,13 +173,17 @@ actor AppLogger {
     }
   }
 
+  private var logDirectory: URL {
+    URL.dataDirectory.appendingPathComponent("Logs", isDirectory: true)
+  }
+
   private func makeLogFileHandle() throws -> FileHandle {
-    let logDirectory = URL.dataDirectory.appendingPathComponent("Logs", isDirectory: true)
     try FileManager.default.ensureExists(for: logDirectory)
 
-    let fileTimestamp = Date.now.ISO8601Format().replacingOccurrences(of: ":", with: "-")
-    let logFileURL = logDirectory.appendingPathComponent("log-\(fileTimestamp).txt")
+    let fileDate = Date.now.ISO8601Format(.iso8601Date(timeZone: .current))
+    let logFileURL = logDirectory.appendingPathComponent("log-\(fileDate).txt")
     try FileManager.default.ensureExists(for: logFileURL, isDirectory: false)
+    pruneOldLogFiles()
 
     let fileHandle = try FileHandle(forWritingTo: logFileURL)
     try fileHandle.seekToEnd()
@@ -182,5 +191,36 @@ actor AppLogger {
       "Log file created at: \(logFileURL.filePath, privacy: .public)",
     )
     return fileHandle
+  }
+
+  /// Prunes old log files to keep only the most recent 7 log files.
+  private func pruneOldLogFiles() {
+    do {
+      let logFiles = try FileManager.default.contentsOfDirectory(
+        at: logDirectory,
+        includingPropertiesForKeys: [.creationDateKey],
+        options: .skipsHiddenFiles,
+      ).filter { $0.pathExtension == "txt" }
+
+      let sortedLogFiles = try logFiles.sorted { file1, file2 in
+        let date1 = try file1.resourceValues(forKeys: [.creationDateKey])
+          .creationDate ?? .distantPast
+        let date2 = try file2.resourceValues(forKeys: [.creationDateKey])
+          .creationDate ?? .distantPast
+        return date1 > date2
+      }
+
+      let filesToDelete = sortedLogFiles.dropFirst(7)
+      for fileURL in filesToDelete {
+        try FileManager.default.removeItem(at: fileURL)
+        logger(for: .general).info(
+          "Deleted old log file: \(fileURL.filePath, privacy: .public)",
+        )
+      }
+    } catch {
+      logger(for: .general).error(
+        "Failed to prune old log files: \(error.localizedDescription, privacy: .public)",
+      )
+    }
   }
 }
