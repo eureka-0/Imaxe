@@ -246,6 +246,18 @@ extension NSApplication {
   }
 }
 
+// MARK: - NSEvent extensions.
+
+extension NSEvent {
+  static var leftMousePressed: Bool {
+    (NSEvent.pressedMouseButtons & 1 << 0) != 0
+  }
+
+  static var rightMousePressed: Bool {
+    (NSEvent.pressedMouseButtons & 1 << 1) != 0
+  }
+}
+
 // MARK: - NSImage extensions.
 
 extension NSImage {

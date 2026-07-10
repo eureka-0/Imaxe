@@ -22,10 +22,9 @@ struct ImaxeApp: App {
       let modelConfiguration = ModelConfiguration(url: modelFileURL)
       modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
 
-      AppLogger.shared.setDestination(to: .console)
-      appLog("Application initialized", level: .info, category: .general)
-
       #if DEBUG
+        AppLogger.shared.setDestination(to: .console)
+        appLog("Application initialized", level: .info, category: .general)
         appLog(
           "Supported image types: \(ImageLoader.supportedImageUTTypesDescription)",
           level: .debug,
@@ -37,6 +36,9 @@ struct ImaxeApp: App {
           level: .debug,
           category: .persistence,
         )
+      #else
+        AppLogger.shared.setDestination(to: .file)
+        appLog("Application initialized", level: .info, category: .general)
       #endif
     } catch {
       fatalError("Failed to create model container: \(error)")

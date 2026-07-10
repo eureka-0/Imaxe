@@ -943,6 +943,7 @@ struct ImageScrollView: NSViewRepresentable {
       frame: NSRect,
       simultaneousZoomScale: CGFloat? = nil,
       targetImageFittedToViewport: Bool = false,
+      caller: String = #function,
     ) {
       DispatchQueue.main.async { [weak self, weak scrollView, weak window] in
         guard let self, let scrollView, let window else { return }
@@ -973,7 +974,7 @@ struct ImageScrollView: NSViewRepresentable {
             Applying window frame from \(window.frame) to \(frame); window animation: \
             \(animatesWindowResize), synchronized window/zoom animation: \
             \(synchronizesWindowAndZoom), duration: \(animationDuration), zoom target: \
-            \(String(describing: simultaneousZoomScale)).
+            \(String(describing: simultaneousZoomScale)) [Caller: \(caller)].
             """,
             level: .debug,
             category: .windowing,
@@ -1416,7 +1417,9 @@ struct ImageScrollView: NSViewRepresentable {
         Task { @MainActor [weak self] in
           guard let self, !isApplyingWindowFrame else { return }
 
-          clearFitToScreenRestoreState()
+          if NSEvent.leftMousePressed {
+            clearFitToScreenRestoreState()
+          }
         }
       }
     }
