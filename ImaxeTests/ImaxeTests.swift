@@ -122,6 +122,172 @@ struct ImageViewTests {
     #expect(coordinator.hasPendingCommands)
   }
 
+  @Test func `constrained window frame preserves size at fractional origin`() throws {
+    let visibleFrame = try #require(NSScreen.main?.visibleFrame)
+    let requestedSize = NSSize(width: 700, height: 500)
+    let requestedOrigin = NSPoint(
+      x: floor(visibleFrame.minX + 20) + 0.5,
+      y: floor(visibleFrame.minY + 20) + 0.5,
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: requestedSize),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+
+    let frame = window.constrainedFrame(
+      requestedSize,
+      centeringStrategy: .custom(NSPoint(
+        x: requestedOrigin.x + requestedSize.width / 2,
+        y: requestedOrigin.y + requestedSize.height / 2,
+      )),
+    )
+
+    #expect(frame.size == requestedSize)
+    #expect(frame.origin == requestedOrigin)
+  }
+
+  @Test func `fit window to image matches viewport within one backing pixel`() async throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let viewportController = ImageViewportController()
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 1000, height: 700)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    let imageSize = NSSize(width: 780, height: 540)
+    scrollView.autoresizingMask = [.width, .height]
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = NSView(frame: NSRect(origin: .zero, size: imageSize))
+    window.contentView = scrollView
+    coordinator.observe(scrollView)
+    coordinator.bind(to: viewportController)
+
+    viewportController.fitWindowToImage()
+
+    let pointTolerance = 1 / window.backingScaleFactor
+    try await TestSupport.waitUntil {
+      abs(scrollView.contentSize.width - imageSize.width) <= pointTolerance
+        && abs(scrollView.contentSize.height - imageSize.height) <= pointTolerance
+    }
+
+    #expect(abs(scrollView.contentSize.width - imageSize.width) <= pointTolerance)
+    #expect(abs(scrollView.contentSize.height - imageSize.height) <= pointTolerance)
+  }
+
+  @Test func `fit to screen animates zoom when window frame is unchanged`() async throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let screen = try #require(window.screen ?? NSScreen.main)
+    let maximumFrame = window.constrainFrameRect(screen.visibleFrame, to: screen)
+    window.setFrame(maximumFrame, display: false)
+
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    scrollView.autoresizingMask = [.width, .height]
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    window.contentView = scrollView
+    scrollView.layoutSubtreeIfNeeded()
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: scrollView.contentSize),
+    )
+    scrollView.magnification = 0.5
+    coordinator.observe(scrollView)
+
+    let originalFrame = window.frame
+    coordinator.handle(.fitToScreen)
+
+    try await TestSupport.waitUntil {
+      coordinator.isProgrammaticZoomAnimating
+    }
+    #expect(window.frame.isApproximatelyEqual(to: originalFrame))
+
+    try await TestSupport.waitUntil {
+      !coordinator.isProgrammaticZoomAnimating
+        && scrollView.magnification.isApproximatelyEqual(to: 1.0)
+    }
+  }
+
+  @Test func `fit to screen and restore keep image and viewport sizes synchronized`() async throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 400, height: 300)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    let clipView = ImageScrollView.CenteringClipView()
+    let imageSize = NSSize(width: 800, height: 600)
+    scrollView.contentView = clipView
+    scrollView.autoresizingMask = [.width, .height]
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    clipView.documentView = NSView(frame: NSRect(origin: .zero, size: imageSize))
+    window.contentView = scrollView
+    scrollView.magnification = 0.5
+    scrollView.layoutSubtreeIfNeeded()
+    coordinator.observe(scrollView)
+
+    func maximumMismatchDuringAnimation() async throws -> CGFloat {
+      try await TestSupport.waitUntil {
+        coordinator.isProgrammaticZoomAnimating
+      }
+
+      var maximumMismatch = CGFloat.zero
+      try await TestSupport.waitUntil(timeout: .seconds(2)) {
+        scrollView.layoutSubtreeIfNeeded()
+        let imageDisplaySize = NSSize(
+          width: imageSize.width * scrollView.magnification,
+          height: imageSize.height * scrollView.magnification,
+        )
+        maximumMismatch = max(
+          maximumMismatch,
+          abs(imageDisplaySize.width - scrollView.contentSize.width),
+          abs(imageDisplaySize.height - scrollView.contentSize.height),
+        )
+        return !coordinator.isProgrammaticZoomAnimating
+      }
+      return maximumMismatch
+    }
+
+    let pointTolerance = 1 / window.backingScaleFactor
+    coordinator.handle(.fitToScreen)
+    let maximumMismatch = try await maximumMismatchDuringAnimation()
+    #expect(
+      maximumMismatch <= pointTolerance,
+      "Maximum image/viewport mismatch was \(maximumMismatch) points.",
+    )
+
+    coordinator.handle(.fitToScreen)
+    let restoreMaximumMismatch = try await maximumMismatchDuringAnimation()
+    #expect(
+      restoreMaximumMismatch <= pointTolerance,
+      "Maximum restore image/viewport mismatch was \(restoreMaximumMismatch) points.",
+    )
+  }
+
   @Test func `fit to screen double click restores previous viewport`() async throws {
     let originalZoomScale = CGFloat(0.25)
     var alwaysFitChanges: [Bool] = []
