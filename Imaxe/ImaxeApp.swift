@@ -7,6 +7,7 @@
 
 import SwiftData
 import SwiftUI
+import UniformTypeIdentifiers
 
 @main
 struct ImaxeApp: App {
@@ -17,14 +18,26 @@ struct ImaxeApp: App {
 
   init() {
     do {
-      let modelFileURL = FileManager.default.dataDirectory.appendingPathComponent("database.sqlite")
-
-      #if DEBUG
-        debugPrint("Model file URL: \(modelFileURL.path)")
-      #endif
-
+      let modelFileURL = URL.dataDirectory.appendingPathComponent("database.sqlite")
       let modelConfiguration = ModelConfiguration(url: modelFileURL)
       modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
+
+      AppLogger.shared.setDestination(to: .console)
+      appLog("Application initialized", level: .info, category: .general)
+
+      #if DEBUG
+        appLog(
+          "Supported image types: \(ImageLoader.supportedImageUTTypesDescription)",
+          level: .debug,
+          category: .imageLoading,
+        )
+
+        appLog(
+          "Model file URL: \(modelFileURL.filePath)",
+          level: .debug,
+          category: .persistence,
+        )
+      #endif
     } catch {
       fatalError("Failed to create model container: \(error)")
     }

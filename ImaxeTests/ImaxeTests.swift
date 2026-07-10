@@ -11,10 +11,13 @@ import SwiftData
 import SwiftUI
 import Testing
 
+// MARK: - Image View
+
 @MainActor
-struct ImaxeTests {
+@Suite("Image View")
+struct ImageViewTests {
   @Test func `bitmap image container uses pixel size`() {
-    let image = bitmapImage()
+    let image = TestSupport.bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
 
     let imageContainer = ImageContainer(url: url, nsImage: image)
@@ -24,7 +27,7 @@ struct ImaxeTests {
   }
 
   @Test func `canvas occupies image pixel size in backing pixels`() {
-    let image = bitmapImage()
+    let image = TestSupport.bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
     let imageContainer = ImageContainer(url: url, nsImage: image)
     let imageInfo = ImageInfo(url: url)
@@ -41,14 +44,335 @@ struct ImaxeTests {
     )
     window.contentView?.addSubview(canvas)
 
-    // At 100% the canvas must occupy exactly the image's pixel size in backing pixels, regardless
-    // of the screen's backing scale factor.
     let backingSize = canvas.convertToBacking(canvas.bounds.size)
     #expect(backingSize.isApproximatelyEqual(to: imageContainer.pixelSize))
   }
 
+  @Test func `always fit to window still applies after viewport preserving image change`() {
+    var reportedZoomScale: CGFloat?
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { reportedZoomScale = $0 },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
+    )
+    let imageView = NSView(frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)))
+    let imageContainer = ImageContainer(
+      url: URL(fileURLWithPath: "/tmp/example.png"),
+      nsImage: TestSupport.bitmapImage(width: 200, height: 100),
+    )
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = imageView
+    coordinator.updateAlwaysFitToWindowFromBinding(true)
+    coordinator.prepareForImage(
+      imageContainer,
+      shouldApplyLoadedImageWindowSize: false,
+    )
+
+    coordinator.scrollViewDidLayout(scrollView)
+
+    #expect(!coordinator.hasPendingCommands)
+    #expect(scrollView.magnification.isApproximatelyEqual(to: 0.5))
+    #expect(reportedZoomScale?.isApproximatelyEqual(to: 0.5) == true)
+  }
+
+  @Test func `double click triggers fit to screen`() throws {
+    let scrollView = ImageScrollView.ImageNSScrollView()
+    var didTriggerDoubleClick = false
+    scrollView.onDoubleClick = {
+      didTriggerDoubleClick = true
+    }
+    let event = try #require(NSEvent.mouseEvent(
+      with: .leftMouseDown,
+      location: .zero,
+      modifierFlags: [],
+      timestamp: 0,
+      windowNumber: 0,
+      context: nil,
+      eventNumber: 0,
+      clickCount: 2,
+      pressure: 1,
+    ))
+
+    scrollView.mouseDown(with: event)
+
+    #expect(didTriggerDoubleClick)
+  }
+
+  @Test func `fit to screen command is queued`() {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let viewportController = ImageViewportController()
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
+    )
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
+    )
+    coordinator.observe(scrollView)
+    coordinator.bind(to: viewportController)
+
+    viewportController.fitToScreen()
+
+    #expect(coordinator.hasPendingCommands)
+  }
+
+  @Test func `constrained window frame preserves size at fractional origin`() throws {
+    let visibleFrame = try #require(NSScreen.main?.visibleFrame)
+    let requestedSize = NSSize(width: 700, height: 500)
+    let requestedOrigin = NSPoint(
+      x: floor(visibleFrame.minX + 20) + 0.5,
+      y: floor(visibleFrame.minY + 20) + 0.5,
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: requestedSize),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+
+    let frame = window.constrainedFrame(
+      requestedSize,
+      centeringStrategy: .custom(NSPoint(
+        x: requestedOrigin.x + requestedSize.width / 2,
+        y: requestedOrigin.y + requestedSize.height / 2,
+      )),
+    )
+
+    #expect(frame.size == requestedSize)
+    #expect(frame.origin == requestedOrigin)
+  }
+
+  @Test func `fit window to image matches viewport within one backing pixel`() async throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let viewportController = ImageViewportController()
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 1000, height: 700)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    let imageSize = NSSize(width: 780, height: 540)
+    scrollView.autoresizingMask = [.width, .height]
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = NSView(frame: NSRect(origin: .zero, size: imageSize))
+    window.contentView = scrollView
+    coordinator.observe(scrollView)
+    coordinator.bind(to: viewportController)
+
+    viewportController.fitWindowToImage()
+
+    let pointTolerance = 1 / window.backingScaleFactor
+    try await TestSupport.waitUntil {
+      abs(scrollView.contentSize.width - imageSize.width) <= pointTolerance
+        && abs(scrollView.contentSize.height - imageSize.height) <= pointTolerance
+    }
+
+    #expect(abs(scrollView.contentSize.width - imageSize.width) <= pointTolerance)
+    #expect(abs(scrollView.contentSize.height - imageSize.height) <= pointTolerance)
+  }
+
+  @Test func `fit to screen animates zoom when window frame is unchanged`() async throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let screen = try #require(window.screen ?? NSScreen.main)
+    let maximumFrame = window.constrainFrameRect(screen.visibleFrame, to: screen)
+    window.setFrame(maximumFrame, display: false)
+
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    scrollView.autoresizingMask = [.width, .height]
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    window.contentView = scrollView
+    scrollView.layoutSubtreeIfNeeded()
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: scrollView.contentSize),
+    )
+    scrollView.magnification = 0.5
+    coordinator.observe(scrollView)
+
+    let originalFrame = window.frame
+    coordinator.handle(.fitToScreen)
+
+    try await TestSupport.waitUntil {
+      coordinator.isProgrammaticZoomAnimating
+    }
+    #expect(window.frame.isApproximatelyEqual(to: originalFrame))
+
+    try await TestSupport.waitUntil {
+      !coordinator.isProgrammaticZoomAnimating
+        && scrollView.magnification.isApproximatelyEqual(to: 1.0)
+    }
+  }
+
+  @Test func `fit to screen and restore keep image and viewport sizes synchronized`() async throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 400, height: 300)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    let clipView = ImageScrollView.CenteringClipView()
+    let imageSize = NSSize(width: 800, height: 600)
+    scrollView.contentView = clipView
+    scrollView.autoresizingMask = [.width, .height]
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    clipView.documentView = NSView(frame: NSRect(origin: .zero, size: imageSize))
+    window.contentView = scrollView
+    scrollView.magnification = 0.5
+    scrollView.layoutSubtreeIfNeeded()
+    coordinator.observe(scrollView)
+
+    func maximumMismatchDuringAnimation() async throws -> CGFloat {
+      try await TestSupport.waitUntil {
+        coordinator.isProgrammaticZoomAnimating
+      }
+
+      var maximumMismatch = CGFloat.zero
+      try await TestSupport.waitUntil(timeout: .seconds(2)) {
+        scrollView.layoutSubtreeIfNeeded()
+        let imageDisplaySize = NSSize(
+          width: imageSize.width * scrollView.magnification,
+          height: imageSize.height * scrollView.magnification,
+        )
+        maximumMismatch = max(
+          maximumMismatch,
+          abs(imageDisplaySize.width - scrollView.contentSize.width),
+          abs(imageDisplaySize.height - scrollView.contentSize.height),
+        )
+        return !coordinator.isProgrammaticZoomAnimating
+      }
+      return maximumMismatch
+    }
+
+    let pointTolerance = 1 / window.backingScaleFactor
+    coordinator.handle(.fitToScreen)
+    let maximumMismatch = try await maximumMismatchDuringAnimation()
+    #expect(
+      maximumMismatch <= pointTolerance,
+      "Maximum image/viewport mismatch was \(maximumMismatch) points.",
+    )
+
+    coordinator.handle(.fitToScreen)
+    let restoreMaximumMismatch = try await maximumMismatchDuringAnimation()
+    #expect(
+      restoreMaximumMismatch <= pointTolerance,
+      "Maximum restore image/viewport mismatch was \(restoreMaximumMismatch) points.",
+    )
+  }
+
+  @Test func `fit to screen double click restores previous viewport`() async throws {
+    let originalZoomScale = CGFloat(0.25)
+    var alwaysFitChanges: [Bool] = []
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { alwaysFitChanges.append($0) },
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 320, height: 240)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let originalWindowFrame = window.frame
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    let imageView = NSView(frame: NSRect(origin: .zero, size: NSSize(width: 1000, height: 500)))
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = imageView
+    scrollView.magnification = originalZoomScale
+    window.contentView = scrollView
+    coordinator.observe(scrollView)
+    coordinator.updateAlwaysFitToWindowFromBinding(true)
+
+    coordinator.handle(.fitToScreen)
+    try await TestSupport.waitUntil {
+      coordinator.isFitToScreenToggleActive
+        && !window.frame.isApproximatelyEqual(to: originalWindowFrame)
+        && scrollView.magnification > originalZoomScale
+    }
+
+    #expect(coordinator.alwaysFitToWindow == false)
+    #expect(alwaysFitChanges.last == false)
+
+    coordinator.handle(.fitToScreen)
+    try await TestSupport.waitUntil {
+      !coordinator.isFitToScreenToggleActive
+        && window.frame.isApproximatelyEqual(to: originalWindowFrame)
+        && scrollView.magnification.isApproximatelyEqual(to: originalZoomScale)
+    }
+  }
+
+  @Test func `stale fit to screen animation does not override restore`() async throws {
+    let originalZoomScale = CGFloat(0.25)
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 320, height: 240)),
+      styleMask: [.titled, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let originalWindowFrame = window.frame
+    let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 1000, height: 500)),
+    )
+    scrollView.magnification = originalZoomScale
+    window.contentView = scrollView
+    coordinator.observe(scrollView)
+
+    coordinator.handle(.fitToScreen)
+    coordinator.handle(.fitToScreen)
+
+    try await TestSupport.waitUntil {
+      !coordinator.isFitToScreenToggleActive
+        && window.frame.isApproximatelyEqual(to: originalWindowFrame)
+        && scrollView.magnification.isApproximatelyEqual(to: originalZoomScale)
+    }
+  }
+}
+
+// MARK: - Image Loading
+
+@MainActor
+@Suite("Image Loading")
+struct ImageLoadingTests {
   @Test func `image info loads sample metadata without image decode`() async throws {
-    let url = sampleImageURL("sample_1280×853.png")
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
     let info = try await ImageLoader.shared.loadInfo(from: url)
 
@@ -60,7 +384,7 @@ struct ImaxeTests {
   }
 
   @Test func `svg loaded image rasterizes to bitmap and uses view box size`() async throws {
-    let url = sampleImageURL("sample_1280×853.svg")
+    let url = TestSupport.sampleImageURL("sample_1280×853.svg")
 
     let imageInfo = try await ImageLoader.shared.loadInfo(from: url)
     let imageContainer = try await ImageLoader.shared.loadImage(from: url)
@@ -73,9 +397,8 @@ struct ImaxeTests {
     #expect(bitmapRep.pixelsHigh == 853)
   }
 
-  @Test func `complex SVG rasterizes to bitmap`() async throws {
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-svg-with-paint-server.svg")
+  @Test func `complex svg rasterizes to bitmap`() async throws {
+    let url = URL.temporaryDirectory.appending(path: "imaxe-svg-with-paint-server.svg")
     let svg = """
     <svg width="100%" height="100%" viewBox="0 0 4267 4267" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -102,7 +425,7 @@ struct ImaxeTests {
   }
 
   @Test func `image loader returns cached image container for same url`() async throws {
-    let url = sampleImageURL("sample_1280×853.png")
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
     let firstImage = try await ImageLoader.shared.loadImage(from: url)
     let secondImage = try await ImageLoader.shared.loadImage(from: url)
@@ -110,8 +433,23 @@ struct ImaxeTests {
     #expect(firstImage === secondImage)
   }
 
+  @Test func `image loader reports missing files as file not found`() async throws {
+    let url = URL.temporaryDirectory.appending(path: "imaxe-missing-image-\(UUID().uuidString).png")
+
+    do {
+      _ = try await ImageLoader.shared.loadImage(from: url)
+      Issue.record("Expected loading a missing image to throw.")
+    } catch let error as ImageLoadingError {
+      if case let .fileNotFound(missingURL) = error {
+        #expect(missingURL == url)
+      } else {
+        Issue.record("Expected fileNotFound, got \(error).")
+      }
+    }
+  }
+
   @Test func `image loader cancellation does not poison later loads`() async throws {
-    let url = sampleImageURL("sample_1280×853.png")
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let requestID = ImageLoader.LoadRequestID()
     let loadTask = Task {
       try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
@@ -130,14 +468,14 @@ struct ImaxeTests {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-changing-image-\(UUID().uuidString).png")
 
-    try pngData(width: 10, height: 20).write(to: url)
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
     let firstImage = try await ImageLoader.shared.loadImage(from: url)
     let firstInfo = try await ImageLoader.shared.loadInfo(from: url)
 
-    try pngData(width: 12, height: 24).write(to: url)
+    try TestSupport.pngData(width: 12, height: 24).write(to: url)
     try FileManager.default.setAttributes(
       [.modificationDate: Date(timeIntervalSinceNow: 2)],
-      ofItemAtPath: url.path,
+      ofItemAtPath: url.filePath,
     )
 
     let secondImage = try await ImageLoader.shared.loadImage(from: url)
@@ -150,165 +488,24 @@ struct ImaxeTests {
     #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
   }
 
-  @Test func `file change reload keeps current image while loading`() throws {
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-session-reload-\(UUID().uuidString).png")
-    try pngData(width: 10, height: 20).write(to: url)
-    let initialImage = ImageContainer(url: url, nsImage: bitmapImage())
-    let session = ImageSession(imageContainer: initialImage)
+  @Test func `thumbnail cache generates svg thumbnail`() throws {
+    let url = TestSupport.sampleImageURL("sample_1280×853.svg")
 
-    session.loadImage(from: url, preservingViewportOnReload: true)
-
-    #expect(session.currentImage === initialImage)
-    #expect(!session.shouldApplyLoadedImageWindowSize)
-  }
-
-  @Test func `always fit to window still applies after viewport-preserving image change`() {
-    var reportedZoomScale: CGFloat?
-    let coordinator = ImageScrollView.Coordinator(
-      onZoomScaleChange: { reportedZoomScale = $0 },
-      onAlwaysFitToWindowChange: { _ in },
-    )
-    let scrollView = NSScrollView(
-      frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
-    )
-    let imageView = NSView(frame: NSRect(
-      origin: .zero,
-      size: NSSize(width: 200, height: 100),
-    ))
-    let imageContainer = ImageContainer(
-      url: URL(fileURLWithPath: "/tmp/example.png"),
-      nsImage: bitmapImage(width: 200, height: 100),
-    )
-    scrollView.allowsMagnification = true
-    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
-    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
-    scrollView.documentView = imageView
-    coordinator.updateAlwaysFitToWindowFromBinding(true)
-    coordinator.prepareForImage(
-      imageContainer,
-      shouldApplyLoadedImageWindowSize: false,
-    )
-
-    coordinator.scrollViewDidLayout(scrollView)
-
-    #expect(!coordinator.hasPendingCommands)
-    #expect(scrollView.magnification.isApproximatelyEqual(to: 0.5))
-    #expect(reportedZoomScale?.isApproximatelyEqual(to: 0.5) == true)
-  }
-
-  @Test func `folder navigator starts with current image and can load directory asynchronously`(
-  ) async throws {
-    let directory = URL.temporaryDirectory
-      .appending(path: "imaxe-folder-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
-    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-
-    let firstURL = directory.appending(path: "b.png")
-    let secondURL = directory.appending(path: "a.png")
-    try pngData(width: 10, height: 20).write(to: firstURL)
-    try pngData(width: 12, height: 24).write(to: secondURL)
-
-    let navigator = FolderNavigator(for: firstURL, enableLoopBrowsing: false)
-    let imageURLs = try #require(await FolderNavigator.imageURLs(for: firstURL))
-
-    #expect(navigator.imageURLs == [firstURL])
-    #expect(imageURLs.map(\.lastPathComponent) == ["a.png", "b.png"])
-  }
-
-  @Test func `image file watcher reports stable file change`() async throws {
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-watched-image-\(UUID().uuidString).png")
-    try pngData(width: 10, height: 20).write(to: url)
-    let changedImageData = try pngData(width: 12, height: 24)
-
-    var watcher: ImageFileWatcher?
-    let didChange = await withCheckedContinuation { continuation in
-      watcher = ImageFileWatcher(url: url) {
-        continuation.resume(returning: true)
-      }
-
-      DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(100)) {
-        try? changedImageData.write(to: url)
-        try? FileManager.default.setAttributes(
-          [.modificationDate: Date(timeIntervalSinceNow: 2)],
-          ofItemAtPath: url.path,
-        )
-      }
-    }
-
-    #expect(didChange)
-    _ = watcher
-  }
-
-  @Test func `recent images are updated sorted and cleared`() throws {
-    let container = try ModelContainer(
-      for: RecentImage.self,
-      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-    )
-    let context = ModelContext(container)
-    let firstURL = URL(fileURLWithPath: "/tmp/first.png")
-    let secondURL = URL(fileURLWithPath: "/tmp/second.png")
-
-    try RecentImagesStore.recordOpened(
-      firstURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 1),
-    )
-    try RecentImagesStore.recordOpened(
-      secondURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 2),
-    )
-    try RecentImagesStore.recordOpened(
-      firstURL,
-      in: context,
-      openedAt: Date(timeIntervalSince1970: 3),
-    )
-
-    let descriptor = FetchDescriptor<RecentImage>(
-      sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
-    )
-    let recentImages = try context.fetch(descriptor)
-
-    #expect(recentImages.compactMap(\.url).map(\.lastPathComponent) == ["first.png", "second.png"])
-    #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
-
-    try RecentImagesStore.clear(in: context)
-
-    #expect(try context.fetch(descriptor).isEmpty)
-  }
-
-  @Test func `recent images store file metadata and cleanup thumbnail cache`() throws {
-    let container = try ModelContainer(
-      for: RecentImage.self,
-      configurations: ModelConfiguration(isStoredInMemoryOnly: true),
-    )
-    let context = ModelContext(container)
-    let url = URL.temporaryDirectory
-      .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
-    try pngData(width: 80, height: 40).write(to: url)
-
-    try RecentImagesStore.recordOpened(url, in: context)
-
-    let recentDescriptor = FetchDescriptor<RecentImage>()
-    let recent = try #require(context.fetch(recentDescriptor).first)
-    let thumbnailKey = try #require(recent.thumbnailCacheKey)
+    let thumbnailKey = try #require(ImageThumbnailCache.ensureThumbnail(for: url))
     let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+    let thumbnailImage = try #require(NSImage(contentsOf: thumbnailURL))
+    let bitmapRep = try #require(thumbnailImage.representations.first as? NSBitmapImageRep)
 
-    let resourceValues = try recent.url.resourceValues(forKeys: [
-      .contentModificationDateKey,
-      .fileSizeKey,
-    ])
-    #expect((resourceValues.fileSize ?? 0) > 0)
-    #expect(resourceValues.contentModificationDate != nil)
-    #expect(FileManager.default.fileExists(atPath: thumbnailURL.path))
-
-    try RecentImagesStore.remove(path: url.filePath, in: context)
-    #expect(!FileManager.default.fileExists(atPath: thumbnailURL.path))
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.filePath))
+    #expect(max(bitmapRep.pixelsWide, bitmapRep.pixelsHigh) <= ImageThumbnailCache.maxPixelSize)
+    #expect(bitmapRep.pixelsWide > 0)
+    #expect(bitmapRep.pixelsHigh > 0)
+    let thumbnailAspectRatio = CGFloat(bitmapRep.pixelsWide) / CGFloat(bitmapRep.pixelsHigh)
+    #expect(abs(thumbnailAspectRatio - 1280.0 / 853.0) < 0.02)
   }
 
   @Test func `thumbnail cache total size sums regular files`() throws {
-    let testDirectory = ImageThumbnailCache.cacheDirectory
+    let testDirectory = URL.thumbnailCachesDirectory
       .appending(path: "test-\(UUID().uuidString)", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
     defer {
@@ -328,7 +525,380 @@ struct ImaxeTests {
     try FileManager.default.removeItem(at: testDirectory)
     #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize)
   }
+}
 
+// MARK: - Session and Navigation
+
+@MainActor
+@Suite("Session And Navigation")
+struct SessionAndNavigationTests {
+  @Test func `file change reload keeps current image while loading`() throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-session-reload-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+    let initialImage = ImageContainer(url: url, nsImage: TestSupport.bitmapImage())
+    let session = ImageSession(imageContainer: initialImage)
+
+    session.loadImage(from: url, preservingViewportOnReload: true)
+
+    #expect(session.currentImage === initialImage)
+    #expect(!session.shouldApplyLoadedImageWindowSize)
+  }
+
+  @Test func `restoring standard window buttons shows hidden titlebar controls`() {
+    let window = NSWindow(
+      contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),
+      styleMask: [.titled, .closable, .miniaturizable, .resizable],
+      backing: .buffered,
+      defer: false,
+    )
+    let session = ImageSession()
+
+    session.bindWindow(window)
+
+    #expect(window.standardWindowButton(.closeButton)?.isHidden == true)
+    #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == true)
+    #expect(window.standardWindowButton(.zoomButton)?.isHidden == true)
+
+    session.restoreStandardWindowButtons()
+
+    #expect(window.standardWindowButton(.closeButton)?.isHidden == false)
+    #expect(window.standardWindowButton(.miniaturizeButton)?.isHidden == false)
+    #expect(window.standardWindowButton(.zoomButton)?.isHidden == false)
+  }
+
+  @Test func `folder navigator starts with current image and loads asynchronously`() async throws {
+    let directory = URL.temporaryDirectory
+      .appending(path: "imaxe-folder-navigation-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+    let firstURL = directory.appending(path: "b.png")
+    let secondURL = directory.appending(path: "a.png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: firstURL)
+    try TestSupport.pngData(width: 12, height: 24).write(to: secondURL)
+
+    let navigator = FolderNavigator(for: firstURL, enableLoopBrowsing: false)
+    let imageURLs = try #require(await FolderNavigator.imageURLs(for: firstURL))
+
+    #expect(navigator.imageURLs == [firstURL])
+    #expect(imageURLs.map(\.lastPathComponent) == ["a.png", "b.png"])
+  }
+
+  @Test func `image file watcher reports stable file change`() async throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-watched-image-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+    let changedImageData = try TestSupport.pngData(width: 12, height: 24)
+
+    var watcher: ImageFileWatcher?
+    let didChange = await withCheckedContinuation { continuation in
+      watcher = ImageFileWatcher(url: url) {
+        continuation.resume(returning: true)
+      }
+
+      DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(100)) {
+        try? changedImageData.write(to: url)
+        try? FileManager.default.setAttributes(
+          [.modificationDate: Date(timeIntervalSinceNow: 2)],
+          ofItemAtPath: url.filePath,
+        )
+      }
+    }
+
+    #expect(didChange)
+    _ = watcher
+  }
+}
+
+// MARK: - Recent Images
+
+@MainActor
+@Suite("Recent Images")
+struct RecentImagesTests {
+  @Test func `recent images are updated sorted and cleared`() throws {
+    try TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let firstURL = URL(fileURLWithPath: "/tmp/first.png")
+      let secondURL = URL(fileURLWithPath: "/tmp/second.png")
+
+      try RecentImagesStore.recordOpened(
+        firstURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        secondURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+      try RecentImagesStore.recordOpened(
+        firstURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 3),
+      )
+
+      let descriptor = FetchDescriptor<RecentImage>(
+        sortBy: [SortDescriptor(\.lastOpenedAt, order: .reverse)],
+      )
+      let recentImages = try context.fetch(descriptor)
+
+      #expect(recentImages.compactMap(\.url).map(\.lastPathComponent) == [
+        "first.png",
+        "second.png",
+      ])
+      #expect(recentImages.first?.lastOpenedAt == Date(timeIntervalSince1970: 3))
+
+      try RecentImagesStore.clear(in: context)
+
+      #expect(try context.fetch(descriptor).isEmpty)
+    }
+  }
+
+  @Test func `recent images use default count limit when preference is unset`() throws {
+    try TestSupport.withRecentImagesCountLimit(nil) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/first.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/second.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+
+      #expect(recentImages.map(\.fileName) == ["second.png", "first.png"])
+    }
+  }
+
+  @Test func `recent images are trimmed to configured count limit`() throws {
+    try TestSupport.withRecentImagesCountLimit(3) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/first.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/second.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+      try RecentImagesStore.recordOpened(
+        URL(fileURLWithPath: "/tmp/third.png"),
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 3),
+      )
+
+      UserDefaults.standard.set(2, forKey: AppSettings.Keys.recentImagesCountLimit.rawValue)
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+
+      #expect(recentImages.map(\.fileName) == ["third.png", "second.png"])
+    }
+  }
+
+  @Test func `recent images store file metadata and cleanup thumbnail cache`() throws {
+    try TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let url = URL.temporaryDirectory
+        .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
+      try TestSupport.pngData(width: 80, height: 40).write(to: url)
+
+      try RecentImagesStore.recordOpened(url, in: context)
+
+      let recentDescriptor = FetchDescriptor<RecentImage>()
+      let recent = try #require(context.fetch(recentDescriptor).first)
+      let thumbnailKey = try #require(recent.thumbnailCacheKey)
+      let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+
+      let resourceValues = try recent.url.resourceValues(forKeys: [
+        .contentModificationDateKey,
+        .fileSizeKey,
+      ])
+      #expect((resourceValues.fileSize ?? 0) > 0)
+      #expect(resourceValues.contentModificationDate != nil)
+      #expect(FileManager.default.fileExists(atPath: thumbnailURL.filePath))
+
+      try RecentImagesStore.remove(path: url.filePath, in: context)
+      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.filePath))
+    }
+  }
+
+  @Test func `missing recent images are pruned with thumbnail cache`() throws {
+    try TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let existingURL = URL.temporaryDirectory
+        .appending(path: "imaxe-existing-recent-\(UUID().uuidString).png")
+      let missingURL = URL.temporaryDirectory
+        .appending(path: "imaxe-pruned-recent-\(UUID().uuidString).png")
+      defer {
+        try? FileManager.default.removeItem(at: existingURL)
+        try? FileManager.default.removeItem(at: missingURL)
+      }
+
+      try TestSupport.pngData(width: 80, height: 40).write(to: existingURL)
+      try TestSupport.pngData(width: 80, height: 40).write(to: missingURL)
+      try RecentImagesStore.recordOpened(
+        existingURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        missingURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+
+      var missingDescriptor = FetchDescriptor<RecentImage>(
+        predicate: #Predicate<RecentImage> { recentImage in
+          recentImage.path == missingURL.filePath
+        },
+      )
+      missingDescriptor.fetchLimit = 1
+      let missingRecent = try #require(context.fetch(missingDescriptor).first)
+      let missingThumbnailKey = try #require(missingRecent.thumbnailCacheKey)
+      let missingThumbnailURL = ImageThumbnailCache.thumbnailURL(for: missingThumbnailKey)
+      try FileManager.default.removeItem(at: missingURL)
+
+      let removedCount = try RecentImagesStore.removeMissingFiles(in: context)
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+      #expect(removedCount == 1)
+      #expect(recentImages.map(\.path) == [existingURL.filePath])
+      #expect(!FileManager.default.fileExists(atPath: missingThumbnailURL.filePath))
+
+      try RecentImagesStore.clear(in: context)
+    }
+  }
+
+  @Test func `opening missing recent image removes recent item and thumbnail cache`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let url = URL.temporaryDirectory
+        .appending(path: "imaxe-missing-recent-\(UUID().uuidString).png")
+      try TestSupport.pngData(width: 80, height: 40).write(to: url)
+      try RecentImagesStore.recordOpened(url, in: context)
+
+      let descriptor = FetchDescriptor<RecentImage>()
+      let recent = try #require(context.fetch(descriptor).first)
+      let thumbnailKey = try #require(recent.thumbnailCacheKey)
+      let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+      try FileManager.default.removeItem(at: url)
+
+      let session = ImageSession()
+      session.removeRecentImage = { path in
+        try RecentImagesStore.remove(path: path, in: context)
+      }
+      session.openRecentImage(recent)
+
+      for _ in 0 ..< 20 {
+        if try context.fetch(descriptor).isEmpty {
+          break
+        }
+        await Task.yield()
+      }
+
+      #expect(try context.fetch(descriptor).isEmpty)
+      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.filePath))
+      #expect(session.alert?.title == "Recent Image Removed")
+    }
+  }
+
+  @Test func `lowered recent images count limit removes trimmed thumbnail cache`() throws {
+    try TestSupport.withRecentImagesCountLimit(3) {
+      let container = try ModelContainer(
+        for: RecentImage.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+      )
+      let context = ModelContext(container)
+      let firstURL = URL.temporaryDirectory
+        .appending(path: "imaxe-trimmed-first-\(UUID().uuidString).png")
+      let secondURL = URL.temporaryDirectory
+        .appending(path: "imaxe-trimmed-second-\(UUID().uuidString).png")
+      let thirdURL = URL.temporaryDirectory
+        .appending(path: "imaxe-trimmed-third-\(UUID().uuidString).png")
+      defer {
+        try? FileManager.default.removeItem(at: firstURL)
+        try? FileManager.default.removeItem(at: secondURL)
+        try? FileManager.default.removeItem(at: thirdURL)
+        try? RecentImagesStore.clear(in: context)
+      }
+
+      try TestSupport.pngData(width: 80, height: 40).write(to: firstURL)
+      try TestSupport.pngData(width: 80, height: 40).write(to: secondURL)
+      try TestSupport.pngData(width: 80, height: 40).write(to: thirdURL)
+      try RecentImagesStore.recordOpened(
+        firstURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 1),
+      )
+      try RecentImagesStore.recordOpened(
+        secondURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 2),
+      )
+      try RecentImagesStore.recordOpened(
+        thirdURL,
+        in: context,
+        openedAt: Date(timeIntervalSince1970: 3),
+      )
+
+      var firstDescriptor = FetchDescriptor<RecentImage>(
+        predicate: #Predicate<RecentImage> { recentImage in
+          recentImage.path == firstURL.filePath
+        },
+      )
+      firstDescriptor.fetchLimit = 1
+      let firstRecent = try #require(context.fetch(firstDescriptor).first)
+      let firstThumbnailKey = try #require(firstRecent.thumbnailCacheKey)
+      let firstThumbnailURL = ImageThumbnailCache.thumbnailURL(for: firstThumbnailKey)
+      #expect(FileManager.default.fileExists(atPath: firstThumbnailURL.filePath))
+
+      UserDefaults.standard.set(2, forKey: AppSettings.Keys.recentImagesCountLimit.rawValue)
+
+      let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
+
+      #expect(recentImages.map(\.path) == [thirdURL.filePath, secondURL.filePath])
+      #expect(!FileManager.default.fileExists(atPath: firstThumbnailURL.filePath))
+    }
+  }
+}
+
+// MARK: - Shared UI
+
+@MainActor
+@Suite("Shared UI")
+struct SharedUITests {
   @Test func `color hex serializes grayscale colors as rgba`() {
     let color = Color(.sRGB, white: 0.5, opacity: 0.25)
 
@@ -341,14 +911,61 @@ struct ImaxeTests {
     #expect(color.hex == "#33669980")
   }
 
-  private func sampleImageURL(_ fileName: String) -> URL {
+  @Test func `image collection single mode initializers compile`() {
+    let items = [CollectionInitializerTestItem(id: 1)]
+
+    _ = ImageCollectionView(
+      items,
+      listRow: { item, _ in
+        Text("Row \(item.id)")
+      },
+    )
+
+    _ = ImageCollectionView(
+      items,
+      gridItem: { item, _ in
+        Text("Grid \(item.id)")
+      },
+    )
+
+    _ = ImageCollectionView(
+      items,
+      listRow: { item, _ in
+        Text("Row \(item.id)")
+      },
+      contextMenu: { _ in
+        Button("Inspect") {}
+      },
+    )
+
+    _ = ImageCollectionView(
+      items,
+      gridItem: { item, _ in
+        Text("Grid \(item.id)")
+      },
+      contextMenu: { _ in
+        Button("Inspect") {}
+      },
+    )
+  }
+
+  private struct CollectionInitializerTestItem: Identifiable {
+    let id: Int
+  }
+}
+
+// MARK: - Test Support
+
+@MainActor
+private enum TestSupport {
+  static func sampleImageURL(_ fileName: String) -> URL {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appending(path: "Images/\(fileName)")
   }
 
-  private func bitmapImage(width: Int = 10, height: Int = 20) -> NSImage {
+  static func bitmapImage(width: Int = 10, height: Int = 20) -> NSImage {
     let representation = NSBitmapImageRep(
       bitmapDataPlanes: nil,
       pixelsWide: width,
@@ -369,19 +986,21 @@ struct ImaxeTests {
     return image
   }
 
-  private func pngData(width: Int, height: Int) throws -> Data {
-    let representation = try #require(NSBitmapImageRep(
-      bitmapDataPlanes: nil,
-      pixelsWide: width,
-      pixelsHigh: height,
-      bitsPerSample: 8,
-      samplesPerPixel: 4,
-      hasAlpha: true,
-      isPlanar: false,
-      colorSpaceName: .deviceRGB,
-      bytesPerRow: 0,
-      bitsPerPixel: 0,
-    ))
+  static func pngData(width: Int, height: Int) throws -> Data {
+    let representation = try #require(
+      NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: width,
+        pixelsHigh: height,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0,
+      ),
+    )
 
     let rect = NSRect(x: 0, y: 0, width: width, height: height)
     NSGraphicsContext.saveGraphicsState()
@@ -392,10 +1011,82 @@ struct ImaxeTests {
 
     return try #require(representation.representation(using: .png, properties: [:]))
   }
+
+  static func withRecentImagesCountLimit<T>(
+    _ limit: Int?,
+    operation: () throws -> T,
+  ) throws -> T {
+    let key = AppSettings.Keys.recentImagesCountLimit.rawValue
+    let previousValue = UserDefaults.standard.object(forKey: key)
+    defer {
+      restoreUserDefault(previousValue, forKey: key)
+    }
+
+    setRecentImagesCountLimit(limit, forKey: key)
+    return try operation()
+  }
+
+  static func withRecentImagesCountLimit<T>(
+    _ limit: Int?,
+    operation: () async throws -> T,
+  ) async throws -> T {
+    let key = AppSettings.Keys.recentImagesCountLimit.rawValue
+    let previousValue = UserDefaults.standard.object(forKey: key)
+    defer {
+      restoreUserDefault(previousValue, forKey: key)
+    }
+
+    setRecentImagesCountLimit(limit, forKey: key)
+    return try await operation()
+  }
+
+  static func waitUntil(
+    timeout: Duration = .seconds(1),
+    condition: @escaping () -> Bool,
+  ) async throws {
+    let start = ContinuousClock.now
+
+    while !condition() {
+      if start.duration(to: .now) > timeout {
+        Issue.record("Timed out waiting for condition.")
+        return
+      }
+      try await Task.sleep(for: .milliseconds(20))
+    }
+  }
+
+  private static func setRecentImagesCountLimit(_ limit: Int?, forKey key: String) {
+    if let limit {
+      UserDefaults.standard.set(limit, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
+  }
+
+  private static func restoreUserDefault(_ value: Any?, forKey key: String) {
+    if let value {
+      UserDefaults.standard.set(value, forKey: key)
+    } else {
+      UserDefaults.standard.removeObject(forKey: key)
+    }
+  }
 }
 
 private extension CGFloat {
   func isApproximatelyEqual(to other: CGFloat) -> Bool {
     abs(self - other) < Constants.zoomScaleUpdateTolerance
+  }
+}
+
+private extension NSRect {
+  func isApproximatelyEqual(to other: NSRect) -> Bool {
+    origin.isApproximatelyEqual(to: other.origin)
+      && size.isApproximatelyEqual(to: other.size)
+  }
+}
+
+private extension NSPoint {
+  func isApproximatelyEqual(to other: NSPoint) -> Bool {
+    abs(x - other.x) < 1.0 && abs(y - other.y) < 1.0
   }
 }

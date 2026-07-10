@@ -19,6 +19,7 @@ Do not expand into RAW editing, professional color grading, layers, batch proces
 
 ## Directory Structure
 
+- `Imaxe.xcodeproj/`: Xcode project file.
 - `Imaxe/Core/`: core models for image loading, navigating, editing, exporting, etc.
 - `Imaxe/Features/`: feature-specific SwiftUI views and AppKit bridges.
 - `Imaxe/Shared/`: commands, constants, and shared AppKit / SwiftUI utilities.

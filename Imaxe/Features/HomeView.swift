@@ -18,7 +18,6 @@ private struct HomeOperationAlert: Identifiable {
 
 struct HomeView: View {
   @Bindable var imageSession: ImageSession
-  let recentImages: [RecentImage]
 
   @AppStorage("recentImagesViewMode")
   private var recentImagesViewModeRawValue = ImageCollectionViewMode.grid.rawValue
@@ -60,7 +59,7 @@ struct HomeView: View {
   }
 
   var body: some View {
-    VStack(spacing: 48) {
+    VStack(spacing: 0) {
       homeHero
       recentImagesCollection
     }
@@ -84,7 +83,7 @@ struct HomeView: View {
         deleteTargetURL = nil
       }
     } message: {
-      Text(deleteTargetURL?.path ?? "")
+      Text(deleteTargetURL?.filePath ?? "")
     }
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
@@ -114,6 +113,7 @@ struct HomeView: View {
       HStack(spacing: 12) {
         SettingsLink {
           Label("Settings", systemImage: "gearshape")
+            .padding(.vertical, 3)
         }
         .help("Open Settings")
 
@@ -121,14 +121,19 @@ struct HomeView: View {
           imageSession.isImporterPresented = true
         } label: {
           Label("Open Image", systemImage: "photo.badge.plus")
+            .padding(.vertical, 3)
         }
         .help("Open Image")
       }
       .buttonStyle(.borderedProminent)
+      .buttonBorderShape(.roundedRectangle)
     }
-    .padding(.horizontal, 32)
-    .padding(.top, 80)
+    .padding([.horizontal, .top], 32)
+    .padding(.bottom, 16)
     .frame(maxWidth: .infinity)
+    .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
+      length * 0.5
+    }
   }
 
   private var imageCollectionConfiguration: ImageCollectionConfiguration<RecentImage> {
@@ -150,7 +155,7 @@ struct HomeView: View {
       ImageCollectionSortOption(
         "modifiedAt",
         title: "Modified",
-        optionalValue: \.url.lastModifiedAt,
+        optionalValue: \.url.contentModificationDate,
       ),
       ImageCollectionSortOption(
         "fileSize",
@@ -166,7 +171,7 @@ struct HomeView: View {
 
   private var recentImagesCollection: some View {
     ImageCollectionView(
-      recentImages,
+      imageSession.recentImages,
       configuration: imageCollectionConfiguration,
       listRow: recentImageListRow,
       gridItem: recentImageGridItem,
@@ -192,12 +197,12 @@ struct HomeView: View {
         .frame(width: 28, height: 28)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(item.fileName)
+        Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
           .font(.callout)
           .lineLimit(1)
           .truncationMode(.middle)
 
-        Text(item.path)
+        Text(item.path.searchHighlightedAttributedString(matching: state.searchText))
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -208,13 +213,13 @@ struct HomeView: View {
       Text(item.lastOpenedAt.relativeDateDescription)
         .font(.callout)
         .foregroundStyle(.secondary)
-        .frame(idealWidth: 116, alignment: .leading)
+        .frame(width: 90, alignment: .leading)
 
       Text(fileSizeDescription(for: item.url.fileSize))
         .font(.callout)
         .monospacedDigit()
         .foregroundStyle(.secondary)
-        .frame(width: 68, alignment: .trailing)
+        .frame(width: 56, alignment: .trailing)
 
       Menu {
         recentImageActionsMenu(item)
@@ -231,10 +236,10 @@ struct HomeView: View {
     }
     .padding(.horizontal, 12)
     .padding(.vertical, 2)
-    .background(state.isHovered ? Color.primary.opacity(0.07) : .clear)
+    .background(state.isHovered ? Color.primary.opacity(0.1) : .clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .onTapGesture(count: 2) {
-      imageSession.loadImage(from: item.url)
+      openRecentImage(item)
     }
   }
 
@@ -244,8 +249,8 @@ struct HomeView: View {
   ) -> some View {
     ImageThumbnailView(url: item.url)
       .overlay(alignment: .bottom) {
-        if state.isHovered {
-          Text(item.fileName)
+        if state.isHovered || !state.searchText.isEmpty {
+          Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
             .font(.system(size: 10, weight: .light))
             .foregroundStyle(.primary)
             .lineLimit(1)
@@ -258,7 +263,7 @@ struct HomeView: View {
         }
       }
       .onTapGesture(count: 1) {
-        imageSession.loadImage(from: item.url)
+        openRecentImage(item)
       }
       .help(item.path)
   }
@@ -266,7 +271,7 @@ struct HomeView: View {
   @ViewBuilder
   private func recentImageActionsMenu(_ item: RecentImage) -> some View {
     Button("Open", systemImage: "photo") {
-      imageSession.loadImage(from: item.url)
+      openRecentImage(item)
     }
 
     Button("Rename", systemImage: "pencil") {
@@ -286,6 +291,10 @@ struct HomeView: View {
     Button("Reveal in Finder", systemImage: "folder") {
       imageSession.revealInFinder(for: [item.url])
     }
+  }
+
+  private func openRecentImage(_ item: RecentImage) {
+    imageSession.openRecentImage(item)
   }
 
   private func fileRenameSheet(for item: RecentImage) -> some View {
@@ -375,5 +384,36 @@ struct HomeView: View {
         message: error.localizedDescription,
       )
     }
+  }
+}
+
+private extension ShapeStyle where Self == Color {
+  static var searchHighlightBackground: Color {
+    Color(
+      light: .yellow.opacity(0.9),
+      dark: .yellow.mix(with: .black, by: 0.4).opacity(0.9),
+    )
+  }
+}
+
+private extension String {
+  func searchHighlightedAttributedString(matching searchText: String) -> AttributedString {
+    var attributedString = AttributedString(self)
+    let searchText = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !isEmpty, !searchText.isEmpty else { return attributedString }
+
+    var remainingRange = startIndex ..< endIndex
+    while let matchRange = fuzzyMatch(searchText, range: remainingRange) {
+      if let lowerBound = AttributedString.Index(matchRange.lowerBound, within: attributedString),
+         let upperBound = AttributedString.Index(matchRange.upperBound, within: attributedString)
+      {
+        attributedString[lowerBound ..< upperBound].backgroundColor = .searchHighlightBackground
+      }
+
+      guard matchRange.upperBound < endIndex else { break }
+      remainingRange = matchRange.upperBound ..< endIndex
+    }
+
+    return attributedString
   }
 }

@@ -72,6 +72,12 @@ struct SearchField: View {
         isFolded = false
       }
     }
+    .onKeyPress(.escape) {
+      if isTextFocused {
+        setTextFocused(false)
+      }
+      return .handled
+    }
   }
 
   private var foldedField: some View {
@@ -100,7 +106,17 @@ struct SearchField: View {
 
       TextField(placeholder, text: $text)
         .textFieldStyle(.plain)
-        .onSubmit(submitAction)
+        .onSubmit {
+          submitAction()
+
+          #if DEBUG
+            appLog(
+              "Search submitted with text: \(text)",
+              level: .debug,
+              category: .userInterface,
+            )
+          #endif
+        }
         .focused(effectiveFocus)
 
       if !text.isEmpty {

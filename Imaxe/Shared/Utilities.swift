@@ -7,6 +7,7 @@
 
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 // MARK: - Functions
 
@@ -35,11 +36,19 @@ nonisolated struct IntSize: Hashable {
 
   init(nsSize: NSSize) {
     if !nsSize.isApproximatelyInt {
-      debugPrint("Warning: NSSize \(nsSize) is not approximately integer.")
+      appLog("NSSize \(nsSize) is not approximately integer.", category: .general)
     }
 
     width = Int(nsSize.width.rounded())
     height = Int(nsSize.height.rounded())
+  }
+}
+
+// MARK: - Bundle extensions
+
+nonisolated extension Bundle {
+  var identifier: String {
+    bundleIdentifier ?? "com.imaxe.Imaxe"
   }
 }
 
@@ -202,55 +211,18 @@ extension Date {
 
 // MARK: - FileManager extensions.
 
-extension FileManager {
-  nonisolated var cachesDirectory: URL {
-    (
-      urls(for: .cachesDirectory, in: .userDomainMask).first ?? URL(
-        fileURLWithPath: NSTemporaryDirectory(),
-        isDirectory: true,
-      ),
-    ).appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
-  }
-
-  var applicationSupportDirectory: URL {
-    guard let appSupportURL = urls(
-      for: .applicationSupportDirectory,
-      in: .userDomainMask,
-    ).first else {
-      fatalError("Unable to locate Application Support directory.")
-    }
-
-    return appSupportURL
-  }
-
-  var dataDirectory: URL {
-    #if DEBUG
-      let directoryName = "Imaxe Debug"
-    #else
-      let directoryName = "Imaxe"
-    #endif
-
-    let url = applicationSupportDirectory.appendingPathComponent(
-      "\(directoryName)",
-      isDirectory: true,
-    )
-
-    do {
-      try ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create data directory: \(error)")
-    }
-
-    return url
-  }
-
-  func ensureExists(for directoryURL: URL) throws {
-    if !fileExists(atPath: directoryURL.path) {
+nonisolated extension FileManager {
+  func ensureExists(for url: URL, isDirectory: Bool = true) throws {
+    if isDirectory {
       try createDirectory(
-        at: directoryURL,
+        at: url,
         withIntermediateDirectories: true,
         attributes: nil,
       )
+    } else {
+      if !fileExists(atPath: url.filePath) {
+        createFile(atPath: url.filePath, contents: nil, attributes: nil)
+      }
     }
   }
 }
@@ -423,19 +395,40 @@ extension NSWindow {
     convertFromBacking(NSRect(origin: .zero, size: size)).size
   }
 
-  func centeredConstrainedFrame(_ windowSize: NSSize) -> NSRect {
+  enum CenteringStrategy {
+    case remain
+    case centerOnScreen
+    case custom(NSPoint)
+  }
+
+  func constrainedFrame(_ windowSize: NSSize, centeringStrategy: CenteringStrategy) -> NSRect {
     let clampedWindowSize = NSSize(
       width: max(windowSize.width, Constants.minimumWindowContentWidth),
       height: max(windowSize.height, Constants.minimumWindowContentHeight + titlebarHeight),
     )
+    let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame
+
+    var centerPoint = NSPoint(x: frame.midX, y: frame.midY)
+    switch centeringStrategy {
+    case .remain:
+      break
+    case .centerOnScreen:
+      if let visibleFrame {
+        centerPoint.x = visibleFrame.midX
+        centerPoint.y = visibleFrame.midY
+      }
+    case let .custom(point):
+      centerPoint = point
+    }
+
     let frame = NSRect(
-      x: frame.midX - clampedWindowSize.width / 2.0,
-      y: frame.midY - clampedWindowSize.height / 2.0,
+      x: centerPoint.x - clampedWindowSize.width / 2.0,
+      y: centerPoint.y - clampedWindowSize.height / 2.0,
       width: clampedWindowSize.width,
       height: clampedWindowSize.height,
     )
 
-    if let visibleFrame = screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+    if let visibleFrame {
       return frame.constrained(to: visibleFrame)
     }
 
@@ -443,27 +436,120 @@ extension NSWindow {
   }
 }
 
+// MARK: - String extensions.
+
+nonisolated extension String {
+  static var defaultFuzzyMatchOptions: String.CompareOptions {
+    [.caseInsensitive, .diacriticInsensitive, .widthInsensitive]
+  }
+
+  func fuzzyMatch(
+    _ other: String,
+    options: String.CompareOptions = String.defaultFuzzyMatchOptions,
+    range searchRange: Range<String.Index>? = nil,
+  ) -> Range<String.Index>? {
+    let other = other.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !other.isEmpty else { return startIndex ..< startIndex }
+
+    return range(of: other, options: options, range: searchRange, locale: .current)
+  }
+
+  func fuzzyContains(
+    _ other: String,
+    options: String.CompareOptions = String.defaultFuzzyMatchOptions,
+    range searchRange: Range<String.Index>? = nil,
+  ) -> Bool {
+    fuzzyMatch(other, options: options, range: searchRange) != nil
+  }
+}
+
 // MARK: - URL extensions.
 
-extension URL {
-  nonisolated var filePath: String {
+nonisolated extension URL {
+  static var dataDirectory: URL {
+    #if DEBUG
+      let directoryName = "Imaxe Debug"
+    #else
+      let directoryName = "Imaxe"
+    #endif
+
+    let url = Self.applicationSupportDirectory.appendingPathComponent(
+      directoryName,
+      isDirectory: true,
+    )
+
+    do {
+      try FileManager.default.ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create data directory: \(error)")
+    }
+
+    return url
+  }
+
+  static var appCachesDirectory: URL {
+    let url = Self.cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
+
+    do {
+      try FileManager.default.ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create caches directory: \(error)")
+    }
+
+    return url
+  }
+
+  static var thumbnailCachesDirectory: URL {
+    let url = Self.appCachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
+
+    do {
+      try FileManager.default.ensureExists(for: url)
+    } catch {
+      fatalError("Failed to create thumbnail cache directory: \(error)")
+    }
+
+    return url
+  }
+
+  var utType: UTType? {
+    guard isFileURL else { return nil }
+
+    return UTType(filenameExtension: pathExtension)
+  }
+
+  var freshFileURL: URL {
+    guard isFileURL else { return self }
+
+    return URL(fileURLWithPath: filePath, isDirectory: hasDirectoryPath)
+  }
+
+  /// Returns the file path without percent encoding.
+  var filePath: String {
     if isFileURL {
-      return standardizedFileURL.path
+      return standardizedFileURL.path(percentEncoded: false)
     }
 
     return absoluteString
   }
 
-  nonisolated var isDirectory: Bool {
-    (try? resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+  func freshResourceValues(forKeys keys: Set<URLResourceKey>) throws -> URLResourceValues {
+    try freshFileURL.resourceValues(forKeys: keys)
   }
 
-  nonisolated var fileSize: Int {
-    (try? resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+  var isDirectory: Bool {
+    (try? freshResourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
   }
 
-  var lastModifiedAt: Date? {
-    (try? resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
+  var fileExists: Bool {
+    (try? freshFileURL.checkResourceIsReachable()) == true
+  }
+
+  var fileSize: Int {
+    (try? freshResourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+  }
+
+  var contentModificationDate: Date? {
+    (try? freshResourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate)
   }
 }
 

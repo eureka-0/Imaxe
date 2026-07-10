@@ -10,32 +10,6 @@ import Dispatch
 import Foundation
 
 final nonisolated class ImageFileWatcher: @unchecked Sendable {
-  private nonisolated struct FileSnapshot: Equatable {
-    let contentModificationDate: Date?
-    let fileSize: Int?
-
-    init?(url: URL) {
-      guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-            attributes[.type] as? FileAttributeType == .typeRegular
-      else { return nil }
-
-      contentModificationDate = attributes[.modificationDate] as? Date
-      fileSize = Self.intValue(from: attributes[.size])
-    }
-
-    private static func intValue(from value: Any?) -> Int? {
-      if let value = value as? Int {
-        return value
-      }
-
-      if let value = value as? NSNumber {
-        return value.intValue
-      }
-
-      return nil
-    }
-  }
-
   private let url: URL
   private let queue = DispatchQueue(label: "com.imaxe.Imaxe.imageFileWatcher")
   private let onChange: @MainActor @Sendable () -> Void
@@ -58,7 +32,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
   private func start() {
     stopSource()
 
-    let fileDescriptor = open(url.path, O_EVTONLY)
+    let fileDescriptor = open(url.filePath, O_EVTONLY)
     guard fileDescriptor >= 0 else { return }
 
     let source = DispatchSource.makeFileSystemObjectSource(

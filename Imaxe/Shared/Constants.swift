@@ -35,7 +35,6 @@ nonisolated enum Constants {
   static let stableFileCheckDeadline: DispatchTimeInterval = .seconds(10)
   static let pollingIntervalOnFileChange: DispatchTimeInterval = .milliseconds(150)
 
-  static let maximumRecentImagesCount = 100
   static let maximumRecentImagesToDisplayInMenu = 20
 
   static let recentImagesGridItemSizeRange: ClosedRange<CGFloat> = 72 ... 260

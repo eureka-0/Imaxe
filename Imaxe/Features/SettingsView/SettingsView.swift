@@ -38,6 +38,11 @@ struct GeneralSettingsView: View {
   @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue)
   private var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange
 
+  @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue)
+  private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
+
+  @State private var totalCacheSize: Int = ImageThumbnailCache.totalCacheSizeInBytes()
+
   var body: some View {
     Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 20) {
       GridRow {
@@ -113,7 +118,61 @@ struct GeneralSettingsView: View {
         .pickerStyle(.menu)
         .gridCellAnchor(.leading)
       }
+
+      GridRow(alignment: .top) {
+        Text("Recent images count limit:")
+
+        VStack(alignment: .leading, spacing: 5) {
+          Picker("", selection: $recentImagesCountLimit) {
+            ForEach([10, 20, 30, 40, 60, 80, 100], id: \.self) { count in
+              Text("\(count)").tag(count)
+            }
+          }
+          .labelsHidden()
+          .pickerStyle(.menu)
+
+          HStack(spacing: 5) {
+            Text("Current thumbnail caches: \(fileSizeDescription(for: totalCacheSize))")
+              .font(.callout)
+              .foregroundStyle(.secondary)
+
+            Button {
+              do {
+                try ImageThumbnailCache.removeAllThumbnails()
+                refreshCacheSize()
+              } catch {
+                appLog(
+                  "Failed to clear thumbnail caches: \(error.localizedDescription)",
+                  level: .error,
+                  category: .persistence,
+                )
+              }
+            } label: {
+              Label("Clear", systemImage: "trash")
+                .font(.callout)
+                .padding(-2)
+            }
+            .labelStyle(.titleOnly)
+            .buttonStyle(.bordered)
+            .disabled(totalCacheSize == 0)
+          }
+          .frame(width: 275, alignment: .leading)
+        }
+        .gridCellAnchor(.leading)
+      }
     }
+    .onAppear {
+      refreshCacheSize()
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: ImageThumbnailCache.didChangeNotification),
+    ) { _ in
+      refreshCacheSize()
+    }
+  }
+
+  private func refreshCacheSize() {
+    totalCacheSize = ImageThumbnailCache.totalCacheSizeInBytes()
   }
 }
 

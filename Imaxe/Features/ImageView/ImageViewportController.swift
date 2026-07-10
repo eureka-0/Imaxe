@@ -12,6 +12,7 @@ enum ImageViewportCommand {
   case fitWindowToImage
   case setZoomScale(to: CGFloat)
   case zoomIn, zoomOut
+  case fitToScreen
 }
 
 protocol ImageViewportCommandHandling: AnyObject {
@@ -39,5 +40,9 @@ final class ImageViewportController {
 
   func zoomOut() {
     handler?.handle(.zoomOut)
+  }
+
+  func fitToScreen() {
+    handler?.handle(.fitToScreen)
   }
 }

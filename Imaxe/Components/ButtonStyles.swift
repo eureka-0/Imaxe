@@ -43,7 +43,7 @@ extension ButtonStyle where Self == BorderedOnHoverButtonStyle {
   }
 
   static func borderedOnHover(
-    cornerRadius: CGFloat = 7,
+    cornerRadius: CGFloat = 8,
     applyPressedEffect: Bool = true,
     isActive: Bool = false,
   ) -> Self {

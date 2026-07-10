@@ -13,6 +13,10 @@ struct FileOperationCommands: Commands {
 
   let modelContainer: ModelContainer
 
+  private var recentImages: [RecentImage] {
+    Array(imageSession?.recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu) ?? [])
+  }
+
   var body: some Commands {
     CommandGroup(after: .newItem) {
       Divider()
@@ -41,7 +45,7 @@ struct FileOperationCommands: Commands {
                 return
               }
 
-              imageSession.loadImage(from: recentImage.url)
+              imageSession.openRecentImage(recentImage)
             }
             .disabled(imageSession == nil)
           }
@@ -49,7 +53,14 @@ struct FileOperationCommands: Commands {
           Divider()
 
           Button("Clear Menu") {
-            try? RecentImagesStore.clear(in: modelContainer.mainContext)
+            do {
+              try RecentImagesStore.clear(in: modelContainer.mainContext)
+            } catch {
+              imageSession?.alert = ImageAlert(
+                title: "Failed to Clear Recent Images",
+                message: error.localizedDescription,
+              )
+            }
           }
         }
       }
@@ -63,10 +74,6 @@ struct FileOperationCommands: Commands {
       .keyboardShortcut("r", modifiers: [.command, .shift])
       .disabled(imageSession?.currentImageInfo == nil && imageSession?.currentImage == nil)
     }
-  }
-
-  private var recentImages: [RecentImage] {
-    imageSession?.recentImages ?? []
   }
 }
 
