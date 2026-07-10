@@ -237,7 +237,7 @@ struct ImageViewTests {
       defer: false,
     )
     let scrollView = ImageScrollView.ImageNSScrollView(frame: window.contentView?.bounds ?? .zero)
-    let clipView = ImageScrollView.CenteringClipView()
+    let clipView = ImageScrollView.ImageClipView()
     let imageSize = NSSize(width: 800, height: 600)
     scrollView.contentView = clipView
     scrollView.autoresizingMask = [.width, .height]
