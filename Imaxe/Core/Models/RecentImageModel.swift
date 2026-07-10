@@ -39,7 +39,7 @@ final class RecentImage {
   }
 
   var location: String {
-    url.deletingLastPathComponent().fileSystemPath
+    url.deletingLastPathComponent().filePath
   }
 }
 
@@ -118,7 +118,10 @@ enum RecentImagesStore {
     try thumbnailKeysToCleanup.formUnion(trim(in: modelContext))
     try modelContext.save()
 
-    try LibraryThumbnailReferences.removeThumbnailsIfUnused(thumbnailKeysToCleanup, in: modelContext)
+    try LibraryThumbnailReferences.removeThumbnailsIfUnused(
+      thumbnailKeysToCleanup,
+      in: modelContext,
+    )
   }
 
   @discardableResult

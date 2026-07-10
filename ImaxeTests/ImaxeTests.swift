@@ -309,7 +309,7 @@ struct ImageLoadingTests {
     try TestSupport.pngData(width: 12, height: 24).write(to: url)
     try FileManager.default.setAttributes(
       [.modificationDate: Date(timeIntervalSinceNow: 2)],
-      ofItemAtPath: url.fileSystemPath,
+      ofItemAtPath: url.filePath,
     )
 
     let secondImage = try await ImageLoader.shared.loadImage(from: url)
@@ -330,7 +330,7 @@ struct ImageLoadingTests {
     let thumbnailImage = try #require(NSImage(contentsOf: thumbnailURL))
     let bitmapRep = try #require(thumbnailImage.representations.first as? NSBitmapImageRep)
 
-    #expect(FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+    #expect(FileManager.default.fileExists(atPath: thumbnailURL.filePath))
     #expect(max(bitmapRep.pixelsWide, bitmapRep.pixelsHigh) <= ImageThumbnailCache.maxPixelSize)
     #expect(bitmapRep.pixelsWide > 0)
     #expect(bitmapRep.pixelsHigh > 0)
@@ -434,7 +434,7 @@ struct SessionAndNavigationTests {
         try? changedImageData.write(to: url)
         try? FileManager.default.setAttributes(
           [.modificationDate: Date(timeIntervalSinceNow: 2)],
-          ofItemAtPath: url.fileSystemPath,
+          ofItemAtPath: url.filePath,
         )
       }
     }
@@ -573,10 +573,10 @@ struct RecentImagesTests {
       ])
       #expect((resourceValues.fileSize ?? 0) > 0)
       #expect(resourceValues.contentModificationDate != nil)
-      #expect(FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+      #expect(FileManager.default.fileExists(atPath: thumbnailURL.filePath))
 
       try RecentImagesStore.remove(path: url.filePath, in: context)
-      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.filePath))
     }
   }
 
@@ -625,7 +625,7 @@ struct RecentImagesTests {
       let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
       #expect(removedCount == 1)
       #expect(recentImages.map(\.path) == [existingURL.filePath])
-      #expect(!FileManager.default.fileExists(atPath: missingThumbnailURL.fileSystemPath))
+      #expect(!FileManager.default.fileExists(atPath: missingThumbnailURL.filePath))
 
       try RecentImagesStore.clear(in: context)
     }
@@ -663,7 +663,7 @@ struct RecentImagesTests {
       }
 
       #expect(try context.fetch(descriptor).isEmpty)
-      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.fileSystemPath))
+      #expect(!FileManager.default.fileExists(atPath: thumbnailURL.filePath))
       #expect(session.alert?.title == "Recent Image Removed")
     }
   }
@@ -716,14 +716,14 @@ struct RecentImagesTests {
       let firstRecent = try #require(context.fetch(firstDescriptor).first)
       let firstThumbnailKey = try #require(firstRecent.thumbnailCacheKey)
       let firstThumbnailURL = ImageThumbnailCache.thumbnailURL(for: firstThumbnailKey)
-      #expect(FileManager.default.fileExists(atPath: firstThumbnailURL.fileSystemPath))
+      #expect(FileManager.default.fileExists(atPath: firstThumbnailURL.filePath))
 
       UserDefaults.standard.set(2, forKey: AppSettings.Keys.recentImagesCountLimit.rawValue)
 
       let recentImages = try RecentImagesStore.fetchRecentImages(in: context)
 
       #expect(recentImages.map(\.path) == [thirdURL.filePath, secondURL.filePath])
-      #expect(!FileManager.default.fileExists(atPath: firstThumbnailURL.fileSystemPath))
+      #expect(!FileManager.default.fileExists(atPath: firstThumbnailURL.filePath))
     }
   }
 }

@@ -44,6 +44,14 @@ nonisolated struct IntSize: Hashable {
   }
 }
 
+// MARK: - Bundle extensions
+
+extension Bundle {
+  var identifier: String {
+    bundleIdentifier ?? "com.imaxe.Imaxe"
+  }
+}
+
 // MARK: - Color extensions.
 
 extension Color {
@@ -204,12 +212,18 @@ extension Date {
 // MARK: - FileManager extensions.
 
 nonisolated extension FileManager {
-  func ensureExists(for directoryURL: URL) throws {
-    try createDirectory(
-      at: directoryURL,
-      withIntermediateDirectories: true,
-      attributes: nil,
-    )
+  func ensureExists(for url: URL, isDirectory: Bool = true) throws {
+    if isDirectory {
+      try createDirectory(
+        at: url,
+        withIntermediateDirectories: true,
+        attributes: nil,
+      )
+    } else {
+      if !fileExists(atPath: url.filePath) {
+        createFile(atPath: url.filePath, contents: nil, attributes: nil)
+      }
+    }
   }
 }
 
@@ -497,11 +511,6 @@ nonisolated extension URL {
     return url
   }
 
-  /// Returns the file system path without percent encoding.
-  var fileSystemPath: String {
-    path(percentEncoded: false)
-  }
-
   var utType: UTType? {
     guard isFileURL else { return nil }
 
@@ -511,12 +520,13 @@ nonisolated extension URL {
   var freshFileURL: URL {
     guard isFileURL else { return self }
 
-    return URL(fileURLWithPath: fileSystemPath, isDirectory: hasDirectoryPath)
+    return URL(fileURLWithPath: filePath, isDirectory: hasDirectoryPath)
   }
 
+  /// Returns the file path without percent encoding.
   var filePath: String {
     if isFileURL {
-      return standardizedFileURL.fileSystemPath
+      return standardizedFileURL.path(percentEncoded: false)
     }
 
     return absoluteString

@@ -83,7 +83,7 @@ struct HomeView: View {
         deleteTargetURL = nil
       }
     } message: {
-      Text(deleteTargetURL?.fileSystemPath ?? "")
+      Text(deleteTargetURL?.filePath ?? "")
     }
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))

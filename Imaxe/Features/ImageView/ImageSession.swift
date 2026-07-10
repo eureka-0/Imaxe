@@ -357,7 +357,7 @@ final class ImageSession {
       guard let removeRecentImage else {
         alert = ImageAlert(
           title: "Recent Image Missing",
-          message: "The file no longer exists:\n\(url.fileSystemPath)",
+          message: "The file no longer exists:\n\(url.filePath)",
         )
         return
       }
@@ -366,7 +366,7 @@ final class ImageSession {
         try removeRecentImage(recentImagePathToRemoveOnFileNotFound)
         alert = ImageAlert(
           title: "Recent Image Removed",
-          message: "The file no longer exists and was removed from Recent Images:\n\(url.fileSystemPath)",
+          message: "The file no longer exists and was removed from Recent Images:\n\(url.filePath)",
         )
       } catch {
         alert = ImageAlert(

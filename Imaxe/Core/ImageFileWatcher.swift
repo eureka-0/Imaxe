@@ -32,7 +32,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
   private func start() {
     stopSource()
 
-    let fileDescriptor = open(url.fileSystemPath, O_EVTONLY)
+    let fileDescriptor = open(url.filePath, O_EVTONLY)
     guard fileDescriptor >= 0 else { return }
 
     let source = DispatchSource.makeFileSystemObjectSource(

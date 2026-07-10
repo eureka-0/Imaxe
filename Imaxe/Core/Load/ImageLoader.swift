@@ -18,13 +18,13 @@ enum ImageLoadingError: Error, LocalizedError {
     switch self {
     case let .unsupportedImageType(url):
       """
-      Unsupported image type for: \(url.fileSystemPath).
+      Unsupported image type for: \(url.filePath).
       Supported types: \(ImageLoader.supportedImageExtensionsDescription).
       """
     case let .fileNotFound(url):
-      "The file no longer exists: \(url.fileSystemPath)"
+      "The file no longer exists: \(url.filePath)"
     case let .failedToLoad(url):
-      "Failed to load image from URL: \(url.fileSystemPath)"
+      "Failed to load image from URL: \(url.filePath)"
     }
   }
 }
@@ -94,30 +94,20 @@ actor ImageLoader {
     imageCache.totalCostLimit = 100 * 1024 * 1024 // 100 MB
   }
 
-  nonisolated static var supportedImageTypes: [UTType] {
-    let supportedTypes: [UTType] = [
-      // Bitmap formats
-      .bmp,
-      .gif,
-      .heic,
-      .heif,
-      .ico,
-      .jpeg,
-      .png,
-      .tiff,
-      .webP,
-      // Vector formats
-      .svg,
-    ].compactMap(\.self)
-
-    #if DEBUG
-      debugPrint(
-        "Supported image types: \(supportedTypes.map(\.identifier).joined(separator: ", "))",
-      )
-    #endif
-
-    return supportedTypes
-  }
+  nonisolated static let supportedImageTypes: [UTType] = [
+    // Bitmap formats
+    .bmp,
+    .gif,
+    .heic,
+    .heif,
+    .ico,
+    .jpeg,
+    .png,
+    .tiff,
+    .webP,
+    // Vector formats
+    .svg,
+  ].compactMap(\.self)
 
   nonisolated static var supportedImageExtensions: [String] {
     supportedImageTypes.compactMap(\.preferredFilenameExtension)
