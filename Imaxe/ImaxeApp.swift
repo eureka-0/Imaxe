@@ -17,22 +17,27 @@ struct ImaxeApp: App {
   private let modelContainer: ModelContainer
 
   init() {
-    #if DEBUG
-      debugPrint("""
-      Supported image types:
-      \(ImageLoader.supportedImageTypes.map(\.identifier).joined(separator: ", "))
-      """)
-    #endif
-
     do {
       let modelFileURL = URL.dataDirectory.appendingPathComponent("database.sqlite")
-
-      #if DEBUG
-        debugPrint("Model file URL: \(modelFileURL.filePath)")
-      #endif
-
       let modelConfiguration = ModelConfiguration(url: modelFileURL)
       modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
+
+      AppLogger.shared.setDestination(to: .console)
+      appLog("Application initialized", level: .info, category: .general)
+
+      #if DEBUG
+        appLog(
+          "Supported image types: \(ImageLoader.supportedImageUTTypesDescription)",
+          level: .debug,
+          category: .imageLoading,
+        )
+
+        appLog(
+          "Model file URL: \(modelFileURL.filePath)",
+          level: .debug,
+          category: .persistence,
+        )
+      #endif
     } catch {
       fatalError("Failed to create model container: \(error)")
     }

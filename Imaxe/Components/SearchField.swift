@@ -110,7 +110,11 @@ struct SearchField: View {
           submitAction()
 
           #if DEBUG
-            debugPrint("SearchField: onSubmit called with text: \(text)")
+            appLog(
+              "Search submitted with text: \(text)",
+              level: .debug,
+              category: .userInterface,
+            )
           #endif
         }
         .focused(effectiveFocus)

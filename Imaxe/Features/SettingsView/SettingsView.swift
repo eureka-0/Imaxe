@@ -141,7 +141,11 @@ struct GeneralSettingsView: View {
                 try ImageThumbnailCache.removeAllThumbnails()
                 refreshCacheSize()
               } catch {
-                print("Failed to clear thumbnail caches: \(error)")
+                appLog(
+                  "Failed to clear thumbnail caches: \(error.localizedDescription)",
+                  level: .error,
+                  category: .persistence,
+                )
               }
             } label: {
               Label("Clear", systemImage: "trash")

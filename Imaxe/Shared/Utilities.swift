@@ -36,7 +36,7 @@ nonisolated struct IntSize: Hashable {
 
   init(nsSize: NSSize) {
     if !nsSize.isApproximatelyInt {
-      debugPrint("Warning: NSSize \(nsSize) is not approximately integer.")
+      appLog("NSSize \(nsSize) is not approximately integer.", category: .general)
     }
 
     width = Int(nsSize.width.rounded())
@@ -46,7 +46,7 @@ nonisolated struct IntSize: Hashable {
 
 // MARK: - Bundle extensions
 
-extension Bundle {
+nonisolated extension Bundle {
   var identifier: String {
     bundleIdentifier ?? "com.imaxe.Imaxe"
   }

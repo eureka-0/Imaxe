@@ -117,6 +117,10 @@ actor ImageLoader {
     supportedImageExtensions.joined(separator: ", ")
   }
 
+  nonisolated static var supportedImageUTTypesDescription: String {
+    supportedImageTypes.map(\.identifier).joined(separator: ", ")
+  }
+
   nonisolated static func isSupportedImage(_ url: URL) -> Bool {
     guard let fileType = url.utType else {
       return false

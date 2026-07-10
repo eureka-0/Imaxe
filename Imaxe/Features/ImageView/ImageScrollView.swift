@@ -793,7 +793,7 @@ struct ImageScrollView: NSViewRepresentable {
       }
     }
 
-    private func animateZoomScale(
+    private func animateZoomScaleDuringWindowResize(
       _ zoomScale: CGFloat,
       to scrollView: NSScrollView,
       duration: TimeInterval,
@@ -813,18 +813,16 @@ struct ImageScrollView: NSViewRepresentable {
       zoomAnimationGeneration += 1
       let animationGeneration = zoomAnimationGeneration
       let imageCenter = imageCenter(in: documentView)
-      let animationDuration = max(0, duration)
       zoomAnimationTask?.cancel()
       animatedZoomTarget = targetZoomScale
       onZoomScaleChange(targetZoomScale)
 
-      guard animationDuration > 0 else {
-        finishZoomScale(
-          targetZoomScale,
-          to: scrollView,
-          centeredAt: imageCenter,
-          animationGeneration: animationGeneration,
-        )
+      guard duration > 0 else {
+        #if DEBUG
+          debugPrint("Animation duration is zero, applying zoom scale immediately.")
+        #endif
+
+        applyZoomScale(targetZoomScale, to: scrollView, animated: true)
         return animationGeneration
       }
 
@@ -836,7 +834,7 @@ struct ImageScrollView: NSViewRepresentable {
           guard zoomAnimationGeneration == animationGeneration else { return }
 
           let elapsedTime = CACurrentMediaTime() - startTime
-          let progress = min(1, CGFloat(elapsedTime / animationDuration))
+          let progress = min(1, CGFloat(elapsedTime / duration))
           let easedProgress = easeInEaseOut(progress)
           let currentZoomScale = startZoomScale
             + (targetZoomScale - startZoomScale) * easedProgress
@@ -942,18 +940,20 @@ struct ImageScrollView: NSViewRepresentable {
         windowFrameAnimationGeneration += 1
         let animationGeneration = windowFrameAnimationGeneration
         let duration = window.animationResizeTime(frame)
-        if duration <= 0 {
-          window.setFrame(frame, display: false)
-          if let simultaneousZoomScale {
-            applyZoomScale(simultaneousZoomScale, to: scrollView, animated: true)
-          }
-          clampScrollBounds(scrollView)
-          onZoomScaleChange(scrollView.magnification)
-          return
-        }
+
+        #if DEBUG
+          debugPrint("""
+            --------------------------------------
+            Applying window frame: \(frame)
+            Current window frame: \(window.frame)
+            Simultaneous zoom scale: \(String(describing: simultaneousZoomScale))
+            Animation duration: \(duration)
+            --------------------------------------
+          """)
+        #endif
 
         let simultaneousZoomAnimationGeneration: Int? = if let simultaneousZoomScale {
-          animateZoomScale(
+          animateZoomScaleDuringWindowResize(
             simultaneousZoomScale,
             to: scrollView,
             duration: duration,
