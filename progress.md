@@ -81,7 +81,6 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] Show user-visible errors when clearing the cache fails in Settings; validate and normalize window-size settings.
 - [ ] Reuse relative-date formatters, fix hover-state cleanup, and evaluate restoring window position and size.
 - [ ] Add an `.xctestplan`, coverage reporting, and a small set of Finder, menu, and window XCUI smoke tests.
-- [ ] Establish a single source of truth for Icon Composer and the legacy AppIcon.
 - [ ] Maintain GitHub release notes, known limitations, and rollback instructions.
 
 ## References

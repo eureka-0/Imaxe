@@ -19,6 +19,7 @@
 /* Begin PBXFileReference section */
 		1E7D568D2FDEEBFE0035C627 /* Imaxe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Imaxe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1EA97D9430021C4600AF78D8 /* Imaxe.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = file; name = Imaxe.xctestplan; path = ImaxeTests/Imaxe.xctestplan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -68,6 +69,7 @@
 		1E7D56842FDEEBFE0035C627 = {
 			isa = PBXGroup;
 			children = (
+				1EA97D9430021C4600AF78D8 /* Imaxe.xctestplan */,
 				1E7D568F2FDEEBFE0035C627 /* Imaxe */,
 				1E7D569D2FDEEC000035C627 /* ImaxeTests */,
 				1E7D568E2FDEEBFE0035C627 /* Products */,
