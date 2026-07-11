@@ -17,26 +17,42 @@ import SwiftUI
 /// easy integration with other SwiftUI views and state management.
 struct ImageScrollView: NSViewRepresentable {
   typealias Coordinator = ImageScrollViewCoordinator
+  typealias NSViewType = NSScrollView
 
   let imageContainer: ImageContainer
   let imageInfo: ImageInfo
-  let viewportController: ImageViewportController
-  let loadedImageWindowSizeMode: LoadedImageWindowSizeMode
-  let fixedLoadedImageWindowSize: NSSize
-  let fixedLoadedImageWindowSizeUnit: LoadedImageWindowSizeUnit
   let shouldApplyLoadedImageWindowSize: Bool
+  var viewportController: ImageViewportController?
   @Binding var zoomScale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
   @AppStorage(AppSettings.Keys.backgroundColor.rawValue)
   private var backgroundColor = AppSettings.Defaults.backgroundColor
 
+  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue)
+  private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
+
+  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue)
+  private var fixedLoadedImageWindowWidth = AppSettings.Defaults.fixedLoadedImageWindowWidth
+
+  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue)
+  private var fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
+
+  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
+  private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
+
+  private var fixedLoadedImageWindowSize: NSSize {
+    NSSize(width: fixedLoadedImageWindowWidth, height: fixedLoadedImageWindowHeight)
+  }
+
   func onZoomScaleChange(_ newZoomScale: CGFloat) {
     guard newZoomScale.isFinite else { return }
 
     let clampedZoomScale = newZoomScale.clamped(to: Constants.imageZoomScaleRange)
+
     DispatchQueue.main.async {
-      guard abs(zoomScale - clampedZoomScale) > Constants.zoomScaleUpdateTolerance else { return }
+      guard abs(zoomScale - clampedZoomScale) > Constants
+        .zoomScaleUpdateTolerance else { return }
       zoomScale = clampedZoomScale
     }
   }
@@ -88,7 +104,9 @@ struct ImageScrollView: NSViewRepresentable {
       imageContainer,
       shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
     )
-    context.coordinator.bind(to: viewportController)
+    if let viewportController {
+      context.coordinator.bind(to: viewportController)
+    }
     context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
     scrollView.onLayout = { [weak coordinator = context.coordinator, weak scrollView] in
       guard let scrollView else { return }
@@ -124,7 +142,9 @@ struct ImageScrollView: NSViewRepresentable {
       fixedSizeUnit: fixedLoadedImageWindowSizeUnit,
     )
     context.coordinator.updateAlwaysFitToWindowFromBinding(alwaysFitToWindow)
-    context.coordinator.bind(to: viewportController)
+    if let viewportController {
+      context.coordinator.bind(to: viewportController)
+    }
     context.coordinator.observe(scrollView)
     let clampedZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
 
@@ -252,5 +272,15 @@ struct ImageScrollView: NSViewRepresentable {
 
       return constrainedBounds
     }
+  }
+}
+
+// MARK: - Modifiers
+
+extension ImageScrollView {
+  func viewportController(_ viewportController: ImageViewportController) -> ImageScrollView {
+    var view = self
+    view.viewportController = viewportController
+    return view
   }
 }

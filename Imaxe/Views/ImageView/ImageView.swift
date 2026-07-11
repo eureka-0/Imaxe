@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import UniformTypeIdentifiers
 
 struct ImageView: View {
   @Bindable var imageSession: ImageSession
@@ -16,28 +15,12 @@ struct ImageView: View {
   @State private var isZoomPickerPresented = false
   @State private var customZoomScaleText = ""
 
-  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue)
-  private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
-
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue)
-  private var fixedLoadedImageWindowWidth = AppSettings.Defaults.fixedLoadedImageWindowWidth
-
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue)
-  private var fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
-
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
-  private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
-
   private var isPopoverPresented: Bool {
     isImageInfoPresented || isZoomPickerPresented
   }
 
   private var displayedImageInfo: ImageInfo? {
     imageSession.currentImageInfo
-  }
-
-  private var fixedLoadedImageWindowSize: NSSize {
-    NSSize(width: fixedLoadedImageWindowWidth, height: fixedLoadedImageWindowHeight)
   }
 
   var body: some View {
@@ -80,14 +63,11 @@ struct ImageView: View {
       ImageScrollView(
         imageContainer: image,
         imageInfo: info,
-        viewportController: imageSession.viewportController,
-        loadedImageWindowSizeMode: loadedImageWindowSizeMode,
-        fixedLoadedImageWindowSize: fixedLoadedImageWindowSize,
-        fixedLoadedImageWindowSizeUnit: fixedLoadedImageWindowSizeUnit,
         shouldApplyLoadedImageWindowSize: imageSession.shouldApplyLoadedImageWindowSize,
         zoomScale: $imageSession.zoomScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
+      .viewportController(imageSession.viewportController)
     } else if imageSession.isLoading {
       loadingImageView
     } else {
