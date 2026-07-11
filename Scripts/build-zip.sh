@@ -33,16 +33,14 @@ require_value() {
 }
 
 BUILD_SETTINGS="$(xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
-  -configuration "${CONFIGURATION}" -showBuildSettings)"
+  -configuration "${CONFIGURATION}" -destination "platform=macOS,arch=arm64" -showBuildSettings)"
 VERSION="$(awk '/ MARKETING_VERSION = / { print $3; exit }' <<< "${BUILD_SETTINGS}")"
 BUILD_NUMBER="$(awk '/ CURRENT_PROJECT_VERSION = / { print $3; exit }' <<< "${BUILD_SETTINGS}")"
-MINIMUM_MACOS="$(awk '/ MACOSX_DEPLOYMENT_TARGET = / { print $3; exit }' <<< "${BUILD_SETTINGS}")"
 COMMIT="$(git rev-parse HEAD)"
 SHORT_COMMIT="$(git rev-parse --short=12 HEAD)"
 
 require_value "version" "${VERSION}"
 require_value "build number" "${BUILD_NUMBER}"
-require_value "minimum macOS version" "${MINIMUM_MACOS}"
 require_value "Git commit" "${COMMIT}"
 
 RELEASE_ID="${SCHEME}-${VERSION}-${BUILD_NUMBER}-${SHORT_COMMIT}"
@@ -51,11 +49,35 @@ STAGING_DIR="${PRODUCTS_DIR}/.${RELEASE_ID}-$(uuidgen).tmp"
 ARCHIVE_PATH="${ARCHIVES_DIR}/${RELEASE_ID}.xcarchive"
 APP_NAME="${SCHEME}.app"
 ZIP_NAME="${RELEASE_ID}-macOS.zip"
-OUTPUT_ZIP="${STAGING_DIR}/${ZIP_NAME}"
-METADATA_FILE="${STAGING_DIR}/build-metadata.txt"
-NOTES_FILE="${STAGING_DIR}/release-notes.md"
-CHECKSUM_FILE="${STAGING_DIR}/SHA256SUMS.txt"
+ZIP_FILE="${OUTPUT_DIR}/${ZIP_NAME}"
+NOTES_FILE="${OUTPUT_DIR}/release-notes.md"
+CHECKSUM_FILE="${OUTPUT_DIR}/SHA256SUMS.txt"
 TAG="v${VERSION}-build.${BUILD_NUMBER}"
+
+if [[ "${PUBLISH}" == true ]]; then
+  for file in "${ZIP_FILE}" "${NOTES_FILE}" "${CHECKSUM_FILE}"; do
+    if [[ ! -f "${file}" ]]; then
+      echo "error: release artifact not found at ${file}; run $0 before publishing" >&2
+      exit 1
+    fi
+  done
+
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "error: GitHub CLI (gh) is required for --publish" >&2
+    exit 1
+  fi
+  if gh release view "${TAG}" >/dev/null 2>&1; then
+    echo "error: GitHub Release ${TAG} already exists; refusing to replace it" >&2
+    exit 1
+  fi
+  gh release create "${TAG}" \
+    "${ZIP_FILE}" \
+    "${CHECKSUM_FILE}" \
+    --title "Imaxe ${VERSION} (${BUILD_NUMBER})" \
+    --notes-file "${NOTES_FILE}"
+  echo "Published GitHub Release ${TAG}"
+  exit 0
+fi
 
 if [[ -e "${OUTPUT_DIR}" || -e "${ARCHIVE_PATH}" ]]; then
   echo "error: release ${RELEASE_ID} already exists; refusing to overwrite a build identity" >&2
@@ -82,7 +104,7 @@ xcodebuild archive \
   -project "${PROJECT}" \
   -scheme "${SCHEME}" \
   -configuration "${CONFIGURATION}" \
-  -destination "generic/platform=macOS" \
+  -destination "platform=macOS,arch=arm64" \
   -derivedDataPath "${DERIVED_DATA_DIR}" \
   -archivePath "${ARCHIVE_PATH}" \
   -quiet
@@ -102,55 +124,20 @@ if [[ "${APP_VERSION}" != "${VERSION}" || "${APP_BUILD}" != "${BUILD_NUMBER}" ]]
   exit 1
 fi
 
-ARCHITECTURES="$(lipo -archs "${ARCHIVED_APP}/Contents/MacOS/${SCHEME}")"
+STAGING_ZIP="${STAGING_DIR}/${ZIP_NAME}"
+STAGING_NOTES="${STAGING_DIR}/release-notes.md"
+STAGING_CHECKSUM="${STAGING_DIR}/SHA256SUMS.txt"
 
-echo "Creating ${OUTPUT_ZIP}..."
-ditto -c -k --sequesterRsrc --keepParent "${ARCHIVED_APP}" "${OUTPUT_ZIP}"
-CHECKSUM="$(shasum -a 256 "${OUTPUT_ZIP}" | awk '{ print $1 }')"
+echo "Creating ${STAGING_ZIP}..."
+ditto -c -k --sequesterRsrc --keepParent "${ARCHIVED_APP}" "${STAGING_ZIP}"
+CHECKSUM="$(shasum -a 256 "${STAGING_ZIP}" | awk '{ print $1 }')"
 
-cat > "${METADATA_FILE}" <<EOF
-product=${SCHEME}
-version=${VERSION}
-build=${BUILD_NUMBER}
-git_commit=${COMMIT}
-minimum_macos=${MINIMUM_MACOS}
-architectures=${ARCHITECTURES}
-archive=${ARCHIVE_PATH#${PWD}/}
-artifact=${ZIP_NAME}
-sha256=${CHECKSUM}
-EOF
-
-cat > "${NOTES_FILE}" <<EOF
+cat > "${STAGING_NOTES}" <<EOF
 ## Imaxe ${VERSION} (${BUILD_NUMBER})
-
-- Requires macOS ${MINIMUM_MACOS} or later.
-- Architectures: ${ARCHITECTURES}.
-- Git commit: \`${COMMIT}\`.
-- SHA-256: \`${CHECKSUM}\`.
-
-If Gatekeeper blocks the downloaded app, extract the zip in Finder, Control-click \`Imaxe.app\`,
-choose **Open**, then confirm **Open**. Verify the checksum before launching.
 EOF
 
-echo "${CHECKSUM}  ${ZIP_NAME}" > "${CHECKSUM_FILE}"
-
-if [[ "${PUBLISH}" == true ]]; then
-  if ! command -v gh >/dev/null 2>&1; then
-    echo "error: GitHub CLI (gh) is required for --publish" >&2
-    exit 1
-  fi
-  if gh release view "${TAG}" >/dev/null 2>&1; then
-    echo "error: GitHub Release ${TAG} already exists; refusing to replace it" >&2
-    exit 1
-  fi
-  gh release create "${TAG}" \
-    "${OUTPUT_ZIP}" \
-    "${METADATA_FILE}" \
-    "${CHECKSUM_FILE}" \
-    --title "Imaxe ${VERSION} (${BUILD_NUMBER})" \
-    --notes-file "${NOTES_FILE}"
-fi
+echo "${CHECKSUM}  ${ZIP_NAME}" > "${STAGING_CHECKSUM}"
 
 mv "${STAGING_DIR}" "${OUTPUT_DIR}"
 trap - EXIT
-echo "Created ${OUTPUT_DIR}/${ZIP_NAME}"
+echo "Created ${ZIP_FILE}"
