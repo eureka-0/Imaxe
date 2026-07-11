@@ -18,13 +18,13 @@ final class RecentImage {
   init(url: URL, lastOpenedAt: Date = .now) {
     path = url.filePath
     self.lastOpenedAt = lastOpenedAt
-    thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
+    thumbnailCacheKey = nil
   }
 
   func update(from url: URL, lastOpenedAt: Date = .now, thumbnailCacheKey: String? = nil) {
     path = url.filePath
     self.lastOpenedAt = lastOpenedAt
-    self.thumbnailCacheKey = thumbnailCacheKey ?? ImageThumbnailCache.ensureThumbnail(for: url)
+    self.thumbnailCacheKey = thumbnailCacheKey
   }
 
   var url: URL {
@@ -58,9 +58,9 @@ enum RecentImagesStore {
     _ url: URL,
     in modelContext: ModelContext,
     openedAt: Date = .now,
-  ) throws {
+  ) async throws {
     let path = url.filePath
-    let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
+    let thumbnailCacheKey = await ImageThumbnailCache.ensureThumbnail(for: url)
     var thumbnailKeysToCleanup = Set<String>()
     var descriptor = FetchDescriptor<RecentImage>(
       predicate: #Predicate<RecentImage> { recentImage in
@@ -167,7 +167,7 @@ enum RecentImagesStore {
     from oldPath: String,
     to url: URL,
     in modelContext: ModelContext,
-  ) throws {
+  ) async throws {
     var descriptor = FetchDescriptor<RecentImage>(
       predicate: #Predicate<RecentImage> { recentImage in
         recentImage.path == oldPath
@@ -176,7 +176,7 @@ enum RecentImagesStore {
     descriptor.fetchLimit = 1
     guard let recentImage = try modelContext.fetch(descriptor).first else { return }
 
-    let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url)
+    let thumbnailCacheKey = await ImageThumbnailCache.ensureThumbnail(for: url)
     let oldThumbnailKey = recentImage.thumbnailCacheKey
     recentImage.update(
       from: url,

@@ -14,11 +14,20 @@
 			remoteGlobalIDString = 1E7D568C2FDEEBFE0035C627;
 			remoteInfo = Imaxe;
 		};
+		1EA97D9F3000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1E7D56852FDEEBFE0035C627 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1E7D568C2FDEEBFE0035C627;
+			remoteInfo = Imaxe;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		1E7D568D2FDEEBFE0035C627 /* Imaxe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Imaxe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1EA97D9430021C4600AF78D8 /* Imaxe.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; name = Imaxe.xctestplan; path = ImaxeTests/Imaxe.xctestplan; sourceTree = "<group>"; };
+		1EA97D9C3000000000000001 /* ImaxeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -45,6 +54,11 @@
 			path = ImaxeTests;
 			sourceTree = "<group>";
 		};
+		1EA97D9D3000000000000001 /* ImaxeUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ImaxeUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,14 +76,23 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1EA97D973000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		1E7D56842FDEEBFE0035C627 = {
 			isa = PBXGroup;
 			children = (
+				1EA97D9430021C4600AF78D8 /* Imaxe.xctestplan */,
 				1E7D568F2FDEEBFE0035C627 /* Imaxe */,
 				1E7D569D2FDEEC000035C627 /* ImaxeTests */,
+				1EA97D9D3000000000000001 /* ImaxeUITests */,
 				1E7D568E2FDEEBFE0035C627 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -79,6 +102,7 @@
 			children = (
 				1E7D568D2FDEEBFE0035C627 /* Imaxe.app */,
 				1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */,
+				1EA97D9C3000000000000001 /* ImaxeUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -131,6 +155,29 @@
 			productReference = 1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		1EA97D9B3000000000000001 /* ImaxeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1EA97DA23000000000000001 /* Build configuration list for PBXNativeTarget "ImaxeUITests" */;
+			buildPhases = (
+				1EA97D963000000000000001 /* Sources */,
+				1EA97D973000000000000001 /* Frameworks */,
+				1EA97D983000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				1EA97DA03000000000000001 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				1EA97D9D3000000000000001 /* ImaxeUITests */,
+			);
+			name = ImaxeUITests;
+			packageProductDependencies = (
+			);
+			productName = ImaxeUITests;
+			productReference = 1EA97D9C3000000000000001 /* ImaxeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -145,6 +192,10 @@
 						CreatedOnToolsVersion = 26.5;
 					};
 					1E7D56992FDEEC000035C627 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 1E7D568C2FDEEBFE0035C627;
+					};
+					1EA97D9B3000000000000001 = {
 						CreatedOnToolsVersion = 26.5;
 						TestTargetID = 1E7D568C2FDEEBFE0035C627;
 					};
@@ -168,6 +219,7 @@
 			targets = (
 				1E7D568C2FDEEBFE0035C627 /* Imaxe */,
 				1E7D56992FDEEC000035C627 /* ImaxeTests */,
+				1EA97D9B3000000000000001 /* ImaxeUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -181,6 +233,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		1E7D56982FDEEC000035C627 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		1EA97D983000000000000001 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -204,6 +263,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		1EA97D963000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -211,6 +277,11 @@
 			isa = PBXTargetDependency;
 			target = 1E7D568C2FDEEBFE0035C627 /* Imaxe */;
 			targetProxy = 1E7D569B2FDEEC000035C627 /* PBXContainerItemProxy */;
+		};
+		1EA97DA03000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1E7D568C2FDEEBFE0035C627 /* Imaxe */;
+			targetProxy = 1EA97D9F3000000000000001 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -350,7 +421,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2Y2HAD54DN;
 				ENABLE_APP_SANDBOX = NO;
@@ -388,7 +459,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2Y2HAD54DN;
 				ENABLE_APP_SANDBOX = NO;
@@ -461,6 +532,38 @@
 			};
 			name = Release;
 		};
+		1EA97DA33000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.ImaxeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = Imaxe;
+			};
+			name = Debug;
+		};
+		1EA97DA43000000000000001 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.imaxe.ImaxeUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_VERSION = 6.0;
+				TEST_TARGET_NAME = Imaxe;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -487,6 +590,15 @@
 			buildConfigurations = (
 				1E7D56B22FDEEC000035C627 /* Debug */,
 				1E7D56B32FDEEC000035C627 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		1EA97DA23000000000000001 /* Build configuration list for PBXNativeTarget "ImaxeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1EA97DA33000000000000001 /* Debug */,
+				1EA97DA43000000000000001 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

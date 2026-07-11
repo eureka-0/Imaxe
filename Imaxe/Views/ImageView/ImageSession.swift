@@ -18,6 +18,8 @@ struct ImageAlert: Identifiable {
 final class ImageSession {
   private(set) var currentImage: ImageContainer?
   private(set) var currentImageInfo: ImageInfo?
+  private(set) var displayedURL: URL?
+  private(set) var pendingURL: URL?
   var isImporterPresented = false
   private(set) var isLoading = false
   var zoomScale: CGFloat = 1.0
@@ -47,16 +49,33 @@ final class ImageSession {
   @ObservationIgnored let viewportController = ImageViewportController()
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
-  @ObservationIgnored private var folderLoadTask: Task<Void, Never>?
   @ObservationIgnored private var activeImageLoad = ImageLoadOperation()
   @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
-  @ObservationIgnored var recordRecentImage: ((URL) throws -> Void)?
+  @ObservationIgnored private var displayedTemporaryURL: URL?
+  @ObservationIgnored private var pendingTemporaryURL: URL?
+  @ObservationIgnored var recordRecentImage: ((URL) async throws -> Void)?
   @ObservationIgnored var removeRecentImage: ((String) throws -> Void)?
+  @ObservationIgnored var loadImageInfo: @Sendable (URL, ImageLoader.LoadRequestID) async throws
+    -> ImageInfo = {
+      try await ImageLoader.shared.loadInfo(from: $0, requestID: $1)
+    }
+
+  @ObservationIgnored var loadImageContainer: @Sendable (
+    URL,
+    ImageLoader.LoadRequestID,
+  ) async throws -> ImageContainer = {
+    try await ImageLoader.shared.loadImage(from: $0, requestID: $1)
+  }
+
+  @ObservationIgnored var loadFolderImageURLs: @Sendable (URL) async -> [URL]? = {
+    await FolderNavigator.imageURLs(for: $0)
+  }
 
   init(imageContainer: ImageContainer? = nil) {
     if let imageContainer {
       currentImage = imageContainer
       currentImageInfo = ImageInfo(url: imageContainer.url)
+      displayedURL = imageContainer.url
       folderNavigator = FolderNavigator(
         for: imageContainer.url,
         enableLoopBrowsing: enableLoopBrowsing,
@@ -67,7 +86,12 @@ final class ImageSession {
   deinit {
     topBarHideTask?.cancel()
     imageLoadTask?.cancel()
-    folderLoadTask?.cancel()
+    if let displayedTemporaryURL {
+      try? FileManager.default.removeItem(at: displayedTemporaryURL)
+    }
+    if let pendingTemporaryURL {
+      try? FileManager.default.removeItem(at: pendingTemporaryURL)
+    }
     let requestID = activeImageLoad.requestID
     Task {
       await ImageLoader.shared.cancelLoads(for: requestID)
@@ -162,9 +186,12 @@ final class ImageSession {
     if let imageType = pasteboard.availableType(from: [.fileURL, .URL, .png, .tiff]) {
       switch imageType {
       case .fileURL:
-        if let fileURLString = pasteboard.string(forType: .fileURL) {
+        if let url = pasteboard.readObjects(
+          forClasses: [NSURL.self],
+          options: [.urlReadingFileURLsOnly: true],
+        )?.first as? URL {
           loadImage(
-            from: URL(fileURLWithPath: fileURLString),
+            from: url,
             failureTitle: "Failed to Load Image from Pasteboard",
             addToRecent: false,
           )
@@ -187,6 +214,7 @@ final class ImageSession {
               from: tempFileURL,
               failureTitle: "Failed to Load Image from Pasteboard",
               addToRecent: false,
+              temporaryURL: tempFileURL,
             )
           } catch {
             alert = ImageAlert(
@@ -211,8 +239,8 @@ final class ImageSession {
   }
 
   func reloadCurrentImage() {
-    guard let folderNavigator else { return }
-    loadImage(from: folderNavigator.currentImageURL)
+    guard let displayedURL else { return }
+    loadImage(from: displayedURL)
   }
 
   func openRecentImage(_ recentImage: RecentImage) {
@@ -224,17 +252,13 @@ final class ImageSession {
   }
 
   func navigateToPreviousImage() {
-    let success = folderNavigator?.moveToPrevious() ?? false
-    if success {
-      reloadCurrentImage()
-    }
+    guard var candidate = folderNavigator, candidate.moveToPrevious() else { return }
+    loadImage(from: candidate.currentImageURL)
   }
 
   func navigateToNextImage() {
-    let success = folderNavigator?.moveToNext() ?? false
-    if success {
-      reloadCurrentImage()
-    }
+    guard var candidate = folderNavigator, candidate.moveToNext() else { return }
+    loadImage(from: candidate.currentImageURL)
   }
 
   func loadImage(
@@ -243,30 +267,19 @@ final class ImageSession {
     addToRecent: Bool = true,
     preservingViewportOnReload: Bool = false,
     recentImagePathToRemoveOnFileNotFound: String? = nil,
+    temporaryURL: URL? = nil,
   ) {
-    let previousImage = currentImage
-    let previousImageInfo = currentImageInfo
-    let previousFolderNavigator = folderNavigator
     let shouldPreserveCurrentImage = preservingViewportOnReload
       && currentImage != nil
       && currentImageInfo != nil
     cancelCurrentImageLoad()
-    imageFileWatcher = nil
     let imageLoad = ImageLoadOperation()
     activeImageLoad = imageLoad
 
     isLoading = true
+    pendingURL = url
+    pendingTemporaryURL = temporaryURL
     shouldApplyLoadedImageWindowSize = !shouldPreserveCurrentImage
-    if !shouldPreserveCurrentImage {
-      currentImage = nil
-      currentImageInfo = nil
-    }
-    folderNavigator = FolderNavigator(
-      for: url,
-      enableLoopBrowsing: enableLoopBrowsing,
-      imageURLs: initialImageURLs(from: previousFolderNavigator, for: url),
-    )
-    loadFolderNavigator(for: url, imageLoad: imageLoad)
 
     imageLoadTask = Task { @MainActor [weak self] in
       guard let self, imageLoad === activeImageLoad, !Task.isCancelled else { return }
@@ -274,73 +287,63 @@ final class ImageSession {
       defer {
         if imageLoad === activeImageLoad {
           isLoading = false
+          pendingURL = nil
+          pendingTemporaryURL = nil
         }
       }
 
-      await withTaskGroup(of: ImageLoadEvent.self) { group in
-        group.addTask {
-          await .info(Self.loadInfoResult(from: url, requestID: imageLoad.requestID))
+      async let infoResult = Self.result {
+        try await loadImageInfo(url, imageLoad.requestID)
+      }
+      async let imageResult = Self.result {
+        try await loadImageContainer(url, imageLoad.requestID)
+      }
+      async let imageURLs = loadFolderImageURLs(url)
+      let (info, image, folderURLs) = await (infoResult, imageResult, imageURLs)
+
+      guard imageLoad === activeImageLoad, !Task.isCancelled else {
+        removeTemporaryFile(temporaryURL)
+        return
+      }
+
+      switch (info, image) {
+      case let (.success(info), .success(imageContainer)):
+        let oldTemporaryURL = displayedTemporaryURL
+        currentImage = imageContainer
+        currentImageInfo = info
+        displayedURL = url
+        displayedTemporaryURL = temporaryURL
+        folderNavigator = FolderNavigator(
+          for: url,
+          enableLoopBrowsing: enableLoopBrowsing,
+          imageURLs: folderURLs ?? initialImageURLs(from: folderNavigator, for: url),
+        )
+        updateImageFileWatcher()
+        if oldTemporaryURL != temporaryURL {
+          removeTemporaryFile(oldTemporaryURL)
         }
-        group.addTask {
-          await .image(Self.loadImageResult(from: url, requestID: imageLoad.requestID))
-        }
-
-        for await event in group {
-          guard imageLoad === activeImageLoad, !Task.isCancelled else {
-            group.cancelAll()
-            return
-          }
-
-          switch event {
-          case let .info(.success(info)):
-            currentImageInfo = info
-
-          case .info(.failure):
-            break
-
-          case let .image(.success(imageContainer)):
-            if currentImageInfo == nil {
-              currentImageInfo = try? await ImageLoader.shared.loadInfo(
-                from: url,
-                requestID: imageLoad.requestID,
-              )
-            }
-            currentImage = imageContainer
-            updateImageFileWatcher()
-            if addToRecent {
-              do {
-                try recordRecentImage?(url)
-              } catch {
-                alert = ImageAlert(
-                  title: "Failed to Update Recent Images",
-                  message: error.localizedDescription,
-                )
-              }
-            }
-
-          case let .image(.failure(error)):
-            group.cancelAll()
-            folderLoadTask?.cancel()
-            currentImage = previousImage
-            currentImageInfo = previousImageInfo
-            folderNavigator = previousFolderNavigator
-            updateImageFileWatcher()
-            handleImageLoadFailure(
-              error,
-              url: url,
-              failureTitle: failureTitle,
-              recentImagePathToRemoveOnFileNotFound: recentImagePathToRemoveOnFileNotFound,
+        if addToRecent {
+          do {
+            try await recordRecentImage?(url)
+            guard imageLoad === activeImageLoad, !Task.isCancelled else { return }
+          } catch {
+            alert = ImageAlert(
+              title: "Failed to Update Recent Images",
+              message: error.localizedDescription,
             )
-            return
           }
         }
+
+      case let (.failure(error), _), let (_, .failure(error)):
+        removeTemporaryFile(temporaryURL)
+        handleImageLoadFailure(
+          error,
+          url: url,
+          failureTitle: failureTitle,
+          recentImagePathToRemoveOnFileNotFound: recentImagePathToRemoveOnFileNotFound,
+        )
       }
     }
-  }
-
-  private enum ImageLoadEvent {
-    case info(Result<ImageInfo, Error>)
-    case image(Result<ImageContainer, Error>)
   }
 
   private final class ImageLoadOperation {
@@ -397,7 +400,8 @@ final class ImageSession {
 
   private func cancelCurrentImageLoad() {
     imageLoadTask?.cancel()
-    folderLoadTask?.cancel()
+    removeTemporaryFile(pendingTemporaryURL)
+    pendingTemporaryURL = nil
     let requestID = activeImageLoad.requestID
     Task {
       await ImageLoader.shared.cancelLoads(for: requestID)
@@ -415,54 +419,34 @@ final class ImageSession {
     return previousFolderNavigator?.imageURLs
   }
 
-  private func loadFolderNavigator(for url: URL, imageLoad: ImageLoadOperation) {
-    folderLoadTask = Task { @MainActor [weak self] in
-      guard let self else { return }
-
-      guard let imageURLs = await FolderNavigator.imageURLs(for: url),
-            imageLoad === activeImageLoad,
-            folderNavigator?.currentImageURL == url,
-            !Task.isCancelled
-      else { return }
-
-      folderNavigator?.replaceImageURLs(imageURLs)
-    }
-  }
-
   private func updateImageFileWatcher() {
     imageFileWatcher = nil
 
     guard actionOnImageFileChange == .reload,
-          let url = folderNavigator?.currentImageURL,
+          let url = displayedURL,
           currentImage != nil
     else { return }
 
     imageFileWatcher = ImageFileWatcher(url: url) { [weak self] in
       guard let self,
-            folderNavigator?.currentImageURL == url
+            folderNavigator?.currentImageURL == url,
+            pendingURL == nil
       else { return }
 
       loadImage(from: url, preservingViewportOnReload: true)
     }
   }
 
-  private nonisolated static func loadInfoResult(
-    from url: URL,
-    requestID: ImageLoader.LoadRequestID,
-  ) async -> Result<ImageInfo, Error> {
-    do {
-      return try await .success(ImageLoader.shared.loadInfo(from: url, requestID: requestID))
-    } catch {
-      return .failure(error)
-    }
+  private func removeTemporaryFile(_ url: URL?) {
+    guard let url else { return }
+    try? FileManager.default.removeItem(at: url)
   }
 
-  private nonisolated static func loadImageResult(
-    from url: URL,
-    requestID: ImageLoader.LoadRequestID,
-  ) async -> Result<ImageContainer, Error> {
+  private static func result<T>(
+    _ operation: () async throws -> T,
+  ) async -> Result<T, Error> {
     do {
-      return try await .success(ImageLoader.shared.loadImage(from: url, requestID: requestID))
+      return try await .success(operation())
     } catch {
       return .failure(error)
     }

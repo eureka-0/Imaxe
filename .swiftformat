@@ -1,0 +1,7 @@
+--swift-version 6.3
+--max-width 100
+--indent 2
+--trailing-commas always
+--allow-partial-wrapping false
+--wrap-arguments before-first
+--init-coder-nil true

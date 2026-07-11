@@ -40,7 +40,9 @@ nonisolated struct ImageInfo: Hashable {
     self.url = newURL
     fileName = newURL.lastPathComponent
     fileSize = newURL.fileSize
-    type = newURL.utType
+    type = ImageLoader.imageTypes(for: newURL).first {
+      $0.conforms(to: .image)
+    }
 
     let properties = Self.getImageProperties(from: newURL)
     let imagePixelSize = Self.getImagePixelSize(from: properties)
@@ -126,6 +128,7 @@ nonisolated struct ImageInfo: Hashable {
 nonisolated struct SVGDocumentSize {
   let viewBox: NSRect?
   let size: NSSize?
+  let hasExplicitDimensions: Bool
 
   var bestSize: NSSize? {
     if let viewBox, viewBox.width > 0, viewBox.height > 0 {
@@ -142,6 +145,9 @@ nonisolated struct SVGDocumentSize {
   init(svgString: String) {
     let svgTag = Self.rootSVGTag(in: svgString) ?? ""
     let attributes = Self.attributes(in: svgTag)
+    hasExplicitDimensions = attributes["viewBox"] != nil
+      || attributes["width"] != nil
+      || attributes["height"] != nil
     viewBox = Self.viewBox(from: attributes["viewBox"])
 
     if let width = Self.length(from: attributes["width"]),

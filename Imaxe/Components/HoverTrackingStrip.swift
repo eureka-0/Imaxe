@@ -87,7 +87,7 @@ struct HoverTrackingStrip: NSViewRepresentable {
     }
 
     func resetHovering() {
-      isHovering = false
+      setHovering(false)
     }
   }
 }

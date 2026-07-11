@@ -203,10 +203,16 @@ extension Comparable {
 
 extension Date {
   var relativeDateDescription: String {
+    RelativeDateFormatter.shared.localizedString(for: self, relativeTo: .now)
+  }
+}
+
+private enum RelativeDateFormatter {
+  static let shared: RelativeDateTimeFormatter = {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .full
-    return formatter.localizedString(for: self, relativeTo: .now)
-  }
+    return formatter
+  }()
 }
 
 // MARK: - FileManager extensions.
@@ -243,6 +249,18 @@ extension NSApplication {
       return NSImage()
     }
     return NSImage(named: iconName) ?? NSImage()
+  }
+}
+
+// MARK: - NSEvent extensions.
+
+extension NSEvent {
+  static var leftMousePressed: Bool {
+    (NSEvent.pressedMouseButtons & 1 << 0) != 0
+  }
+
+  static var rightMousePressed: Bool {
+    (NSEvent.pressedMouseButtons & 1 << 1) != 0
   }
 }
 
@@ -473,42 +491,18 @@ nonisolated extension URL {
       let directoryName = "Imaxe"
     #endif
 
-    let url = Self.applicationSupportDirectory.appendingPathComponent(
+    return Self.applicationSupportDirectory.appendingPathComponent(
       directoryName,
       isDirectory: true,
     )
-
-    do {
-      try FileManager.default.ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create data directory: \(error)")
-    }
-
-    return url
   }
 
   static var appCachesDirectory: URL {
-    let url = Self.cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
-
-    do {
-      try FileManager.default.ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create caches directory: \(error)")
-    }
-
-    return url
+    cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
   }
 
   static var thumbnailCachesDirectory: URL {
-    let url = Self.appCachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
-
-    do {
-      try FileManager.default.ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create thumbnail cache directory: \(error)")
-    }
-
-    return url
+    appCachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
   }
 
   var utType: UTType? {

@@ -55,7 +55,7 @@ struct ContentView: View {
       imageSession.enableLoopBrowsing = enableLoopBrowsing
       imageSession.actionOnImageFileChange = actionOnImageFileChange
       imageSession.recordRecentImage = { url in
-        try RecentImagesStore.recordOpened(url, in: modelContext)
+        try await RecentImagesStore.recordOpened(url, in: modelContext)
       }
       imageSession.removeRecentImage = { path in
         try RecentImagesStore.remove(path: path, in: modelContext)

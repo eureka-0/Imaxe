@@ -5,12 +5,12 @@
 //  Created by lxlong on 2026/7/3.
 //
 
+import AppKit
 import CryptoKit
 import Foundation
 import ImageIO
-import QuickLookThumbnailing
+@preconcurrency import QuickLookThumbnailing
 import SwiftData
-import Synchronization
 import UniformTypeIdentifiers
 
 enum LibraryThumbnailReferences {
@@ -28,7 +28,6 @@ enum LibraryThumbnailReferences {
     in modelContext: ModelContext,
   ) throws {
     guard try !isThumbnailReferenced(key, in: modelContext) else { return }
-
     try ImageThumbnailCache.removeThumbnail(for: key)
   }
 
@@ -36,51 +35,95 @@ enum LibraryThumbnailReferences {
     _ key: String,
     in modelContext: ModelContext,
   ) throws -> Bool {
-    var recentDescriptor = FetchDescriptor<RecentImage>(
-      predicate: #Predicate<RecentImage> { recentImage in
-        recentImage.thumbnailCacheKey == key
-      },
+    var descriptor = FetchDescriptor<RecentImage>(
+      predicate: #Predicate<RecentImage> { $0.thumbnailCacheKey == key },
     )
-    recentDescriptor.fetchLimit = 1
-    if try !modelContext.fetch(recentDescriptor).isEmpty {
-      return true
+    descriptor.fetchLimit = 1
+    return try !modelContext.fetch(descriptor).isEmpty
+  }
+}
+
+actor ImageThumbnailService {
+  static let shared = ImageThumbnailService()
+
+  private struct PendingThumbnail {
+    let task: Task<Void, Never>
+    var waiters: [UUID: CheckedContinuation<String?, Never>]
+  }
+
+  private var pendingThumbnails: [String: PendingThumbnail] = [:]
+
+  func thumbnailKey(for url: URL) async -> String? {
+    guard let key = ImageThumbnailCache.cacheKey(for: url) else { return nil }
+    if ImageThumbnailCache.isValidThumbnail(for: key) {
+      return key
     }
 
-    return false
+    let waiterID = UUID()
+    return await withTaskCancellationHandler {
+      await withCheckedContinuation { continuation in
+        guard !Task.isCancelled else {
+          continuation.resume(returning: nil)
+          return
+        }
+        addWaiter(continuation, id: waiterID, key: key, url: url)
+      }
+    } onCancel: {
+      Task {
+        await self.cancelWaiter(id: waiterID, key: key)
+      }
+    }
+  }
+
+  private func addWaiter(
+    _ continuation: CheckedContinuation<String?, Never>,
+    id: UUID,
+    key: String,
+    url: URL,
+  ) {
+    if var pending = pendingThumbnails[key] {
+      pending.waiters[id] = continuation
+      pendingThumbnails[key] = pending
+      return
+    }
+
+    let task = Task.detached(priority: .utility) {
+      let result = await ImageThumbnailCache.generateThumbnail(for: url, key: key) ? key : nil
+      await self.finish(key: key, result: result)
+    }
+    pendingThumbnails[key] = PendingThumbnail(task: task, waiters: [id: continuation])
+  }
+
+  private func cancelWaiter(id: UUID, key: String) {
+    guard var pending = pendingThumbnails[key],
+          let continuation = pending.waiters.removeValue(forKey: id)
+    else { return }
+
+    continuation.resume(returning: nil)
+    if pending.waiters.isEmpty {
+      pending.task.cancel()
+      pendingThumbnails[key] = nil
+    } else {
+      pendingThumbnails[key] = pending
+    }
+  }
+
+  private func finish(key: String, result: String?) {
+    guard let pending = pendingThumbnails.removeValue(forKey: key) else { return }
+    for continuation in pending.waiters.values {
+      continuation.resume(returning: result)
+    }
   }
 }
 
 nonisolated enum ImageThumbnailCache {
-  static let maxPixelSize = 320
+  static let maxPixelSize = 512
   static let didChangeNotification = Notification.Name("ImageThumbnailCacheDidChange")
 
-  private static let cacheVersion = "v1"
+  private static let cacheVersion = "v2"
 
-  /// Ensures that a thumbnail exists for the given image URL. If a thumbnail already exists in the
-  /// cache, it returns the cache key. If not, it generates a new thumbnail, saves it to the cache,
-  /// and returns the new cache key. Returns `nil` if the thumbnail cannot be created.
-  static func ensureThumbnail(for url: URL) -> String? {
-    let sourceURL = url.freshFileURL
-    guard sourceURL.isFileURL, !sourceURL.isDirectory,
-          ImageLoader.isSupportedImage(sourceURL)
-    else {
-      return nil
-    }
-
-    let key = thumbnailCacheKey(for: sourceURL)
-    let outputURL = thumbnailURL(for: key)
-    if outputURL.fileExists {
-      return key
-    }
-
-    do {
-      try writeThumbnail(from: sourceURL, to: outputURL)
-      postDidChangeNotification()
-      return key
-    } catch {
-      try? FileManager.default.removeItem(at: outputURL)
-      return nil
-    }
+  static func ensureThumbnail(for url: URL) async -> String? {
+    await ImageThumbnailService.shared.thumbnailKey(for: url)
   }
 
   static func thumbnailURL(for key: String) -> URL {
@@ -104,94 +147,122 @@ nonisolated enum ImageThumbnailCache {
   }
 
   static func totalCacheSizeInBytes() -> Int {
-    guard let fileEnumerator = FileManager.default.enumerator(
+    guard let enumerator = FileManager.default.enumerator(
       at: URL.thumbnailCachesDirectory,
       includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
-    ) else {
-      return 0
-    }
+    ) else { return 0 }
 
-    var totalSize = 0
-    for case let fileURL as URL in fileEnumerator {
-      guard let resourceValues = try? fileURL.resourceValues(forKeys: [
-        .fileSizeKey,
-        .isRegularFileKey,
-      ]),
-        resourceValues.isRegularFile == true
-      else { continue }
-
-      totalSize += resourceValues.fileSize ?? 0
+    return enumerator.reduce(into: 0) { total, item in
+      guard let url = item as? URL,
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey]),
+            values.isRegularFile == true
+      else { return }
+      total += values.fileSize ?? 0
     }
-    return totalSize
   }
 
-  private static func postDidChangeNotification() {
-    NotificationCenter.default.post(name: didChangeNotification, object: nil)
-  }
+  static func cacheKey(for url: URL) -> String? {
+    let sourceURL = url.freshFileURL
+    guard sourceURL.isFileURL, !sourceURL.isDirectory,
+          ImageLoader.isSupportedImage(sourceURL)
+    else { return nil }
 
-  private static func thumbnailCacheKey(for url: URL) -> String {
-    let resourceValues = try? url.freshResourceValues(forKeys: [
+    let values = try? sourceURL.freshResourceValues(forKeys: [
       .contentModificationDateKey,
       .fileSizeKey,
     ])
-    let modifiedAt = resourceValues?.contentModificationDate?.timeIntervalSince1970 ?? 0
-    let fileSize = resourceValues?.fileSize ?? 0
     let source = [
       cacheVersion,
-      url.filePath,
-      "\(fileSize)",
-      "\(modifiedAt)",
+      sourceURL.filePath,
+      "\(values?.fileSize ?? 0)",
+      "\(values?.contentModificationDate?.timeIntervalSince1970 ?? 0)",
       "\(maxPixelSize)",
     ].joined(separator: "|")
-
-    let digest = SHA256.hash(data: Data(source.utf8))
-    return digest.map { String(format: "%02x", $0) }.joined()
+    return SHA256.hash(data: Data(source.utf8))
+      .map { String(format: "%02x", $0) }
+      .joined()
   }
 
-  private static func writeThumbnail(from sourceURL: URL, to outputURL: URL) throws {
-    if sourceURL.utType == .svg {
-      try writeQuickLookThumbnail(from: sourceURL, to: outputURL)
-      return
+  static func isValidThumbnail(for key: String) -> Bool {
+    let url = thumbnailURL(for: key)
+    guard url.fileExists,
+          let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+          CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
+    else {
+      try? FileManager.default.removeItem(at: url)
+      return false
     }
+    return true
+  }
 
-    try writeImageIOThumbnail(from: sourceURL, to: outputURL)
+  static func generateThumbnail(for sourceURL: URL, key: String) async -> Bool {
+    let outputURL = thumbnailURL(for: key)
+    do {
+      try Task.checkCancellation()
+      try FileManager.default.ensureExists(for: outputURL.deletingLastPathComponent())
+      let temporaryURL = outputURL.deletingLastPathComponent()
+        .appendingPathComponent(".\(key)-\(UUID().uuidString).tmp")
+      defer { try? FileManager.default.removeItem(at: temporaryURL) }
+
+      if sourceURL.utType == .svg {
+        try await writeQuickLookThumbnail(from: sourceURL, to: temporaryURL)
+      } else {
+        try writeImageIOThumbnail(from: sourceURL, to: temporaryURL)
+      }
+      try Task.checkCancellation()
+      guard canDecodeImage(at: temporaryURL) else {
+        throw ThumbnailCacheError.invalidCachedImage
+      }
+      try Task.checkCancellation()
+      try atomicallyInstall(temporaryURL, at: outputURL)
+      postDidChangeNotification()
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  private static func canDecodeImage(at url: URL) -> Bool {
+    guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return false }
+    return CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
+  }
+
+  private static func atomicallyInstall(_ temporaryURL: URL, at outputURL: URL) throws {
+    if outputURL.fileExists {
+      _ = try FileManager.default.replaceItemAt(outputURL, withItemAt: temporaryURL)
+    } else {
+      try FileManager.default.moveItem(at: temporaryURL, to: outputURL)
+    }
   }
 
   private static func writeImageIOThumbnail(from sourceURL: URL, to outputURL: URL) throws {
-    let sourceOptions = [
-      kCGImageSourceShouldCache: false,
-    ] as CFDictionary
-    guard let imageSource = CGImageSourceCreateWithURL(sourceURL as CFURL, sourceOptions) else {
-      throw ThumbnailCacheError.failedToCreateImageSource
-    }
+    guard let source = CGImageSourceCreateWithURL(
+      sourceURL as CFURL,
+      [kCGImageSourceShouldCache: false] as CFDictionary,
+    ) else { throw ThumbnailCacheError.failedToCreateImageSource }
 
-    let thumbnailOptions = [
+    let options = [
       kCGImageSourceCreateThumbnailFromImageAlways: true,
       kCGImageSourceCreateThumbnailWithTransform: true,
       kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
       kCGImageSourceShouldCacheImmediately: false,
     ] as CFDictionary
-    guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(imageSource, 0, thumbnailOptions)
-    else {
-      throw ThumbnailCacheError.failedToCreateThumbnail
-    }
-
-    guard let destination = CGImageDestinationCreateWithURL(
-      outputURL as CFURL,
-      UTType.png.identifier as CFString,
-      1,
-      nil,
-    ) else {
-      throw ThumbnailCacheError.failedToCreateDestination
-    }
+    guard let thumbnail = CGImageSourceCreateThumbnailAtIndex(source, 0, options),
+          let destination = CGImageDestinationCreateWithURL(
+            outputURL as CFURL,
+            UTType.png.identifier as CFString,
+            1,
+            nil,
+          )
+    else { throw ThumbnailCacheError.failedToCreateThumbnail }
 
     CGImageDestinationAddImage(destination, thumbnail, nil)
-    if !CGImageDestinationFinalize(destination) {
+    guard CGImageDestinationFinalize(destination) else {
       throw ThumbnailCacheError.failedToWriteThumbnail
     }
   }
 
-  private static func writeQuickLookThumbnail(from sourceURL: URL, to outputURL: URL) throws {
+  private static func writeQuickLookThumbnail(from sourceURL: URL, to outputURL: URL) async throws {
     let request = QLThumbnailGenerator.Request(
       fileAt: sourceURL,
       size: CGSize(width: maxPixelSize, height: maxPixelSize),
@@ -201,38 +272,34 @@ nonisolated enum ImageThumbnailCache {
     request.iconMode = false
     request.contentType = .svg
 
-    let generationError = Mutex<Error?>(nil)
-    let semaphore = DispatchSemaphore(value: 0)
-    QLThumbnailGenerator.shared.saveBestRepresentation(
-      for: request,
-      to: outputURL,
-      as: .png,
-    ) { error in
-      generationError.withLock {
-        $0 = error
+    try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation {
+        (continuation: CheckedContinuation<Void, Error>) in
+        QLThumbnailGenerator.shared.saveBestRepresentation(
+          for: request,
+          to: outputURL,
+          as: .png,
+        ) { error in
+          if let error {
+            continuation.resume(throwing: error)
+          } else {
+            continuation.resume()
+          }
+        }
       }
-      semaphore.signal()
-    }
-
-    if semaphore.wait(timeout: .now() + .seconds(10)) == .timedOut {
+    } onCancel: {
       QLThumbnailGenerator.shared.cancel(request)
-      throw ThumbnailCacheError.quickLookGenerationTimedOut
     }
+  }
 
-    if let error = generationError.withLock({ $0 }) {
-      throw error
-    }
-
-    guard outputURL.fileExists else {
-      throw ThumbnailCacheError.failedToWriteThumbnail
-    }
+  private static func postDidChangeNotification() {
+    NotificationCenter.default.post(name: didChangeNotification, object: nil)
   }
 
   private enum ThumbnailCacheError: Error {
     case failedToCreateImageSource
     case failedToCreateThumbnail
-    case failedToCreateDestination
     case failedToWriteThumbnail
-    case quickLookGenerationTimedOut
+    case invalidCachedImage
   }
 }

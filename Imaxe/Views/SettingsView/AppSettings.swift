@@ -51,6 +51,15 @@ enum AppSettings {
       )
     }
   }
+
+  static func normalizedFixedLoadedImageWindowDimension(
+    _ value: Double,
+    minimum: CGFloat,
+  ) -> Double {
+    guard value.isFinite else { return Double(minimum) }
+
+    return value.clamped(to: Double(minimum) ... 10000)
+  }
 }
 
 enum Appearance: String, CaseIterable, Identifiable {

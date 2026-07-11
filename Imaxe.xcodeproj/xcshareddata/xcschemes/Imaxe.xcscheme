@@ -27,8 +27,13 @@
       buildConfiguration = "Debug"
       selectedDebuggerIdentifier = ""
       selectedLauncherIdentifier = "Xcode.IDEFoundation.Launcher.PosixSpawn"
-      shouldUseLaunchSchemeArgsEnv = "YES"
-      shouldAutocreateTestPlan = "YES">
+      shouldUseLaunchSchemeArgsEnv = "YES">
+      <TestPlans>
+         <TestPlanReference
+            reference = "container:ImaxeTests/Imaxe.xctestplan"
+            default = "YES">
+         </TestPlanReference>
+      </TestPlans>
       <Testables>
          <TestableReference
             skipped = "NO"
@@ -38,6 +43,17 @@
                BlueprintIdentifier = "1E7D56992FDEEC000035C627"
                BuildableName = "ImaxeTests.xctest"
                BlueprintName = "ImaxeTests"
+               ReferencedContainer = "container:Imaxe.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1EA97D9B3000000000000001"
+               BuildableName = "ImaxeUITests.xctest"
+               BlueprintName = "ImaxeUITests"
                ReferencedContainer = "container:Imaxe.xcodeproj">
             </BuildableReference>
          </TestableReference>

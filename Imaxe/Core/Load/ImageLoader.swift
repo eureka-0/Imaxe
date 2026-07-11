@@ -12,7 +12,12 @@ import UniformTypeIdentifiers
 enum ImageLoadingError: Error, LocalizedError {
   case unsupportedImageType(URL)
   case fileNotFound(URL)
-  case failedToLoad(URL)
+  case permissionDenied(URL)
+  case ioFailure(URL, String)
+  case corruptImage(URL)
+  case sizeLimitExceeded(URL)
+  case invalidDimensions(URL)
+  case cancelled
 
   var errorDescription: String? {
     switch self {
@@ -23,8 +28,18 @@ enum ImageLoadingError: Error, LocalizedError {
       """
     case let .fileNotFound(url):
       "The file no longer exists: \(url.filePath)"
-    case let .failedToLoad(url):
-      "Failed to load image from URL: \(url.filePath)"
+    case let .permissionDenied(url):
+      "Imaxe does not have permission to read: \(url.filePath)"
+    case let .ioFailure(url, message):
+      "Could not read \(url.filePath): \(message)"
+    case let .corruptImage(url):
+      "The image file is damaged or uses unsupported content: \(url.filePath)"
+    case let .sizeLimitExceeded(url):
+      "The image is too large to open safely: \(url.filePath)"
+    case let .invalidDimensions(url):
+      "The image has invalid or missing dimensions: \(url.filePath)"
+    case .cancelled:
+      "Image loading was cancelled."
     }
   }
 }
@@ -122,11 +137,51 @@ actor ImageLoader {
   }
 
   nonisolated static func isSupportedImage(_ url: URL) -> Bool {
-    guard let fileType = url.utType else {
-      return false
+    imageTypes(for: url).contains { type in
+      supportedImageTypes.contains { type.conforms(to: $0) }
+    }
+  }
+
+  nonisolated static func isSVG(_ url: URL) -> Bool {
+    actualImageType(for: url) == nil
+      && imageTypes(for: url).contains { $0.conforms(to: .svg) }
+  }
+
+  /// Returns true if the image size exceeds the maximum allowed dimensions or pixel count.
+  nonisolated static func exceedsImageSizeLimit(_ size: NSSize) -> Bool {
+    guard size.width.isFinite, size.height.isFinite,
+          size.width > 0, size.height > 0
+    else { return false }
+
+    return size.width > Constants.maximumImageDimension
+      || size.height > Constants.maximumImageDimension
+      || size.width * size.height > Constants.maximumImagePixelCount
+  }
+
+  nonisolated static func imageTypes(for url: URL) -> [UTType] {
+    var imageTypes: [UTType] = []
+
+    if let extensionType = url.utType {
+      imageTypes.append(extensionType)
     }
 
-    return supportedImageTypes.contains { fileType.conforms(to: $0) }
+    if let resourceType = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType {
+      imageTypes.append(resourceType)
+    }
+
+    if let actualType = actualImageType(for: url) {
+      imageTypes.append(actualType)
+    }
+
+    return imageTypes
+  }
+
+  nonisolated static func actualImageType(for url: URL) -> UTType? {
+    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil),
+          let identifier = CGImageSourceGetType(imageSource) as String?
+    else { return nil }
+
+    return UTType(identifier)
   }
 
   func loadInfo(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageInfo {
@@ -137,7 +192,7 @@ actor ImageLoader {
     }
 
     guard let fileSnapshot = FileSnapshot(url: url) else {
-      throw ImageLoadingError.failedToLoad(url)
+      throw ImageLoadingError.ioFailure(url, "Unable to read file attributes.")
     }
 
     let cacheKey = url as NSURL
@@ -165,6 +220,7 @@ actor ImageLoader {
     let loadTaskID = UUID()
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageInfo in
       try Task.checkCancellation()
+      try Self.validateImageContent(at: url)
       let info = ImageInfo(url: url)
       try Task.checkCancellation()
       return info
@@ -189,7 +245,7 @@ actor ImageLoader {
       if shouldRemoveInfoTask(at: url, id: loadTaskID, after: error) {
         infoLoadTasks[url] = nil
       }
-      throw error
+      throw Self.normalizedError(error, for: url)
     }
   }
 
@@ -201,7 +257,7 @@ actor ImageLoader {
     }
 
     guard let fileSnapshot = FileSnapshot(url: url) else {
-      throw ImageLoadingError.failedToLoad(url)
+      throw ImageLoadingError.ioFailure(url, "Unable to read file attributes.")
     }
 
     let cacheKey = url as NSURL
@@ -229,14 +285,10 @@ actor ImageLoader {
     let loadTaskID = UUID()
     let task = Task.detached(priority: .userInitiated) { () throws -> ImageContainer in
       try Task.checkCancellation()
-      let imageContainer: ImageContainer? = if url.utType == .svg {
-        Self.loadSVG(from: url)
+      let imageContainer: ImageContainer = if Self.isSVG(url) {
+        try Self.loadSVG(from: url)
       } else {
-        Self.loadBitmap(from: url)
-      }
-
-      guard let imageContainer else {
-        throw ImageLoadingError.failedToLoad(url)
+        try Self.loadBitmap(from: url)
       }
 
       try Task.checkCancellation()
@@ -262,7 +314,7 @@ actor ImageLoader {
       if shouldRemoveImageTask(at: url, id: loadTaskID, after: error) {
         imageLoadTasks[url] = nil
       }
-      throw error
+      throw Self.normalizedError(error, for: url)
     }
   }
 
@@ -344,6 +396,11 @@ actor ImageLoader {
       removeCachedValues(for: url)
       throw ImageLoadingError.fileNotFound(url)
     }
+
+    guard FileManager.default.isReadableFile(atPath: url.filePath) else {
+      removeCachedValues(for: url)
+      throw ImageLoadingError.permissionDenied(url)
+    }
   }
 
   private func removeCachedValues(for url: URL) {
@@ -373,7 +430,19 @@ actor ImageLoader {
   }
 
   private func isCurrentTaskCancellation(_ error: Error) -> Bool {
-    Task.isCancelled && error is CancellationError
+    guard Task.isCancelled else { return false }
+
+    if error is CancellationError {
+      return true
+    }
+
+    if let imageLoadingError = error as? ImageLoadingError,
+       case .cancelled = imageLoadingError
+    {
+      return true
+    }
+
+    return false
   }
 
   private func value<T>(of task: Task<T, Error>, requestID: LoadRequestID?) async throws -> T {
@@ -388,28 +457,119 @@ actor ImageLoader {
     }
   }
 
-  private nonisolated static func loadBitmap(from url: URL) -> ImageContainer? {
-    guard let imageData = try? Data(contentsOf: url),
-          let nsImage = NSImage(data: imageData)
-    else { return nil }
+  private nonisolated static func validateImageContent(at url: URL) throws {
+    if isSVG(url) {
+      return
+    }
+
+    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+      throw ImageLoadingError.corruptImage(url)
+    }
+
+    try validateImageSize(imageSource, at: url)
+  }
+
+  private nonisolated static func validateImageSize(
+    _ imageSource: CGImageSource,
+    at url: URL,
+  ) throws {
+    guard let properties = CGImageSourceCopyPropertiesAtIndex(
+      imageSource,
+      0,
+      nil,
+    ) as? [CFString: Any],
+      let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+      let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
+    else { return }
+
+    if exceedsImageSizeLimit(NSSize(width: width.doubleValue, height: height.doubleValue)) {
+      throw ImageLoadingError.sizeLimitExceeded(url)
+    }
+  }
+
+  private nonisolated static func loadBitmap(from url: URL) throws -> ImageContainer {
+    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+      throw ImageLoadingError.corruptImage(url)
+    }
+    try validateImageSize(imageSource, at: url)
+
+    let imageData: Data
+    do {
+      imageData = try Data(contentsOf: url)
+    } catch {
+      throw normalizedError(error, for: url)
+    }
+
+    guard let nsImage = NSImage(data: imageData) else {
+      throw ImageLoadingError.corruptImage(url)
+    }
 
     return ImageContainer(url: url, nsImage: nsImage)
   }
 
-  private nonisolated static func loadSVG(from url: URL) -> ImageContainer? {
-    guard let imageData = try? Data(contentsOf: url),
-          let sourceImage = NSImage(data: imageData)
-    else { return nil }
+  private nonisolated static func loadSVG(from url: URL) throws -> ImageContainer {
+    let imageData: Data
+    do {
+      imageData = try Data(contentsOf: url)
+    } catch {
+      throw normalizedError(error, for: url)
+    }
+
+    guard let sourceImage = NSImage(data: imageData) else {
+      throw ImageLoadingError.corruptImage(url)
+    }
 
     let documentSize = String(data: imageData, encoding: .utf8)
       .map(SVGDocumentSize.init(svgString:))
+    if let documentSize, documentSize.hasExplicitDimensions, documentSize.bestSize == nil {
+      throw ImageLoadingError.invalidDimensions(url)
+    }
     let pixelSize = documentSize?.bestSize ?? sourceImage.size.validSize
 
+    guard pixelSize.width.isFinite, pixelSize.height.isFinite,
+          pixelSize.width > 0, pixelSize.height > 0
+    else { throw ImageLoadingError.invalidDimensions(url) }
+
+    if exceedsImageSizeLimit(pixelSize) {
+      throw ImageLoadingError.sizeLimitExceeded(url)
+    }
+
     guard let nsImage = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
-      return nil
+      throw ImageLoadingError.corruptImage(url)
     }
 
     return ImageContainer(url: url, nsImage: nsImage, pixelSize: pixelSize)
+  }
+
+  private nonisolated static func normalizedError(
+    _ error: Error,
+    for url: URL,
+  ) -> ImageLoadingError {
+    if error is CancellationError {
+      return .cancelled
+    }
+
+    if let imageLoadingError = error as? ImageLoadingError {
+      return imageLoadingError
+    }
+
+    let error = error as NSError
+    if error.domain == NSCocoaErrorDomain {
+      switch CocoaError.Code(rawValue: error.code) {
+      case .fileNoSuchFile:
+        return .fileNotFound(url)
+      case .fileReadNoPermission, .fileWriteNoPermission:
+        return .permissionDenied(url)
+      default:
+        break
+      }
+    }
+
+    if error.domain == NSPOSIXErrorDomain, error.code == Int(EACCES) || error.code == Int(EPERM) {
+      return .permissionDenied(url)
+    }
+
+    return .ioFailure(url, error.localizedDescription)
   }
 
   private nonisolated static func rasterizedSVGImage(
