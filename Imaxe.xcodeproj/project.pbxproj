@@ -26,8 +26,8 @@
 /* Begin PBXFileReference section */
 		1E7D568D2FDEEBFE0035C627 /* Imaxe.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Imaxe.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		1E7D569A2FDEEC000035C627 /* ImaxeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		1EA97D9430021C4600AF78D8 /* Imaxe.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = text; name = Imaxe.xctestplan; path = ImaxeTests/Imaxe.xctestplan; sourceTree = "<group>"; };
 		1EA97D9C3000000000000001 /* ImaxeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ImaxeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		1EA97D9430021C4600AF78D8 /* Imaxe.xctestplan */ = {isa = PBXFileReference; lastKnownFileType = file; name = Imaxe.xctestplan; path = ImaxeTests/Imaxe.xctestplan; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -421,7 +421,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2Y2HAD54DN;
 				ENABLE_APP_SANDBOX = NO;
@@ -459,7 +459,7 @@
 				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 8;
+				CURRENT_PROJECT_VERSION = 9;
 				DEAD_CODE_STRIPPING = YES;
 				DEVELOPMENT_TEAM = 2Y2HAD54DN;
 				ENABLE_APP_SANDBOX = NO;
