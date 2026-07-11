@@ -68,6 +68,11 @@ struct ImageView: View {
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
       .viewportController(imageSession.viewportController)
+      .overlay {
+        if imageSession.isLoading, imageSession.loadingElapsedTime > 0.1 {
+          loadingImageView
+        }
+      }
     } else if imageSession.isLoading {
       loadingImageView
     } else {
@@ -85,6 +90,8 @@ struct ImageView: View {
         .foregroundStyle(.secondary)
     }
     .padding(24)
+    .background(.regularMaterial)
+    .clipShape(RoundedRectangle(cornerRadius: 12))
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(Text("Loading..."))

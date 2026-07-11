@@ -9,6 +9,8 @@ import SwiftUI
 
 struct ImageThumbnailView: View {
   let url: URL
+  let cacheKey: String?
+
   @State private var thumbnailImage: NSImage?
 
   private var backgroundColor: Color = .clear
@@ -16,8 +18,9 @@ struct ImageThumbnailView: View {
   private var contentMode: ContentMode = .fill
   private var cornerRadius: CGFloat = 0
 
-  init(url: URL) {
+  init(url: URL, cacheKey: String? = nil) {
     self.url = url
+    self.cacheKey = cacheKey
   }
 
   var body: some View {
@@ -39,9 +42,15 @@ struct ImageThumbnailView: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
       }
     }
-    .task(id: url) {
+    .task(id: cacheKey ?? url.absoluteString) {
       thumbnailImage = nil
-      guard let key = await ImageThumbnailCache.ensureThumbnail(for: url),
+      let key: String? = if let cacheKey, ImageThumbnailCache.isValidThumbnail(for: cacheKey) {
+        cacheKey
+      } else {
+        await ImageThumbnailCache.ensureThumbnail(for: url)
+      }
+
+      guard let key,
             !Task.isCancelled
       else { return }
       thumbnailImage = NSImage(contentsOf: ImageThumbnailCache.thumbnailURL(for: key))

@@ -14,17 +14,28 @@ final class RecentImage {
   @Attribute(.unique) var path: String
   var lastOpenedAt: Date
   var thumbnailCacheKey: String?
+  var sourceFileSize: Int?
+  var sourceContentModificationDate: Date?
 
-  init(url: URL, lastOpenedAt: Date = .now) {
+  init(url: URL, lastOpenedAt: Date = .now, fileSnapshot: FileSnapshot? = nil) {
     path = url.filePath
     self.lastOpenedAt = lastOpenedAt
     thumbnailCacheKey = nil
+    sourceFileSize = fileSnapshot?.fileSize
+    sourceContentModificationDate = fileSnapshot?.contentModificationDate
   }
 
-  func update(from url: URL, lastOpenedAt: Date = .now, thumbnailCacheKey: String? = nil) {
+  func update(
+    from url: URL,
+    lastOpenedAt: Date = .now,
+    thumbnailCacheKey: String? = nil,
+    fileSnapshot: FileSnapshot? = nil,
+  ) {
     path = url.filePath
     self.lastOpenedAt = lastOpenedAt
     self.thumbnailCacheKey = thumbnailCacheKey
+    sourceFileSize = fileSnapshot?.fileSize
+    sourceContentModificationDate = fileSnapshot?.contentModificationDate
   }
 
   var url: URL {
@@ -60,6 +71,7 @@ enum RecentImagesStore {
     openedAt: Date = .now,
   ) async throws {
     let path = url.filePath
+    let fileSnapshot = FileSnapshot(url: url)
     let thumbnailCacheKey = await ImageThumbnailCache.ensureThumbnail(for: url)
     var thumbnailKeysToCleanup = Set<String>()
     var descriptor = FetchDescriptor<RecentImage>(
@@ -79,9 +91,14 @@ enum RecentImagesStore {
         from: url,
         lastOpenedAt: openedAt,
         thumbnailCacheKey: thumbnailCacheKey,
+        fileSnapshot: fileSnapshot,
       )
     } else {
-      let recentImage = RecentImage(url: url, lastOpenedAt: openedAt)
+      let recentImage = RecentImage(
+        url: url,
+        lastOpenedAt: openedAt,
+        fileSnapshot: fileSnapshot,
+      )
       recentImage.thumbnailCacheKey = thumbnailCacheKey
       modelContext.insert(recentImage)
     }
@@ -176,12 +193,14 @@ enum RecentImagesStore {
     descriptor.fetchLimit = 1
     guard let recentImage = try modelContext.fetch(descriptor).first else { return }
 
+    let fileSnapshot = FileSnapshot(url: url)
     let thumbnailCacheKey = await ImageThumbnailCache.ensureThumbnail(for: url)
     let oldThumbnailKey = recentImage.thumbnailCacheKey
     recentImage.update(
       from: url,
       lastOpenedAt: recentImage.lastOpenedAt,
       thumbnailCacheKey: thumbnailCacheKey,
+      fileSnapshot: fileSnapshot,
     )
     var thumbnailKeysToCleanup = try trim(in: modelContext)
     if let oldThumbnailKey,

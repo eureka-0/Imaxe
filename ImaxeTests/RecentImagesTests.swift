@@ -137,6 +137,8 @@ struct RecentImagesTests {
       ])
       #expect((resourceValues.fileSize ?? 0) > 0)
       #expect(resourceValues.contentModificationDate != nil)
+      #expect(recent.sourceFileSize == resourceValues.fileSize)
+      #expect(recent.sourceContentModificationDate == resourceValues.contentModificationDate)
       #expect(FileManager.default.fileExists(atPath: thumbnailURL.filePath))
 
       try RecentImagesStore.remove(path: url.filePath, in: context)

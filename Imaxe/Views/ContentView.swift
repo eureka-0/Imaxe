@@ -105,7 +105,6 @@ struct ContentView: View {
 
   private func refreshRecentImages() {
     do {
-      try RecentImagesStore.removeMissingFiles(in: modelContext)
       imageSession.recentImages = try RecentImagesStore.fetchRecentImages(in: modelContext)
     } catch {
       imageSession.recentImages = recentImages

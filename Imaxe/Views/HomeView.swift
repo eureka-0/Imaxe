@@ -155,12 +155,12 @@ struct HomeView: View {
       ImageCollectionSortOption(
         "modifiedAt",
         title: "Modified",
-        optionalValue: \.url.contentModificationDate,
+        optionalValue: \.sourceContentModificationDate,
       ),
       ImageCollectionSortOption(
         "fileSize",
         title: "Size",
-        value: \.url.fileSize,
+        optionalValue: \.sourceFileSize,
       ),
     ]
     configuration.defaultSortOptionID = "lastOpenedAt"
@@ -193,7 +193,7 @@ struct HomeView: View {
     state: ImageCollectionItemState,
   ) -> some View {
     HStack(spacing: 6) {
-      ImageThumbnailView(url: item.url)
+      ImageThumbnailView(url: item.url, cacheKey: item.thumbnailCacheKey)
         .frame(width: 28, height: 28)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -215,7 +215,7 @@ struct HomeView: View {
         .foregroundStyle(.secondary)
         .frame(width: 90, alignment: .leading)
 
-      Text(fileSizeDescription(for: item.url.fileSize))
+      Text(item.sourceFileSize.map(fileSizeDescription(for:)) ?? "-")
         .font(.callout)
         .monospacedDigit()
         .foregroundStyle(.secondary)
@@ -247,7 +247,7 @@ struct HomeView: View {
     _ item: RecentImage,
     state: ImageCollectionItemState,
   ) -> some View {
-    ImageThumbnailView(url: item.url)
+    ImageThumbnailView(url: item.url, cacheKey: item.thumbnailCacheKey)
       .overlay(alignment: .bottom) {
         if state.isHovered || !state.searchText.isEmpty {
           Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))

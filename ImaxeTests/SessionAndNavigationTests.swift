@@ -133,6 +133,37 @@ struct SessionAndNavigationTests {
     #expect(session.folderNavigator?.currentImageURL == c)
   }
 
+  @Test func `image loading timer stops after a replaced request`() async throws {
+    let directory = URL.temporaryDirectory
+      .appending(path: "imaxe-loading-timer-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let firstURL = directory.appending(path: "first.png")
+    let secondURL = directory.appending(path: "second.png")
+    try TestSupport.pngData(width: 10, height: 10).write(to: firstURL)
+    try TestSupport.pngData(width: 20, height: 20).write(to: secondURL)
+
+    let session = ImageSession()
+    session.loadImageInfo = { url, requestID in
+      try await Task.sleep(for: .milliseconds(150))
+      return try await ImageLoader.shared.loadInfo(from: url, requestID: requestID)
+    }
+    session.loadImageContainer = { url, requestID in
+      try await Task.sleep(for: .milliseconds(150))
+      return try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
+    }
+
+    session.loadImage(from: firstURL, addToRecent: false)
+    try await TestSupport.waitUntil { session.loadingElapsedTime > 0 }
+
+    session.loadImage(from: secondURL, addToRecent: false)
+    try await TestSupport.waitUntil { !session.isLoading }
+    try await Task.sleep(for: .milliseconds(100))
+
+    #expect(session.loadingElapsedTime == 0)
+  }
+
   @Test func `delayed metadata prevents partial image commit`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let session = ImageSession()

@@ -22,6 +22,7 @@ final class ImageSession {
   private(set) var pendingURL: URL?
   var isImporterPresented = false
   private(set) var isLoading = false
+  private(set) var loadingElapsedTime: TimeInterval = 0
   var zoomScale: CGFloat = 1.0
   private(set) var isWindowPinned = false
   var alwaysFitToWindow = true
@@ -277,6 +278,7 @@ final class ImageSession {
     activeImageLoad = imageLoad
 
     isLoading = true
+    loadingElapsedTime = 0
     pendingURL = url
     pendingTemporaryURL = temporaryURL
     shouldApplyLoadedImageWindowSize = !shouldPreserveCurrentImage
@@ -284,9 +286,19 @@ final class ImageSession {
     imageLoadTask = Task { @MainActor [weak self] in
       guard let self, imageLoad === activeImageLoad, !Task.isCancelled else { return }
 
+      let timerTask = Task { @MainActor [weak self] in
+        while !Task.isCancelled {
+          try? await Task.sleep(for: .seconds(0.05))
+          guard let self, !Task.isCancelled else { return }
+          loadingElapsedTime += 0.05
+        }
+      }
+
       defer {
+        timerTask.cancel()
         if imageLoad === activeImageLoad {
           isLoading = false
+          loadingElapsedTime = 0
           pendingURL = nil
           pendingTemporaryURL = nil
         }
