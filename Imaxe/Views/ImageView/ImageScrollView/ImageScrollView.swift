@@ -42,7 +42,16 @@ struct ImageScrollView: NSViewRepresentable {
   private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
 
   private var fixedLoadedImageWindowSize: NSSize {
-    NSSize(width: fixedLoadedImageWindowWidth, height: fixedLoadedImageWindowHeight)
+    NSSize(
+      width: AppSettings.normalizedFixedLoadedImageWindowDimension(
+        fixedLoadedImageWindowWidth,
+        minimum: Constants.minimumWindowContentWidth,
+      ),
+      height: AppSettings.normalizedFixedLoadedImageWindowDimension(
+        fixedLoadedImageWindowHeight,
+        minimum: Constants.minimumWindowContentHeight,
+      ),
+    )
   }
 
   func onZoomScaleChange(_ newZoomScale: CGFloat) {

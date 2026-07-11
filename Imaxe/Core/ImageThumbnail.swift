@@ -51,7 +51,7 @@ enum LibraryThumbnailReferences {
 }
 
 nonisolated enum ImageThumbnailCache {
-  static let maxPixelSize = 320
+  static let maxPixelSize = 512
   static let didChangeNotification = Notification.Name("ImageThumbnailCacheDidChange")
 
   private static let cacheVersion = "v1"

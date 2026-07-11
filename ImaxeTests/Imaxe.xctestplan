@@ -4,7 +4,7 @@
       "id" : "F5390C9E-9FEB-4771-9067-8B56DD9B4347",
       "name" : "Test Scheme Action",
       "options" : {
-
+        "codeCoverage" : true
       }
     }
   ],
@@ -23,6 +23,13 @@
         "containerPath" : "container:Imaxe.xcodeproj",
         "identifier" : "1E7D56992FDEEC000035C627",
         "name" : "ImaxeTests"
+      }
+    },
+    {
+      "target" : {
+        "containerPath" : "container:Imaxe.xcodeproj",
+        "identifier" : "1EA97D9B3000000000000001",
+        "name" : "ImaxeUITests"
       }
     }
   ],

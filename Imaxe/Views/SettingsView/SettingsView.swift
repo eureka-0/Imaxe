@@ -7,6 +7,11 @@
 
 import SwiftUI
 
+private struct CacheClearError: Identifiable {
+  let id = UUID()
+  let message: String
+}
+
 struct SettingsView: View {
   var body: some View {
     TabView {
@@ -42,6 +47,7 @@ struct GeneralSettingsView: View {
   private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
 
   @State private var totalCacheSize: Int = ImageThumbnailCache.totalCacheSizeInBytes()
+  @State private var cacheClearError: CacheClearError?
 
   var body: some View {
     Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 20) {
@@ -146,6 +152,7 @@ struct GeneralSettingsView: View {
                   level: .error,
                   category: .persistence,
                 )
+                cacheClearError = CacheClearError(message: error.localizedDescription)
               }
             } label: {
               Label("Clear", systemImage: "trash")
@@ -168,6 +175,12 @@ struct GeneralSettingsView: View {
       NotificationCenter.default.publisher(for: ImageThumbnailCache.didChangeNotification),
     ) { _ in
       refreshCacheSize()
+    }
+    .alert(item: $cacheClearError) { error in
+      Alert(
+        title: Text("Could Not Clear Thumbnail Cache"),
+        message: Text(error.message),
+      )
     }
   }
 
@@ -256,6 +269,7 @@ struct ImageSettingsView: View {
         }
     }
     .onAppear {
+      normalizeFixedLoadedImageWindowSize()
       DispatchQueue.main.async {
         widthInputFocused = false
         heightInputFocused = false
@@ -334,10 +348,21 @@ struct ImageSettingsView: View {
   }
 
   private func sanitizedWidth(_ value: Double) -> Double {
-    value.clamped(to: Constants.minimumWindowContentWidth ... 10000)
+    AppSettings.normalizedFixedLoadedImageWindowDimension(
+      value,
+      minimum: Constants.minimumWindowContentWidth,
+    )
   }
 
   private func sanitizedHeight(_ value: Double) -> Double {
-    value.clamped(to: Constants.minimumWindowContentHeight ... 10000)
+    AppSettings.normalizedFixedLoadedImageWindowDimension(
+      value,
+      minimum: Constants.minimumWindowContentHeight,
+    )
+  }
+
+  private func normalizeFixedLoadedImageWindowSize() {
+    fixedLoadedImageWindowWidth = sanitizedWidth(fixedLoadedImageWindowWidth)
+    fixedLoadedImageWindowHeight = sanitizedHeight(fixedLoadedImageWindowHeight)
   }
 }

@@ -76,12 +76,11 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ## P3 — Maintenance and Polish
 
-- [ ] Determine supported types using a combination of file extension, resource content type, and the actual ImageIO type.
-- [ ] Differentiate image-loading errors: I/O, permissions, corrupt content, size limits, and cancellation.
-- [ ] Show user-visible errors when clearing the cache fails in Settings; validate and normalize window-size settings.
-- [ ] Reuse relative-date formatters, fix hover-state cleanup, and evaluate restoring window position and size.
-- [ ] Add an `.xctestplan`, coverage reporting, and a small set of Finder, menu, and window XCUI smoke tests.
-- [ ] Maintain GitHub release notes, known limitations, and rollback instructions.
+- [x] Determine supported types using a combination of file extension, resource content type, and the actual ImageIO type.
+- [x] Differentiate image-loading errors: I/O, permissions, corrupt content, size limits, and cancellation.
+- [x] Show user-visible errors when clearing the cache fails in Settings; validate and normalize window-size settings.
+- [x] Reuse relative-date formatters and fix hover-state cleanup. Keep window restoration disabled so launches do not restore coordinates from unavailable displays.
+- [x] Add an `.xctestplan`, coverage reporting, and a small set of Finder, menu, and window XCUI smoke tests.
 
 ## References
 

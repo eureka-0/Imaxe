@@ -40,7 +40,9 @@ nonisolated struct ImageInfo: Hashable {
     self.url = newURL
     fileName = newURL.lastPathComponent
     fileSize = newURL.fileSize
-    type = newURL.utType
+    type = ImageLoader.imageTypes(for: newURL).first {
+      $0.conforms(to: .image)
+    }
 
     let properties = Self.getImageProperties(from: newURL)
     let imagePixelSize = Self.getImagePixelSize(from: properties)

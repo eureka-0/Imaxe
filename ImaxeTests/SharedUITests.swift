@@ -62,6 +62,27 @@ struct SharedUITests {
     )
   }
 
+  @Test func `fixed window dimensions are finite and constrained`() {
+    #expect(
+      AppSettings.normalizedFixedLoadedImageWindowDimension(
+        .nan,
+        minimum: Constants.minimumWindowContentWidth,
+      ) == Constants.minimumWindowContentWidth,
+    )
+    #expect(
+      AppSettings.normalizedFixedLoadedImageWindowDimension(
+        1,
+        minimum: Constants.minimumWindowContentHeight,
+      ) == Constants.minimumWindowContentHeight,
+    )
+    #expect(
+      AppSettings.normalizedFixedLoadedImageWindowDimension(
+        20_000,
+        minimum: Constants.minimumWindowContentHeight,
+      ) == 10_000,
+    )
+  }
+
   private struct CollectionInitializerTestItem: Identifiable {
     let id: Int
   }

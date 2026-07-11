@@ -46,6 +46,17 @@
                ReferencedContainer = "container:Imaxe.xcodeproj">
             </BuildableReference>
          </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "1EA97D9B3000000000000001"
+               BuildableName = "ImaxeUITests.xctest"
+               BlueprintName = "ImaxeUITests"
+               ReferencedContainer = "container:Imaxe.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
       </Testables>
    </TestAction>
    <LaunchAction

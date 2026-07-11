@@ -203,10 +203,16 @@ extension Comparable {
 
 extension Date {
   var relativeDateDescription: String {
+    RelativeDateFormatter.shared.localizedString(for: self, relativeTo: .now)
+  }
+}
+
+private enum RelativeDateFormatter {
+  static let shared: RelativeDateTimeFormatter = {
     let formatter = RelativeDateTimeFormatter()
     formatter.unitsStyle = .full
-    return formatter.localizedString(for: self, relativeTo: .now)
-  }
+    return formatter
+  }()
 }
 
 // MARK: - FileManager extensions.

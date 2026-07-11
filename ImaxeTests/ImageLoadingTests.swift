@@ -90,6 +90,38 @@ struct ImageLoadingTests {
     }
   }
 
+  @Test func `image loader recognizes ImageIO content without a file extension`() throws {
+    let url = URL.temporaryDirectory.appending(path: "imaxe-image-(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+
+    #expect(ImageLoader.isSupportedImage(url))
+  }
+
+  @Test func `image loader reports corrupt supported content`() async throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-corrupt-image-(UUID().uuidString).png")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try Data("not an image".utf8).write(to: url)
+
+    do {
+      _ = try await ImageLoader.shared.loadImage(from: url)
+      Issue.record("Expected corrupt image content to throw.")
+    } catch let error as ImageLoadingError {
+      if case let .corruptImage(corruptURL) = error {
+        #expect(corruptURL == url)
+      } else {
+        Issue.record("Expected corruptImage, got (error).")
+      }
+    }
+  }
+
+  @Test func `image loader enforces pixel dimension and count limits`() {
+    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 32_769, height: 1)))
+    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 10_001, height: 10_001)))
+    #expect(!ImageLoader.exceedsImageSizeLimit(NSSize(width: 10_000, height: 10_000)))
+  }
+
   @Test func `image loader cancellation does not poison later loads`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let requestID = ImageLoader.LoadRequestID()
