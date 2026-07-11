@@ -491,42 +491,18 @@ nonisolated extension URL {
       let directoryName = "Imaxe"
     #endif
 
-    let url = Self.applicationSupportDirectory.appendingPathComponent(
+    return Self.applicationSupportDirectory.appendingPathComponent(
       directoryName,
       isDirectory: true,
     )
-
-    do {
-      try FileManager.default.ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create data directory: \(error)")
-    }
-
-    return url
   }
 
   static var appCachesDirectory: URL {
-    let url = Self.cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
-
-    do {
-      try FileManager.default.ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create caches directory: \(error)")
-    }
-
-    return url
+    cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
   }
 
   static var thumbnailCachesDirectory: URL {
-    let url = Self.appCachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
-
-    do {
-      try FileManager.default.ensureExists(for: url)
-    } catch {
-      fatalError("Failed to create thumbnail cache directory: \(error)")
-    }
-
-    return url
+    appCachesDirectory.appendingPathComponent("Thumbnails", isDirectory: true)
   }
 
   var utType: UTType? {

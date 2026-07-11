@@ -16,31 +16,31 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Asynchronous State Consistency
 
-- [ ] Check request identity and cancellation after every `await`; stale requests must not commit results.
-- [ ] Update the image, metadata, navigation position, and file watcher together through a single commit point.
-- [ ] Distinguish `displayedURL` from `pendingURL`; reliably return to the original image when navigation to a corrupt image fails.
-- [ ] Add deterministic tests for rapid A/B/C switching, delayed metadata, decode failures, and completion of stale animations.
+- [x] Check request identity and cancellation after every `await`; stale requests must not commit results.
+- [x] Update the image, metadata, navigation position, and file watcher together through a single commit point.
+- [x] Distinguish `displayedURL` from `pendingURL`; reliably return to the original image when navigation to a corrupt image fails.
+- [x] Add deterministic tests for rapid A/B/C switching, delayed metadata, decode failures, and completion of stale animations.
 
 ### Thumbnails and Cache
 
-- [ ] Move thumbnail generation out of SwiftUI `body` and the main thread, using an asynchronous service that supports cancellation and request coalescing.
-- [ ] Keep Quick Look thumbnail generation asynchronous and avoid synchronous semaphore waits.
-- [ ] Use temporary files and atomic replacement for cache writes; validate that cached images can be decoded on cache hits.
-- [ ] Fall back to no thumbnail when the cache directory or writes fail; this must not prevent opening the primary image or terminate the app.
+- [x] Move thumbnail generation out of SwiftUI `body` and the main thread, using an asynchronous service that supports cancellation and request coalescing.
+- [x] Keep Quick Look thumbnail generation asynchronous and avoid synchronous semaphore waits.
+- [x] Use temporary files and atomic replacement for cache writes; validate that cached images can be decoded on cache hits.
+- [x] Fall back to no thumbnail when the cache directory or writes fail; this must not prevent opening the primary image or terminate the app.
 
 ### Input, Limits, and Recovery
 
-- [ ] Correctly parse `.fileURL` values from the Pasteboard without overriding `⌘V` in text inputs.
-- [ ] Define and promptly clean up the lifecycle of temporary image files created from the Pasteboard.
-- [ ] Limit SVG rasterization dimensions, pixel count, and memory use; return a clear error for invalid or oversized dimensions.
-- [ ] Provide recoverable fallback paths when SwiftData, the cache directory, or disk writes fail.
-- [ ] Hide user paths, file names, and search text in release logs by default, and cap log storage.
+- [x] Correctly parse `.fileURL` values from the Pasteboard without overriding `⌘V` in text inputs.
+- [x] Define and promptly clean up the lifecycle of temporary image files created from the Pasteboard.
+- [x] Limit SVG rasterization dimensions, pixel count, and memory use; return a clear error for invalid or oversized dimensions.
+- [x] Provide recoverable fallback paths when SwiftData, the cache directory, or disk writes fail.
+- [x] Hide user paths, file names, and search text in release logs by default, and cap log storage.
 
 ### Limited GitHub Distribution
 
-- [ ] Ensure build scripts use only project-specific output and archive directories; never clean global Xcode Archives.
-- [ ] Record the version, build number, and Git commit in release artifacts so the same build number never maps to different binaries.
-- [ ] Distribute zip archives through GitHub Releases and state supported macOS versions and architectures in the release notes.
+- [x] Ensure build scripts use only project-specific output and archive directories; never clean global Xcode Archives.
+- [x] Record the version, build number, and Git commit in release artifacts so the same build number never maps to different binaries.
+- [x] Distribute zip archives through GitHub Releases and state supported macOS versions and architectures in the release notes.
 - [ ] Do not apply for an Apple Developer account: do not configure `Apple Development`, `Developer ID`, notarization, or stapling workflows.
 - [ ] Clearly document that unsigned or ad-hoc-signed artifacts may be blocked by Gatekeeper, including installation instructions for limited distribution.
 - [ ] Verify download, extraction, and first launch on a Mac without a development environment.

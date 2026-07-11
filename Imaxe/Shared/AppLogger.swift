@@ -77,6 +77,7 @@ actor AppLogger {
   }
 
   private static let subsystem = Bundle.main.identifier
+  private static let maximumLogFileSize: UInt64 = 2 * 1024 * 1024
 
   private var destination: AppLogDestination = .console
   private var loggers: [AppLogCategory: Logger] = [:]
@@ -150,7 +151,11 @@ actor AppLogger {
     level: AppLogLevel,
     category: AppLogCategory,
   ) {
-    logger(for: category).log(level: level.osLogType, "\(message, privacy: .public)")
+    #if DEBUG
+      logger(for: category).log(level: level.osLogType, "\(message, privacy: .public)")
+    #else
+      logger(for: category).log(level: level.osLogType, "\(message, privacy: .private)")
+    #endif
   }
 
   private func logToFile(
@@ -159,12 +164,19 @@ actor AppLogger {
     category: AppLogCategory,
   ) {
     do {
-      let fileHandle = try logFileHandle ?? makeLogFileHandle()
-      logFileHandle = fileHandle
       let timestamp = Date.now.ISO8601Format()
       let line = "[\(timestamp)] [\(category.rawValue)] [\(level.rawValue)] \(message)\n"
       if let data = line.data(using: .utf8) {
-        try fileHandle.write(contentsOf: data)
+        if UInt64(data.count) > Self.maximumLogFileSize {
+          let truncatedLine = "[\(timestamp)] [\(category.rawValue)] [\(level.rawValue)] Log entry truncated.\n"
+          guard let truncatedData = truncatedLine.data(using: .utf8) else { return }
+          let fileHandle = try fileHandle(for: UInt64(truncatedData.count))
+          try fileHandle.write(contentsOf: truncatedData)
+          logger(for: .general).error("App log entry exceeded the file size limit.")
+        } else {
+          let fileHandle = try fileHandle(for: UInt64(data.count))
+          try fileHandle.write(contentsOf: data)
+        }
       }
     } catch {
       logger(for: .general).error(
@@ -177,20 +189,52 @@ actor AppLogger {
     URL.dataDirectory.appendingPathComponent("Logs", isDirectory: true)
   }
 
-  private func makeLogFileHandle() throws -> FileHandle {
+  private func fileHandle(for lineSize: UInt64) throws -> FileHandle {
+    if let logFileHandle {
+      let currentSize = try logFileHandle.offset()
+      if currentSize + lineSize <= Self.maximumLogFileSize {
+        return logFileHandle
+      }
+
+      try logFileHandle.close()
+      self.logFileHandle = nil
+    }
+
+    let fileHandle = try makeLogFileHandle(minimumAvailableBytes: lineSize)
+    logFileHandle = fileHandle
+    return fileHandle
+  }
+
+  private func makeLogFileHandle(minimumAvailableBytes: UInt64) throws -> FileHandle {
     try FileManager.default.ensureExists(for: logDirectory)
 
-    let fileDate = Date.now.ISO8601Format(.iso8601Date(timeZone: .current))
-    let logFileURL = logDirectory.appendingPathComponent("log-\(fileDate).txt")
+    let logFileURL = try availableLogFileURL(minimumAvailableBytes: minimumAvailableBytes)
     try FileManager.default.ensureExists(for: logFileURL, isDirectory: false)
     pruneOldLogFiles()
 
     let fileHandle = try FileHandle(forWritingTo: logFileURL)
     try fileHandle.seekToEnd()
     logger(for: .general).info(
-      "Log file created at: \(logFileURL.filePath, privacy: .public)",
+      "Log file created.",
     )
     return fileHandle
+  }
+
+  private func availableLogFileURL(minimumAvailableBytes: UInt64) throws -> URL {
+    let fileDate = Date.now.ISO8601Format(.iso8601Date(timeZone: .current))
+    var index = 0
+
+    while true {
+      let suffix = index == 0 ? "" : "-\(index)"
+      let url = logDirectory.appendingPathComponent("log-\(fileDate)\(suffix).txt")
+      guard url.fileExists else { return url }
+
+      let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+      if UInt64(size) + minimumAvailableBytes <= Self.maximumLogFileSize {
+        return url
+      }
+      index += 1
+    }
   }
 
   /// Prunes old log files to keep only the most recent 7 log files.
@@ -214,12 +258,12 @@ actor AppLogger {
       for fileURL in filesToDelete {
         try FileManager.default.removeItem(at: fileURL)
         logger(for: .general).info(
-          "Deleted old log file: \(fileURL.filePath, privacy: .public)",
+          "Deleted an old log file.",
         )
       }
     } catch {
       logger(for: .general).error(
-        "Failed to prune old log files: \(error.localizedDescription, privacy: .public)",
+        "Failed to prune old log files.",
       )
     }
   }

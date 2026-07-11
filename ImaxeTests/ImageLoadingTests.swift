@@ -117,9 +117,31 @@ struct ImageLoadingTests {
   }
 
   @Test func `image loader enforces pixel dimension and count limits`() {
-    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 32_769, height: 1)))
-    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 10_001, height: 10_001)))
-    #expect(!ImageLoader.exceedsImageSizeLimit(NSSize(width: 10_000, height: 10_000)))
+    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 32769, height: 1)))
+    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 10001, height: 10001)))
+    #expect(!ImageLoader.exceedsImageSizeLimit(NSSize(width: 10000, height: 10000)))
+  }
+
+  @Test func `svg loader rejects invalid and oversized dimensions`() async throws {
+    let invalidURL = URL.temporaryDirectory
+      .appending(path: "imaxe-invalid-dimensions-\(UUID().uuidString).svg")
+    let oversizedURL = URL.temporaryDirectory
+      .appending(path: "imaxe-oversized-dimensions-\(UUID().uuidString).svg")
+    defer {
+      try? FileManager.default.removeItem(at: invalidURL)
+      try? FileManager.default.removeItem(at: oversizedURL)
+    }
+    try "<svg viewBox=\"0 0 -1 20\" xmlns=\"http://www.w3.org/2000/svg\"/>"
+      .write(to: invalidURL, atomically: true, encoding: .utf8)
+    try "<svg viewBox=\"0 0 50000 50000\" xmlns=\"http://www.w3.org/2000/svg\"/>"
+      .write(to: oversizedURL, atomically: true, encoding: .utf8)
+
+    await #expect(throws: ImageLoadingError.self) {
+      _ = try await ImageLoader.shared.loadImage(from: invalidURL)
+    }
+    await #expect(throws: ImageLoadingError.self) {
+      _ = try await ImageLoader.shared.loadImage(from: oversizedURL)
+    }
   }
 
   @Test func `image loader cancellation does not poison later loads`() async throws {
@@ -162,10 +184,10 @@ struct ImageLoadingTests {
     #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
   }
 
-  @Test func `thumbnail cache generates svg thumbnail`() throws {
+  @Test func `thumbnail cache generates svg thumbnail`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.svg")
 
-    let thumbnailKey = try #require(ImageThumbnailCache.ensureThumbnail(for: url))
+    let thumbnailKey = try #require(await ImageThumbnailCache.ensureThumbnail(for: url))
     let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
     let thumbnailImage = try #require(NSImage(contentsOf: thumbnailURL))
     let bitmapRep = try #require(thumbnailImage.representations.first as? NSBitmapImageRep)
@@ -176,6 +198,19 @@ struct ImageLoadingTests {
     #expect(bitmapRep.pixelsHigh > 0)
     let thumbnailAspectRatio = CGFloat(bitmapRep.pixelsWide) / CGFloat(bitmapRep.pixelsHigh)
     #expect(abs(thumbnailAspectRatio - 1280.0 / 853.0) < 0.02)
+  }
+
+  @Test func `thumbnail cache replaces corrupt cache entry`() async throws {
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let key = try #require(ImageThumbnailCache.cacheKey(for: url))
+    let cacheURL = ImageThumbnailCache.thumbnailURL(for: key)
+    try FileManager.default.ensureExists(for: cacheURL.deletingLastPathComponent())
+    try Data("corrupt".utf8).write(to: cacheURL, options: .atomic)
+
+    let regeneratedKey = await ImageThumbnailCache.ensureThumbnail(for: url)
+
+    #expect(regeneratedKey == key)
+    #expect(ImageThumbnailCache.isValidThumbnail(for: key))
   }
 
   @Test func `thumbnail cache total size sums regular files`() throws {

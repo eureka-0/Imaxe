@@ -13,8 +13,8 @@ import Testing
 @MainActor
 @Suite("Recent Images")
 struct RecentImagesTests {
-  @Test func `recent images are updated sorted and cleared`() throws {
-    try TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+  @Test func `recent images are updated sorted and cleared`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
       let container = try ModelContainer(
         for: RecentImage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true),
@@ -23,17 +23,17 @@ struct RecentImagesTests {
       let firstURL = URL(fileURLWithPath: "/tmp/first.png")
       let secondURL = URL(fileURLWithPath: "/tmp/second.png")
 
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         firstURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 1),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         secondURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 2),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         firstURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 3),
@@ -56,20 +56,20 @@ struct RecentImagesTests {
     }
   }
 
-  @Test func `recent images use default count limit when preference is unset`() throws {
-    try TestSupport.withRecentImagesCountLimit(nil) {
+  @Test func `recent images use default count limit when preference is unset`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(nil) {
       let container = try ModelContainer(
         for: RecentImage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true),
       )
       let context = ModelContext(container)
 
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         URL(fileURLWithPath: "/tmp/first.png"),
         in: context,
         openedAt: Date(timeIntervalSince1970: 1),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         URL(fileURLWithPath: "/tmp/second.png"),
         in: context,
         openedAt: Date(timeIntervalSince1970: 2),
@@ -81,25 +81,25 @@ struct RecentImagesTests {
     }
   }
 
-  @Test func `recent images are trimmed to configured count limit`() throws {
-    try TestSupport.withRecentImagesCountLimit(3) {
+  @Test func `recent images are trimmed to configured count limit`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(3) {
       let container = try ModelContainer(
         for: RecentImage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true),
       )
       let context = ModelContext(container)
 
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         URL(fileURLWithPath: "/tmp/first.png"),
         in: context,
         openedAt: Date(timeIntervalSince1970: 1),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         URL(fileURLWithPath: "/tmp/second.png"),
         in: context,
         openedAt: Date(timeIntervalSince1970: 2),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         URL(fileURLWithPath: "/tmp/third.png"),
         in: context,
         openedAt: Date(timeIntervalSince1970: 3),
@@ -113,8 +113,8 @@ struct RecentImagesTests {
     }
   }
 
-  @Test func `recent images store file metadata and cleanup thumbnail cache`() throws {
-    try TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+  @Test func `recent images store file metadata and cleanup thumbnail cache`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
       let container = try ModelContainer(
         for: RecentImage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true),
@@ -124,7 +124,7 @@ struct RecentImagesTests {
         .appending(path: "imaxe-thumbnail-cache-\(UUID().uuidString).png")
       try TestSupport.pngData(width: 80, height: 40).write(to: url)
 
-      try RecentImagesStore.recordOpened(url, in: context)
+      try await RecentImagesStore.recordOpened(url, in: context)
 
       let recentDescriptor = FetchDescriptor<RecentImage>()
       let recent = try #require(context.fetch(recentDescriptor).first)
@@ -144,8 +144,8 @@ struct RecentImagesTests {
     }
   }
 
-  @Test func `missing recent images are pruned with thumbnail cache`() throws {
-    try TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
+  @Test func `missing recent images are pruned with thumbnail cache`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {
       let container = try ModelContainer(
         for: RecentImage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true),
@@ -162,12 +162,12 @@ struct RecentImagesTests {
 
       try TestSupport.pngData(width: 80, height: 40).write(to: existingURL)
       try TestSupport.pngData(width: 80, height: 40).write(to: missingURL)
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         existingURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 1),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         missingURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 2),
@@ -205,7 +205,7 @@ struct RecentImagesTests {
       let url = URL.temporaryDirectory
         .appending(path: "imaxe-missing-recent-\(UUID().uuidString).png")
       try TestSupport.pngData(width: 80, height: 40).write(to: url)
-      try RecentImagesStore.recordOpened(url, in: context)
+      try await RecentImagesStore.recordOpened(url, in: context)
 
       let descriptor = FetchDescriptor<RecentImage>()
       let recent = try #require(context.fetch(descriptor).first)
@@ -219,11 +219,8 @@ struct RecentImagesTests {
       }
       session.openRecentImage(recent)
 
-      for _ in 0 ..< 20 {
-        if try context.fetch(descriptor).isEmpty {
-          break
-        }
-        await Task.yield()
+      try await TestSupport.waitUntil(timeout: .seconds(2)) {
+        (try? context.fetch(descriptor).isEmpty) == true
       }
 
       #expect(try context.fetch(descriptor).isEmpty)
@@ -232,8 +229,8 @@ struct RecentImagesTests {
     }
   }
 
-  @Test func `lowered recent images count limit removes trimmed thumbnail cache`() throws {
-    try TestSupport.withRecentImagesCountLimit(3) {
+  @Test func `lowered recent images count limit removes trimmed thumbnail cache`() async throws {
+    try await TestSupport.withRecentImagesCountLimit(3) {
       let container = try ModelContainer(
         for: RecentImage.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true),
@@ -255,17 +252,17 @@ struct RecentImagesTests {
       try TestSupport.pngData(width: 80, height: 40).write(to: firstURL)
       try TestSupport.pngData(width: 80, height: 40).write(to: secondURL)
       try TestSupport.pngData(width: 80, height: 40).write(to: thirdURL)
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         firstURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 1),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         secondURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 2),
       )
-      try RecentImagesStore.recordOpened(
+      try await RecentImagesStore.recordOpened(
         thirdURL,
         in: context,
         openedAt: Date(timeIntervalSince1970: 3),

@@ -9,10 +9,15 @@ final class ImaxeUITests: XCTestCase {
 
     continueAfterFailure = false
     app = XCUIApplication()
+    app.terminate()
     app.launch()
+    app.activate()
   }
 
   func testWindowAndFileMenuAreAvailable() {
+    if !app.windows.firstMatch.waitForExistence(timeout: 3) {
+      app.typeKey("n", modifierFlags: .command)
+    }
     XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
 
     let fileMenu = app.menuBars.menuBarItems["File"]

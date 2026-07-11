@@ -17,8 +17,9 @@ struct ImaxeApp: App {
   private let modelContainer: ModelContainer
 
   init() {
+    let modelFileURL = URL.dataDirectory.appendingPathComponent("database.sqlite")
     do {
-      let modelFileURL = URL.dataDirectory.appendingPathComponent("database.sqlite")
+      try FileManager.default.ensureExists(for: URL.dataDirectory)
       let modelConfiguration = ModelConfiguration(url: modelFileURL)
       modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
 
@@ -41,7 +42,19 @@ struct ImaxeApp: App {
         appLog("Application initialized", level: .info, category: .general)
       #endif
     } catch {
-      fatalError("Failed to create model container: \(error)")
+      do {
+        modelContainer = try ModelContainer(
+          for: RecentImage.self,
+          configurations: ModelConfiguration(isStoredInMemoryOnly: true),
+        )
+        appLog(
+          "Persistent recent images are unavailable; using temporary storage.",
+          level: .error,
+          category: .persistence,
+        )
+      } catch {
+        fatalError("Failed to create fallback model container: \(error)")
+      }
     }
   }
 

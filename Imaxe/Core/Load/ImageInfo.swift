@@ -128,6 +128,7 @@ nonisolated struct ImageInfo: Hashable {
 nonisolated struct SVGDocumentSize {
   let viewBox: NSRect?
   let size: NSSize?
+  let hasExplicitDimensions: Bool
 
   var bestSize: NSSize? {
     if let viewBox, viewBox.width > 0, viewBox.height > 0 {
@@ -144,6 +145,9 @@ nonisolated struct SVGDocumentSize {
   init(svgString: String) {
     let svgTag = Self.rootSVGTag(in: svgString) ?? ""
     let attributes = Self.attributes(in: svgTag)
+    hasExplicitDimensions = attributes["viewBox"] != nil
+      || attributes["width"] != nil
+      || attributes["height"] != nil
     viewBox = Self.viewBox(from: attributes["viewBox"])
 
     if let width = Self.length(from: attributes["width"]),

@@ -67,19 +67,19 @@ struct SharedUITests {
       AppSettings.normalizedFixedLoadedImageWindowDimension(
         .nan,
         minimum: Constants.minimumWindowContentWidth,
-      ) == Constants.minimumWindowContentWidth,
+      ) == Double(Constants.minimumWindowContentWidth),
     )
     #expect(
       AppSettings.normalizedFixedLoadedImageWindowDimension(
         1,
         minimum: Constants.minimumWindowContentHeight,
-      ) == Constants.minimumWindowContentHeight,
+      ) == Double(Constants.minimumWindowContentHeight),
     )
     #expect(
       AppSettings.normalizedFixedLoadedImageWindowDimension(
-        20_000,
+        20000,
         minimum: Constants.minimumWindowContentHeight,
-      ) == 10_000,
+      ) == 10000,
     )
   }
 

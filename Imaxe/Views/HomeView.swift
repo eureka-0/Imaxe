@@ -366,12 +366,27 @@ struct HomeView: View {
     let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedName)
     do {
       try FileManager.default.moveItem(at: url, to: newURL)
-      try RecentImagesStore.updateLocation(from: url.filePath, to: newURL, in: modelContext)
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Rename Item",
         message: error.localizedDescription,
       )
+      return
+    }
+
+    Task {
+      do {
+        try await RecentImagesStore.updateLocation(
+          from: url.filePath,
+          to: newURL,
+          in: modelContext,
+        )
+      } catch {
+        operationAlert = HomeOperationAlert(
+          title: "Failed to Update Recent Images",
+          message: error.localizedDescription,
+        )
+      }
     }
   }
 

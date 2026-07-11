@@ -9,38 +9,42 @@ import SwiftUI
 
 struct ImageThumbnailView: View {
   let url: URL
+  @State private var thumbnailImage: NSImage?
 
   private var backgroundColor: Color = .clear
   private var aspectRatio: CGFloat? = 1
   private var contentMode: ContentMode = .fill
   private var cornerRadius: CGFloat = 0
 
-  private var thumbnailImage: NSImage? {
-    guard let thumbnailCacheKey = ImageThumbnailCache.ensureThumbnail(for: url) else { return nil }
-
-    return NSImage(contentsOf: ImageThumbnailCache.thumbnailURL(for: thumbnailCacheKey))
-  }
-
   init(url: URL) {
     self.url = url
   }
 
   var body: some View {
-    if let aspectRatio {
-      backgroundColor
-        .aspectRatio(aspectRatio, contentMode: .fit)
-        .overlay {
+    Group {
+      if let aspectRatio {
+        backgroundColor
+          .aspectRatio(aspectRatio, contentMode: .fit)
+          .overlay {
+            thumbnailContent
+          }
+          .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+      } else {
+        ZStack {
+          Rectangle()
+            .fill(backgroundColor)
+
           thumbnailContent
         }
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
-    } else {
-      ZStack {
-        Rectangle()
-          .fill(backgroundColor)
-
-        thumbnailContent
       }
-      .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    }
+    .task(id: url) {
+      thumbnailImage = nil
+      guard let key = await ImageThumbnailCache.ensureThumbnail(for: url),
+            !Task.isCancelled
+      else { return }
+      thumbnailImage = NSImage(contentsOf: ImageThumbnailCache.thumbnailURL(for: key))
     }
   }
 

@@ -16,6 +16,7 @@ enum ImageLoadingError: Error, LocalizedError {
   case ioFailure(URL, String)
   case corruptImage(URL)
   case sizeLimitExceeded(URL)
+  case invalidDimensions(URL)
   case cancelled
 
   var errorDescription: String? {
@@ -35,6 +36,8 @@ enum ImageLoadingError: Error, LocalizedError {
       "The image file is damaged or uses unsupported content: \(url.filePath)"
     case let .sizeLimitExceeded(url):
       "The image is too large to open safely: \(url.filePath)"
+    case let .invalidDimensions(url):
+      "The image has invalid or missing dimensions: \(url.filePath)"
     case .cancelled:
       "Image loading was cancelled."
     }
@@ -518,7 +521,14 @@ actor ImageLoader {
 
     let documentSize = String(data: imageData, encoding: .utf8)
       .map(SVGDocumentSize.init(svgString:))
+    if let documentSize, documentSize.hasExplicitDimensions, documentSize.bestSize == nil {
+      throw ImageLoadingError.invalidDimensions(url)
+    }
     let pixelSize = documentSize?.bestSize ?? sourceImage.size.validSize
+
+    guard pixelSize.width.isFinite, pixelSize.height.isFinite,
+          pixelSize.width > 0, pixelSize.height > 0
+    else { throw ImageLoadingError.invalidDimensions(url) }
 
     if exceedsImageSizeLimit(pixelSize) {
       throw ImageLoadingError.sizeLimitExceeded(url)

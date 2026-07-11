@@ -30,7 +30,6 @@ struct FileOperationCommands: Commands {
       Button("Open from Pasteboard") {
         imageSession?.openImageFromPasteboard()
       }
-      .keyboardShortcut("v", modifiers: .command)
       .disabled(imageSession == nil)
 
       Menu("Open Recent") {

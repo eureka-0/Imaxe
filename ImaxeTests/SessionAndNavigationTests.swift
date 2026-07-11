@@ -89,4 +89,86 @@ struct SessionAndNavigationTests {
     #expect(didChange)
     _ = watcher
   }
+
+  @Test func `rapid image switching commits only latest request`() async throws {
+    let directory = URL.temporaryDirectory
+      .appending(path: "imaxe-rapid-switch-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let a = directory.appending(path: "a.png")
+    let b = directory.appending(path: "b.png")
+    let c = directory.appending(path: "c.png")
+    try TestSupport.pngData(width: 10, height: 10).write(to: a)
+    try TestSupport.pngData(width: 20, height: 20).write(to: b)
+    try TestSupport.pngData(width: 30, height: 30).write(to: c)
+
+    let session = ImageSession()
+    session.loadImageInfo = { url, requestID in
+      if url == a {
+        try? await Task.sleep(for: .milliseconds(150))
+      } else if url == b {
+        try? await Task.sleep(for: .milliseconds(75))
+      }
+      return try await ImageLoader.shared.loadInfo(from: url, requestID: requestID)
+    }
+    session.loadImageContainer = { url, requestID in
+      if url == a {
+        try? await Task.sleep(for: .milliseconds(150))
+      } else if url == b {
+        try? await Task.sleep(for: .milliseconds(75))
+      }
+      return try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
+    }
+
+    session.loadImage(from: a, addToRecent: false)
+    session.loadImage(from: b, addToRecent: false)
+    session.loadImage(from: c, addToRecent: false)
+    try await TestSupport.waitUntil { !session.isLoading }
+    try await Task.sleep(for: .milliseconds(200))
+
+    #expect(session.displayedURL == c)
+    #expect(session.pendingURL == nil)
+    #expect(session.currentImageInfo?.pixelSize == IntSize(width: 30, height: 30))
+    #expect(session.folderNavigator?.currentImageURL == c)
+  }
+
+  @Test func `delayed metadata prevents partial image commit`() async throws {
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let session = ImageSession()
+    session.loadImageInfo = { url, requestID in
+      try await Task.sleep(for: .milliseconds(100))
+      return try await ImageLoader.shared.loadInfo(from: url, requestID: requestID)
+    }
+
+    session.loadImage(from: url, addToRecent: false)
+    try await Task.sleep(for: .milliseconds(25))
+
+    #expect(session.currentImage == nil)
+    #expect(session.currentImageInfo == nil)
+    #expect(session.pendingURL == url)
+
+    try await TestSupport.waitUntil { !session.isLoading }
+    #expect(session.currentImage != nil)
+    #expect(session.currentImageInfo?.url == url)
+  }
+
+  @Test func `failed navigation preserves displayed image and position`() async throws {
+    let goodURL = TestSupport.sampleImageURL("sample_1280×853.png")
+    let initialImage = ImageContainer(url: goodURL, nsImage: TestSupport.bitmapImage())
+    let session = ImageSession(imageContainer: initialImage)
+    let corruptURL = URL.temporaryDirectory
+      .appending(path: "imaxe-corrupt-navigation-\(UUID().uuidString).png")
+    try Data("not an image".utf8).write(to: corruptURL)
+    defer { try? FileManager.default.removeItem(at: corruptURL) }
+
+    session.loadImage(from: corruptURL, addToRecent: false)
+    try await TestSupport.waitUntil { !session.isLoading }
+
+    #expect(session.currentImage === initialImage)
+    #expect(session.displayedURL == goodURL)
+    #expect(session.folderNavigator?.currentImageURL == goodURL)
+    #expect(session.pendingURL == nil)
+    #expect(session.alert?.title == "Failed to Load Image")
+  }
 }
