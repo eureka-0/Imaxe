@@ -69,8 +69,11 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Testing and Builds
 
+- [x] Serialize recent-image tests that temporarily mutate the host app's `UserDefaults`, and always restore the app default afterward; parallel or stale-value restoration could leave the Debug app's recent-image limit set to a test value such as 3.
 - [ ] Add metadata, primary-image loading, thumbnail, corrupt-file, and permission-failure tests for every registered format.
 - [ ] Isolate loaders, caches, UserDefaults, and temporary directories used by tests to reduce flaky parallel tests.
+- [ ] Stabilize the timing-sensitive `image loading timer stops after a replaced request` test, which intermittently fails under the full suite.
+- [ ] Make XCUI menu tests locale-independent; they currently look up English titles like `File` even when macOS presents localized menu names.
 - [ ] Remove machine-specific absolute paths from `buildServer.json`; document script dependencies and failure messages.
 - [ ] Define the minimum macOS version and support scope for Apple Silicon and universal binaries.
 

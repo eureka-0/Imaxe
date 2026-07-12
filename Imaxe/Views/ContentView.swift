@@ -10,10 +10,15 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+  let url: URL?
+
+  @Environment(\.dismissWindow) private var dismissWindow
+  @Environment(\.openWindow) private var openWindow
   @Environment(\.modelContext) private var modelContext
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
   @State private var imageSession = ImageSession()
+  @State private var didLoadInitialURL = false
   @State private var isTargetedForDrop = false
 
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
@@ -37,17 +42,10 @@ struct ContentView: View {
       if isShowingImageInterface {
         ImageView(imageSession: imageSession)
       } else {
-        HomeView(imageSession: imageSession)
+        Color.clear
       }
     }
     .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
-    .overlay(
-      ContainerRelativeShape()
-        .strokeBorder(
-          isTargetedForDrop ? Color.accentColor : .clear,
-          lineWidth: 3,
-        ),
-    )
     .focusedSceneValue(imageSession)
     .dismissTextFocusOnClickOutside()
     .onAppear {
@@ -61,6 +59,21 @@ struct ContentView: View {
         try RecentImagesStore.remove(path: path, in: modelContext)
       }
       refreshRecentImages()
+      loadInitialURLIfNeeded()
+      dismissWindow(id: "home")
+    }
+    .overlay(
+      ContainerRelativeShape()
+        .strokeBorder(
+          isTargetedForDrop ? Color.accentColor : .clear,
+          lineWidth: 3,
+        ),
+    )
+    .dropDestination(for: URL.self) { urls, _ in
+      openImages(at: urls)
+      return !urls.isEmpty
+    } isTargeted: { isTargeted in
+      isTargetedForDrop = isTargeted
     }
     .onChange(of: recentImages) { _, newValue in
       imageSession.recentImages = newValue
@@ -85,22 +98,23 @@ struct ContentView: View {
     .fileImporter(
       isPresented: $imageSession.isImporterPresented,
       allowedContentTypes: ImageLoader.supportedImageTypes,
-      onCompletion: imageSession.onOpenImage,
-    )
+    ) { result in
+      imageSession.onOpenImage(result: result, openWindow: openWindow)
+    }
     .alert(item: $imageSession.alert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
     }
-    .dropDestination(for: URL.self) { urls, _ in
-      guard let url = urls.first else { return false }
-
-      imageSession.loadImage(from: url)
-      return true
-    } isTargeted: { isTargeted in
-      isTargetedForDrop = isTargeted
-    }
     .onOpenURL { url in
       imageSession.loadImage(from: url)
+      dismissWindow(id: "home")
     }
+    .handlesExternalEvents(preferring: [], allowing: [])
+  }
+
+  private func loadInitialURLIfNeeded() {
+    guard !didLoadInitialURL, let url else { return }
+    didLoadInitialURL = true
+    imageSession.loadImage(from: url)
   }
 
   private func refreshRecentImages() {
@@ -114,9 +128,13 @@ struct ContentView: View {
       )
     }
   }
-}
 
-#Preview {
-  ContentView()
-    .modelContainer(for: [RecentImage.self], inMemory: true)
+  private func openImages(at urls: [URL]) {
+    guard !urls.isEmpty else { return }
+
+    for url in urls {
+      openWindow(id: "image", value: url)
+    }
+    dismissWindow(id: "home")
+  }
 }

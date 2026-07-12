@@ -34,6 +34,7 @@ Do not expand into RAW editing, professional color grading, layers, batch proces
 - Prefer non-destructive editing models and compose edits during export.
 - Use ImageIO / Core Graphics when a feature needs explicit control over thumbnail size, downsampling, cache / decode timing, metadata, orientation, incremental loading, or export.
 - Keep changes tightly scoped to the requested task.
+- Record any new problems discovered while modifying code in `progress.md` as soon as they are found.
 - Use 2-space indentation, simple imports, and clear method separation.
 - Use Swift Observation (`@Observable`) for current view models / sessions.
 - Prefer strong types, `let` constants, and Swift concurrency with `async` / `await`.

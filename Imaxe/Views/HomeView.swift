@@ -17,14 +17,18 @@ private struct HomeOperationAlert: Identifiable {
 }
 
 struct HomeView: View {
-  @Bindable var imageSession: ImageSession
-
-  @AppStorage("recentImagesViewMode")
-  private var recentImagesViewModeRawValue = ImageCollectionViewMode.grid.rawValue
+  @AppStorage("recentImagesViewMode") private var recentImagesViewModeRawValue =
+    ImageCollectionViewMode.grid.rawValue
   @AppStorage("recentImagesGridItemSize") private var recentImagesGridItemSize = 120.0
 
+  @Environment(\.dismissWindow) private var dismissWindow
+  @Environment(\.openWindow) private var openWindow
   @Environment(\.modelContext) private var modelContext
+  @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
+
   @State private var deleteTargetURL: URL?
+  @State private var isImporterPresented = false
+  @State private var isTargetedForDrop = false
   @State private var renameTarget: RecentImage?
   @State private var renameText = ""
   @State private var operationAlert: HomeOperationAlert?
@@ -63,7 +67,7 @@ struct HomeView: View {
       homeHero
       recentImagesCollection
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .dismissTextFocusOnClickOutside()
     .sheet(item: $renameTarget) { item in
       fileRenameSheet(for: item)
     }
@@ -87,6 +91,32 @@ struct HomeView: View {
     }
     .alert(item: $operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
+    }
+    .fileImporter(
+      isPresented: $isImporterPresented,
+      allowedContentTypes: ImageLoader.supportedImageTypes,
+      allowsMultipleSelection: true,
+      onCompletion: openImportedImages,
+    )
+    .overlay(
+      ContainerRelativeShape()
+        .strokeBorder(
+          isTargetedForDrop ? Color.accentColor : .clear,
+          lineWidth: 3,
+        ),
+    )
+    .dropDestination(for: URL.self) { urls, _ in
+      openImages(at: urls)
+      return !urls.isEmpty
+    } isTargeted: { isTargeted in
+      isTargetedForDrop = isTargeted
+    }
+    .focusedSceneValue(\.openImageAction) {
+      isImporterPresented = true
+    }
+    .focusedSceneValue(\.recentImages, recentImages)
+    .focusedSceneValue(\.openRecentImageAction) { recentImage in
+      openRecentImage(recentImage)
     }
   }
 
@@ -118,7 +148,7 @@ struct HomeView: View {
         .help("Open Settings")
 
         Button {
-          imageSession.isImporterPresented = true
+          isImporterPresented = true
         } label: {
           Label("Open Image", systemImage: "photo.badge.plus")
             .padding(.vertical, 3)
@@ -132,7 +162,7 @@ struct HomeView: View {
     .padding(.bottom, 16)
     .frame(maxWidth: .infinity)
     .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
-      length * 0.5
+      length * 0.45
     }
   }
 
@@ -171,7 +201,7 @@ struct HomeView: View {
 
   private var recentImagesCollection: some View {
     ImageCollectionView(
-      imageSession.recentImages,
+      recentImages,
       configuration: imageCollectionConfiguration,
       listRow: recentImageListRow,
       gridItem: recentImageGridItem,
@@ -289,12 +319,33 @@ struct HomeView: View {
     }
 
     Button("Reveal in Finder", systemImage: "folder") {
-      imageSession.revealInFinder(for: [item.url])
+      NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
   }
 
   private func openRecentImage(_ item: RecentImage) {
-    imageSession.openRecentImage(item)
+    openImages(at: [item.url])
+  }
+
+  private func openImportedImages(_ result: Result<[URL], Error>) {
+    switch result {
+    case let .success(urls):
+      openImages(at: urls)
+    case let .failure(error):
+      operationAlert = HomeOperationAlert(
+        title: "Failed to Open Images",
+        message: error.localizedDescription,
+      )
+    }
+  }
+
+  private func openImages(at urls: [URL]) {
+    guard !urls.isEmpty else { return }
+
+    for url in urls {
+      openWindow(id: "image", value: url)
+    }
+    dismissWindow(id: "home")
   }
 
   private func fileRenameSheet(for item: RecentImage) -> some View {
@@ -431,4 +482,9 @@ private extension String {
 
     return attributedString
   }
+}
+
+#Preview {
+  HomeView()
+    .modelContainer(for: [RecentImage.self], inMemory: true)
 }

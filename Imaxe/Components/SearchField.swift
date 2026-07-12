@@ -72,6 +72,11 @@ struct SearchField: View {
         isFolded = false
       }
     }
+    .onAppear {
+      DispatchQueue.main.async {
+        isFocused = false
+      }
+    }
     .onKeyPress(.escape) {
       if isTextFocused {
         setTextFocused(false)

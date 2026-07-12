@@ -11,7 +11,7 @@ import SwiftUI
 import Testing
 
 @MainActor
-@Suite("Recent Images")
+@Suite("Recent Images", .serialized)
 struct RecentImagesTests {
   @Test func `recent images are updated sorted and cleared`() async throws {
     try await TestSupport.withRecentImagesCountLimit(AppSettings.Defaults.recentImagesCountLimit) {

@@ -59,8 +59,27 @@ struct ImaxeApp: App {
   }
 
   var body: some Scene {
-    WindowGroup {
-      ContentView()
+    Window("Home", id: "home") {
+      HomeView()
+        .ignoresSafeArea()
+        .frame(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+        .applyAppearance(appearance)
+        .configureWindow { window in
+          window.isMovableByWindowBackground = true
+          window.titleVisibility = .hidden
+          window.titlebarAppearsTransparent = true
+          window.tabbingMode = .disallowed
+        }
+    }
+    .modelContainer(modelContainer)
+    .windowStyle(.hiddenTitleBar)
+    .windowResizability(.contentSize)
+    .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+    .defaultLaunchBehavior(.presented)
+    .restorationBehavior(.disabled)
+
+    WindowGroup("Image", id: "image", for: URL.self) { $url in
+      ContentView(url: url)
         .ignoresSafeArea()
         .applyAppearance(appearance)
         .frame(
@@ -78,8 +97,11 @@ struct ImaxeApp: App {
     .windowStyle(.hiddenTitleBar)
     .windowResizability(.contentSize)
     .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+    .defaultLaunchBehavior(.suppressed)
     .restorationBehavior(.disabled)
+    .handlesExternalEvents(matching: ["*"])
     .commands {
+      CommandGroup(replacing: .newItem) {}
       CommandGroup(replacing: .toolbar) {}
       CommandGroup(replacing: .sidebar) {}
       FileOperationCommands(modelContainer: modelContainer)

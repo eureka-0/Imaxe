@@ -8,13 +8,51 @@
 import SwiftData
 import SwiftUI
 
+private struct OpenImageActionKey: FocusedValueKey {
+  typealias Value = () -> Void
+}
+
+private struct RecentImagesKey: FocusedValueKey {
+  typealias Value = [RecentImage]
+}
+
+private struct OpenRecentImageActionKey: FocusedValueKey {
+  typealias Value = (RecentImage) -> Void
+}
+
+extension FocusedValues {
+  var openImageAction: (() -> Void)? {
+    get { self[OpenImageActionKey.self] }
+    set { self[OpenImageActionKey.self] = newValue }
+  }
+
+  var recentImages: [RecentImage]? {
+    get { self[RecentImagesKey.self] }
+    set { self[RecentImagesKey.self] = newValue }
+  }
+
+  var openRecentImageAction: ((RecentImage) -> Void)? {
+    get { self[OpenRecentImageActionKey.self] }
+    set { self[OpenRecentImageActionKey.self] = newValue }
+  }
+}
+
 struct FileOperationCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
+  @FocusedValue(\.openImageAction) private var openImageAction
+  @FocusedValue(\.recentImages) private var recentImagesValue
+  @FocusedValue(\.openRecentImageAction) private var openRecentImageAction
 
   let modelContainer: ModelContainer
 
   private var recentImages: [RecentImage] {
-    Array(imageSession?.recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu) ?? [])
+    if let imageSession {
+      Array(imageSession.recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu))
+    } else if let recentImagesValue {
+      Array(recentImagesValue.prefix(Constants.maximumRecentImagesToDisplayInMenu))
+    } else {
+      []
+    }
   }
 
   var body: some Commands {
@@ -22,10 +60,14 @@ struct FileOperationCommands: Commands {
       Divider()
 
       Button("Open Image...") {
-        imageSession?.isImporterPresented = true
+        if let imageSession {
+          imageSession.isImporterPresented = true
+        } else {
+          openImageAction?()
+        }
       }
       .keyboardShortcut("o", modifiers: .command)
-      .disabled(imageSession == nil)
+      .disabled(imageSession == nil && openImageAction == nil)
 
       Button("Open from Pasteboard") {
         imageSession?.openImageFromPasteboard()
@@ -39,14 +81,13 @@ struct FileOperationCommands: Commands {
         } else {
           ForEach(recentImages) { recentImage in
             Button(recentImage.fileName) {
-              guard let imageSession else {
-                NSSound.beep()
-                return
+              if let imageSession {
+                imageSession.openRecentImage(recentImage)
+              } else if let openRecentImageAction {
+                openRecentImageAction(recentImage)
               }
-
-              imageSession.openRecentImage(recentImage)
             }
-            .disabled(imageSession == nil)
+            .disabled(imageSession == nil && openRecentImageAction == nil)
           }
 
           Divider()

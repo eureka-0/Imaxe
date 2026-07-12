@@ -42,7 +42,7 @@ struct ImageView: View {
           .frame(height: Constants.topBarHoverStripHeight)
         }
       } else {
-        HomeView(imageSession: imageSession)
+        Color.clear
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -76,7 +76,7 @@ struct ImageView: View {
     } else if imageSession.isLoading {
       loadingImageView
     } else {
-      HomeView(imageSession: imageSession)
+      Color.clear
     }
   }
 

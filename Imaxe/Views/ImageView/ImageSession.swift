@@ -230,10 +230,14 @@ final class ImageSession {
     }
   }
 
-  func onOpenImage(result: Result<URL, Error>) {
+  func onOpenImage(result: Result<URL, Error>, openWindow: OpenWindowAction? = nil) {
     switch result {
     case let .success(url):
-      loadImage(from: url, failureTitle: "Failed to Open Image")
+      if let openWindow {
+        openWindow(id: "image", value: url)
+      } else {
+        loadImage(from: url, failureTitle: "Failed to Open Image")
+      }
     case let .failure(error):
       alert = ImageAlert(title: "Failed to Open Image", message: error.localizedDescription)
     }
