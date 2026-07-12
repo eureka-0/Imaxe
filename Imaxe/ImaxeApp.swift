@@ -71,6 +71,7 @@ struct ImaxeApp: App {
           window.isMovableByWindowBackground = true
           window.titleVisibility = .hidden
           window.titlebarAppearsTransparent = true
+          window.tabbingMode = .disallowed
         }
     }
     .modelContainer(modelContainer)
@@ -79,6 +80,8 @@ struct ImaxeApp: App {
     .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
     .restorationBehavior(.disabled)
     .commands {
+      CommandGroup(replacing: .toolbar) {}
+      CommandGroup(replacing: .sidebar) {}
       FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
     }

@@ -10,7 +10,7 @@ import SwiftUI
 // MARK: - SearchField
 
 struct SearchField: View {
-  var placeholder: LocalizedStringKey = "Search"
+  var placeholder: LocalizedStringResource = "Search"
   @Binding var text: String
 
   @FocusState private var isFocused: Bool
@@ -28,7 +28,7 @@ struct SearchField: View {
   private var fieldHeight: CGFloat = 26
   private let iconLength: CGFloat = 16
 
-  init(_ placeholder: LocalizedStringKey = "Search", text: Binding<String>) {
+  init(_ placeholder: LocalizedStringResource = "Search", text: Binding<String>) {
     self.placeholder = placeholder
     _text = text
   }
@@ -104,7 +104,7 @@ struct SearchField: View {
           expandAndFocus()
         }
 
-      TextField(placeholder, text: $text)
+      TextField(String(localized: placeholder), text: $text)
         .textFieldStyle(.plain)
         .onSubmit {
           submitAction()

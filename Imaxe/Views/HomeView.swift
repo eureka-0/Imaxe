@@ -92,7 +92,7 @@ struct HomeView: View {
 
   private var homeHero: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Drop images anywhere")
+      Text("Drop images here to open")
         .font(.title.weight(.semibold))
         .lineLimit(1)
 

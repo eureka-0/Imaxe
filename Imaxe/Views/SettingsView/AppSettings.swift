@@ -69,7 +69,7 @@ enum Appearance: String, CaseIterable, Identifiable {
     rawValue
   }
 
-  var description: LocalizedStringKey {
+  var description: LocalizedStringResource {
     switch self {
     case .system: "System"
     case .light: "Light"
@@ -113,7 +113,7 @@ enum ActionOnImageFileChange: String, CaseIterable, Identifiable {
     rawValue
   }
 
-  var description: LocalizedStringKey {
+  var description: LocalizedStringResource {
     switch self {
     case .reload: "Reload"
     case .ignore: "Ignore"
@@ -128,7 +128,7 @@ enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
     rawValue
   }
 
-  var description: LocalizedStringKey {
+  var description: LocalizedStringResource {
     switch self {
     case .pixelSize: "1 image pixel corresponds to 1 screen pixel"
     case .pointSize: "1 image pixel corresponds to 1 screen point"
@@ -144,7 +144,7 @@ enum LoadedImageWindowSizeMode: String, CaseIterable, Identifiable {
     rawValue
   }
 
-  var description: LocalizedStringKey {
+  var description: LocalizedStringResource {
     switch self {
     case .actualSizeLimitedToScreen: "Actual size (limited to screen)"
     case .zoomToFitScreen: "Fit to screen"
@@ -162,7 +162,7 @@ enum LoadedImageWindowSizeUnit: String, CaseIterable, Identifiable {
     rawValue
   }
 
-  var description: LocalizedStringKey {
+  var description: LocalizedStringResource {
     switch self {
     case .points: "Points"
     case .pixels: "Pixels"
@@ -177,7 +177,7 @@ enum ImageInterpolationStrategy: String, CaseIterable, Identifiable {
     rawValue
   }
 
-  var description: LocalizedStringKey {
+  var description: LocalizedStringResource {
     switch self {
     case .none: "None"
     case .low: "Low"

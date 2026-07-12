@@ -271,7 +271,7 @@ struct ImageView: View {
     .help(Text("Toggle window pinning"))
   }
 
-  private func topBarIconLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+  private func topBarIconLabel(_ title: LocalizedStringResource, systemImage: String) -> some View {
     Label(title, systemImage: systemImage)
       .labelStyle(.iconOnly)
       .frame(width: Constants.topBarIconButtonWidth, height: Constants.topBarButtonHeight)

@@ -39,10 +39,10 @@ final class ImageCollectionItemState {
 }
 
 struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable {
-  var title: String?
-  var subtitle: String?
+  var title: LocalizedStringResource?
+  var subtitle: LocalizedStringResource?
   var useDefaultSubtitle: Bool = true
-  var emptyDescription: String?
+  var emptyDescription: LocalizedStringResource?
   var searchableText: ((Item) -> String)?
   var sortOptions: [ImageCollectionSortOption<Item>] = []
   var defaultSortOptionID: ImageCollectionSortOption<Item>.ID?
@@ -679,7 +679,10 @@ extension ImageCollectionView where GridItemContent == EmptyView, ContextMenuCon
 // MARK: - Modifiers
 
 extension ImageCollectionView {
-  func collectionTitle(_ title: String, subtitle: String? = nil) -> Self {
+  func collectionTitle(
+    _ title: LocalizedStringResource,
+    subtitle: LocalizedStringResource? = nil,
+  ) -> Self {
     var view = self
     view.configuration.title = title
     view.configuration.subtitle = subtitle

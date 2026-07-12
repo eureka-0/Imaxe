@@ -1,0 +1,379 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ""
+          }
+        }
+      }
+    },
+    "%" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%"
+          }
+        }
+      }
+    },
+    "%.1f second" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f秒"
+          }
+        }
+      }
+    },
+    "%.1f seconds" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f秒"
+          }
+        }
+      }
+    },
+    "%lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
+      }
+    },
+    "%lld image%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld image%2$@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld张图片"
+          }
+        }
+      }
+    },
+    "1 image pixel corresponds to 1 screen pixel" : {
+
+    },
+    "1 image pixel corresponds to 1 screen point" : {
+
+    },
+    "100" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100"
+          }
+        }
+      }
+    },
+    "Action on image file change:" : {
+
+    },
+    "Actual print size based on image DPI and screen PPI" : {
+
+    },
+    "Actual size" : {
+
+    },
+    "Actual Size" : {
+
+    },
+    "Actual size (limited to screen)" : {
+
+    },
+    "Appearance:" : {
+
+    },
+    "Apply" : {
+
+    },
+    "Ascending" : {
+
+    },
+    "Background color:" : {
+
+    },
+    "Browsing:" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Choose zoom level" : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear Menu" : {
+
+    },
+    "Clear Search" : {
+
+    },
+    "Could Not Clear Thumbnail Cache" : {
+
+    },
+    "Current thumbnail caches: %@" : {
+
+    },
+    "Dark" : {
+
+    },
+    "Default zoom level:" : {
+
+    },
+    "Define %@ zoom as:" : {
+
+    },
+    "Descending" : {
+
+    },
+    "Drop images here to open" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拖放图片到这里打开"
+          }
+        }
+      }
+    },
+    "File name %@" : {
+
+    },
+    "Fill screen" : {
+
+    },
+    "Fit the image to the window" : {
+
+    },
+    "Fit to screen" : {
+
+    },
+    "Fit to Window" : {
+
+    },
+    "Fit Window to Image" : {
+
+    },
+    "Fixed size" : {
+
+    },
+    "General" : {
+
+    },
+    "Height" : {
+
+    },
+    "Height:" : {
+
+    },
+    "High" : {
+
+    },
+    "Ignore" : {
+
+    },
+    "Image" : {
+
+    },
+    "Image Info" : {
+
+    },
+    "Image interpolation:" : {
+
+    },
+    "Image position %@" : {
+
+    },
+    "Info" : {
+
+    },
+    "Light" : {
+
+    },
+    "Loading..." : {
+
+    },
+    "Loop browsing" : {
+
+    },
+    "Low" : {
+
+    },
+    "Medium" : {
+
+    },
+    "More" : {
+
+    },
+    "Move to Trash" : {
+
+    },
+    "Move to Trash?" : {
+
+    },
+    "Name" : {
+
+    },
+    "Next image" : {
+
+    },
+    "Next Image" : {
+
+    },
+    "No images yet" : {
+
+    },
+    "No recent images yet" : {
+
+    },
+    "No Recent Items" : {
+
+    },
+    "None" : {
+
+    },
+    "Open" : {
+
+    },
+    "Open from Pasteboard" : {
+
+    },
+    "Open Image" : {
+
+    },
+    "Open Image..." : {
+
+    },
+    "Open Recent" : {
+
+    },
+    "Open Settings" : {
+
+    },
+    "Order" : {
+
+    },
+    "Pin Window" : {
+
+    },
+    "Pixels" : {
+
+    },
+    "Points" : {
+
+    },
+    "Previous image" : {
+
+    },
+    "Previous Image" : {
+
+    },
+    "Recent Images" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近打开"
+          }
+        }
+      }
+    },
+    "Recent images count limit:" : {
+
+    },
+    "Reload" : {
+
+    },
+    "Remove from Recents" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Resize the window to fit the image" : {
+
+    },
+    "Reveal in Finder" : {
+
+    },
+    "Search" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
+        }
+      }
+    },
+    "Settings" : {
+
+    },
+    "Show image info" : {
+
+    },
+    "Sort" : {
+
+    },
+    "Sort by" : {
+
+    },
+    "Sort menu." : {
+
+    },
+    "System" : {
+
+    },
+    "Toggle window pinning" : {
+
+    },
+    "Top bar hide delay:" : {
+
+    },
+    "Width" : {
+
+    },
+    "Width:" : {
+
+    },
+    "Zoom" : {
+
+    },
+    "Zoom in" : {
+
+    },
+    "Zoom In" : {
+
+    },
+    "Zoom out" : {
+
+    },
+    "Zoom Out" : {
+
+    }
+  },
+  "version" : "1.2"
+}

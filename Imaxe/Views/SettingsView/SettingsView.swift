@@ -222,7 +222,7 @@ struct ImageSettingsView: View {
   var body: some View {
     Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 20) {
       GridRow {
-        Text("Define 100% zoom as:")
+        Text("Define \(100.formatted(.percent)) zoom as:")
 
         Picker("", selection: $imageActualSizeStrategy) {
           ForEach(ImageActualSizeStrategy.allCases) {
