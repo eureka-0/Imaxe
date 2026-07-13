@@ -46,6 +46,16 @@ final class ImageSession {
   }
 
   var alert: ImageAlert?
+
+  var showAlert: Bool {
+    get { alert != nil }
+    set {
+      if !newValue {
+        alert = nil
+      }
+    }
+  }
+
   @ObservationIgnored private weak var owningWindow: NSWindow?
   @ObservationIgnored let viewportController = ImageViewportController()
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
@@ -182,51 +192,19 @@ final class ImageSession {
   }
 
   func openImageFromPasteboard() {
-    let pasteboard = NSPasteboard.general
-
-    if let imageType = pasteboard.availableType(from: [.fileURL, .URL, .png, .tiff]) {
-      switch imageType {
-      case .fileURL:
-        if let url = pasteboard.readObjects(
-          forClasses: [NSURL.self],
-          options: [.urlReadingFileURLsOnly: true],
-        )?.first as? URL {
-          loadImage(
-            from: url,
-            failureTitle: "Failed to Load Image from Pasteboard",
-            addToRecent: false,
-          )
-        }
-      case .URL:
-        if let urlString = pasteboard.string(forType: .URL), let url = URL(string: urlString) {
-          loadImage(
-            from: url,
-            failureTitle: "Failed to Load Image from Pasteboard",
-            addToRecent: false,
-          )
-        }
-      case .png, .tiff:
-        if let data = pasteboard.data(forType: imageType) {
-          let tempFileURL = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            .appendingPathExtension(imageType == .png ? "png" : "tiff")
-          do {
-            try data.write(to: tempFileURL)
-            loadImage(
-              from: tempFileURL,
-              failureTitle: "Failed to Load Image from Pasteboard",
-              addToRecent: false,
-              temporaryURL: tempFileURL,
-            )
-          } catch {
-            alert = ImageAlert(
-              title: "Failed to Load Image from Pasteboard",
-              message: error.localizedDescription,
-            )
-          }
-        }
-      default:
-        break
-      }
+    do {
+      guard let image = try extractImageFromPasteboard() else { return }
+      loadImage(
+        from: image.url,
+        failureTitle: "Failed to Load Image from Pasteboard",
+        addToRecent: false,
+        temporaryURL: image.temporaryURL,
+      )
+    } catch {
+      alert = ImageAlert(
+        title: "Failed to Load Image from Pasteboard",
+        message: error.localizedDescription,
+      )
     }
   }
 
@@ -234,7 +212,7 @@ final class ImageSession {
     switch result {
     case let .success(url):
       if let openWindow {
-        openWindow(id: "image", value: url)
+        openWindow(id: "image", value: ImageWindowRequest(url: url))
       } else {
         loadImage(from: url, failureTitle: "Failed to Open Image")
       }
@@ -273,6 +251,7 @@ final class ImageSession {
     preservingViewportOnReload: Bool = false,
     recentImagePathToRemoveOnFileNotFound: String? = nil,
     temporaryURL: URL? = nil,
+    onFailure: (() -> Void)? = nil,
   ) {
     let shouldPreserveCurrentImage = preservingViewportOnReload
       && currentImage != nil
@@ -358,8 +337,19 @@ final class ImageSession {
           failureTitle: failureTitle,
           recentImagePathToRemoveOnFileNotFound: recentImagePathToRemoveOnFileNotFound,
         )
+        onFailure?()
       }
     }
+  }
+
+  func close() {
+    topBarHideTask?.cancel()
+    topBarHideTask = nil
+    cancelCurrentImageLoad()
+    imageLoadTask = nil
+    removeTemporaryFile(displayedTemporaryURL)
+    displayedTemporaryURL = nil
+    imageFileWatcher = nil
   }
 
   private final class ImageLoadOperation {

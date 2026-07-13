@@ -10,7 +10,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
-  let url: URL?
+  let request: ImageWindowRequest?
 
   @Environment(\.dismissWindow) private var dismissWindow
   @Environment(\.openWindow) private var openWindow
@@ -18,6 +18,7 @@ struct ContentView: View {
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
   @State private var imageSession = ImageSession()
+  @State private var didFailInitialRequest = false
   @State private var didLoadInitialURL = false
   @State private var isTargetedForDrop = false
 
@@ -59,8 +60,11 @@ struct ContentView: View {
         try RecentImagesStore.remove(path: path, in: modelContext)
       }
       refreshRecentImages()
-      loadInitialURLIfNeeded()
+      loadInitialRequestIfNeeded()
       dismissWindow(id: "home")
+    }
+    .onDisappear {
+      imageSession.close()
     }
     .overlay(
       ContainerRelativeShape()
@@ -101,8 +105,18 @@ struct ContentView: View {
     ) { result in
       imageSession.onOpenImage(result: result, openWindow: openWindow)
     }
-    .alert(item: $imageSession.alert) { alert in
-      Alert(title: Text(alert.title), message: Text(alert.message))
+    .alert(imageSession.alert?.title ?? "", isPresented: $imageSession.showAlert) {
+      Button("OK") {
+        guard didFailInitialRequest else { return }
+        if let request {
+          DispatchQueue.main.async {
+            dismissWindow(id: "image", value: request)
+          }
+        }
+        openWindow(id: "home")
+      }
+    } message: {
+      Text(imageSession.alert?.message ?? "")
     }
     .onOpenURL { url in
       imageSession.loadImage(from: url)
@@ -111,10 +125,18 @@ struct ContentView: View {
     .handlesExternalEvents(preferring: [], allowing: [])
   }
 
-  private func loadInitialURLIfNeeded() {
-    guard !didLoadInitialURL, let url else { return }
+  private func loadInitialRequestIfNeeded() {
+    guard !didLoadInitialURL, let request else { return }
     didLoadInitialURL = true
-    imageSession.loadImage(from: url)
+    imageSession.loadImage(
+      from: request.url,
+      addToRecent: request.addsToRecent,
+      recentImagePathToRemoveOnFileNotFound: request.recentImagePath,
+      temporaryURL: request.temporaryURL,
+      onFailure: {
+        didFailInitialRequest = true
+      },
+    )
   }
 
   private func refreshRecentImages() {
@@ -133,7 +155,7 @@ struct ContentView: View {
     guard !urls.isEmpty else { return }
 
     for url in urls {
-      openWindow(id: "image", value: url)
+      openWindow(id: "image", value: ImageWindowRequest(url: url))
     }
     dismissWindow(id: "home")
   }

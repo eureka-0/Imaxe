@@ -16,6 +16,8 @@ private struct HomeOperationAlert: Identifiable {
   let message: String
 }
 
+// MARK: - HomeView
+
 struct HomeView: View {
   @AppStorage("recentImagesViewMode") private var recentImagesViewModeRawValue =
     ImageCollectionViewMode.grid.rawValue
@@ -26,22 +28,7 @@ struct HomeView: View {
   @Environment(\.modelContext) private var modelContext
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
-  @State private var deleteTargetURL: URL?
-  @State private var isImporterPresented = false
-  @State private var isTargetedForDrop = false
-  @State private var renameTarget: RecentImage?
-  @State private var renameText = ""
-  @State private var operationAlert: HomeOperationAlert?
-
-  private var isDeleteConfirmationPresented: Binding<Bool> {
-    Binding {
-      deleteTargetURL != nil
-    } set: { isPresented in
-      if !isPresented {
-        deleteTargetURL = nil
-      }
-    }
-  }
+  @State private var viewModel = HomeViewModel()
 
   private var recentImagesViewMode: Binding<ImageCollectionViewMode> {
     Binding {
@@ -67,57 +54,54 @@ struct HomeView: View {
       homeHero
       recentImagesCollection
     }
+    .onAppear {
+      viewModel.modelContext = modelContext
+      viewModel.openWindow = openWindow
+      viewModel.dismissWindow = dismissWindow
+    }
     .dismissTextFocusOnClickOutside()
-    .sheet(item: $renameTarget) { item in
+    .sheet(item: $viewModel.renameTarget) { item in
       fileRenameSheet(for: item)
     }
     .confirmationDialog(
       "Move to Trash?",
-      isPresented: isDeleteConfirmationPresented,
+      isPresented: viewModel.isDeleteConfirmationPresented,
       titleVisibility: .visible,
     ) {
       Button("Move to Trash", role: .destructive) {
-        if let deleteTargetURL {
-          moveToTrash(deleteTargetURL)
-        }
-        deleteTargetURL = nil
+        viewModel.moveToTrash()
       }
 
       Button("Cancel", role: .cancel) {
-        deleteTargetURL = nil
+        viewModel.cancelDelete()
       }
     } message: {
-      Text(deleteTargetURL?.filePath ?? "")
+      Text(viewModel.deleteTargetURL?.filePath ?? "")
     }
-    .alert(item: $operationAlert) { alert in
+    .alert(item: $viewModel.operationAlert) { alert in
       Alert(title: Text(alert.title), message: Text(alert.message))
     }
     .fileImporter(
-      isPresented: $isImporterPresented,
+      isPresented: $viewModel.isImporterPresented,
       allowedContentTypes: ImageLoader.supportedImageTypes,
       allowsMultipleSelection: true,
-      onCompletion: openImportedImages,
+      onCompletion: viewModel.openImportedImages,
     )
     .overlay(
       ContainerRelativeShape()
         .strokeBorder(
-          isTargetedForDrop ? Color.accentColor : .clear,
+          viewModel.isTargetedForDrop ? Color.accentColor : .clear,
           lineWidth: 3,
         ),
     )
     .dropDestination(for: URL.self) { urls, _ in
-      openImages(at: urls)
+      viewModel.openImages(at: urls)
       return !urls.isEmpty
     } isTargeted: { isTargeted in
-      isTargetedForDrop = isTargeted
+      viewModel.isTargetedForDrop = isTargeted
     }
-    .focusedSceneValue(\.openImageAction) {
-      isImporterPresented = true
-    }
+    .focusedSceneValue(viewModel)
     .focusedSceneValue(\.recentImages, recentImages)
-    .focusedSceneValue(\.openRecentImageAction) { recentImage in
-      openRecentImage(recentImage)
-    }
   }
 
   private var homeHero: some View {
@@ -148,7 +132,7 @@ struct HomeView: View {
         .help("Open Settings")
 
         Button {
-          isImporterPresented = true
+          viewModel.isImporterPresented = true
         } label: {
           Label("Open Image", systemImage: "photo.badge.plus")
             .padding(.vertical, 3)
@@ -195,7 +179,7 @@ struct HomeView: View {
     ]
     configuration.defaultSortOptionID = "lastOpenedAt"
     configuration.clearHelpText = "Clear Recent Images"
-    configuration.onClear = clearRecentImages
+    configuration.onClear = viewModel.clearRecentImages
     return configuration
   }
 
@@ -269,7 +253,7 @@ struct HomeView: View {
     .background(state.isHovered ? Color.primary.opacity(0.1) : .clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .onTapGesture(count: 2) {
-      openRecentImage(item)
+      viewModel.openRecentImage(item)
     }
   }
 
@@ -293,7 +277,7 @@ struct HomeView: View {
         }
       }
       .onTapGesture(count: 1) {
-        openRecentImage(item)
+        viewModel.openRecentImage(item)
       }
       .help(item.path)
   }
@@ -301,21 +285,21 @@ struct HomeView: View {
   @ViewBuilder
   private func recentImageActionsMenu(_ item: RecentImage) -> some View {
     Button("Open", systemImage: "photo") {
-      openRecentImage(item)
+      viewModel.openRecentImage(item)
     }
 
     Button("Rename", systemImage: "pencil") {
-      beginRename(item)
+      viewModel.beginRename(item)
     }
 
     Button("Move to Trash", systemImage: "trash", role: .destructive) {
-      confirmDelete(item.url)
+      viewModel.confirmDelete(item.url)
     }
 
     Divider()
 
     Button("Remove from Recents", systemImage: "minus.circle") {
-      remove(path: item.path)
+      viewModel.remove(path: item.path)
     }
 
     Button("Reveal in Finder", systemImage: "folder") {
@@ -323,11 +307,73 @@ struct HomeView: View {
     }
   }
 
-  private func openRecentImage(_ item: RecentImage) {
-    openImages(at: [item.url])
+  private func fileRenameSheet(for item: RecentImage) -> some View {
+    VStack(alignment: .leading, spacing: 14) {
+      Text("Rename")
+        .font(.headline)
+
+      TextField("Name", text: $viewModel.renameText)
+        .textFieldStyle(.roundedBorder)
+        .frame(width: 320)
+
+      HStack {
+        Spacer()
+
+        Button("Cancel") {
+          viewModel.cancelRename()
+        }
+        .keyboardShortcut(.cancelAction)
+
+        Button("Rename") {
+          viewModel.rename(item.url)
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(viewModel.trimmedRenameText.isEmpty)
+      }
+    }
+    .padding(20)
+    .frame(width: 380)
+  }
+}
+
+// MARK: - HomeViewModel
+
+@Observable
+final class HomeViewModel {
+  var deleteTargetURL: URL?
+  var isImporterPresented = false
+  var isTargetedForDrop = false
+  var renameTarget: RecentImage?
+  var renameText = ""
+  fileprivate var operationAlert: HomeOperationAlert?
+
+  @ObservationIgnored var modelContext: ModelContext?
+  @ObservationIgnored var openWindow: OpenWindowAction?
+  @ObservationIgnored var dismissWindow: DismissWindowAction?
+
+  var isDeleteConfirmationPresented: Binding<Bool> {
+    Binding {
+      self.deleteTargetURL != nil
+    } set: { isPresented in
+      if !isPresented {
+        self.deleteTargetURL = nil
+      }
+    }
   }
 
-  private func openImportedImages(_ result: Result<[URL], Error>) {
+  var trimmedRenameText: String {
+    renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  func openRecentImage(_ item: RecentImage) {
+    openWindow?(
+      id: "image",
+      value: ImageWindowRequest(url: item.url, recentImagePath: item.path),
+    )
+    dismissWindow?(id: "home")
+  }
+
+  func openImportedImages(_ result: Result<[URL], Error>) {
     switch result {
     case let .success(urls):
       openImages(at: urls)
@@ -339,47 +385,22 @@ struct HomeView: View {
     }
   }
 
-  private func openImages(at urls: [URL]) {
+  func openImages(at urls: [URL]) {
     guard !urls.isEmpty else { return }
 
     for url in urls {
-      openWindow(id: "image", value: url)
+      openWindow?(id: "image", value: ImageWindowRequest(url: url))
     }
-    dismissWindow(id: "home")
+    DispatchQueue.main.async {
+      self.dismissWindow?(id: "home")
+    }
   }
 
-  private func fileRenameSheet(for item: RecentImage) -> some View {
-    VStack(alignment: .leading, spacing: 14) {
-      Text("Rename")
-        .font(.headline)
-
-      TextField("Name", text: $renameText)
-        .textFieldStyle(.roundedBorder)
-        .frame(width: 320)
-
-      HStack {
-        Spacer()
-
-        Button("Cancel") {
-          renameTarget = nil
-        }
-        .keyboardShortcut(.cancelAction)
-
-        Button("Rename") {
-          rename(item.url, to: renameText)
-          renameTarget = nil
-        }
-        .keyboardShortcut(.defaultAction)
-        .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      }
-    }
-    .padding(20)
-    .frame(width: 380)
-  }
-
-  private func remove(path: String) {
+  func remove(path: String) {
     do {
-      try RecentImagesStore.remove(path: path, in: modelContext)
+      if let modelContext {
+        try RecentImagesStore.remove(path: path, in: modelContext)
+      }
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Remove Item",
@@ -388,15 +409,21 @@ struct HomeView: View {
     }
   }
 
-  private func confirmDelete(_ url: URL) {
+  func confirmDelete(_ url: URL) {
     deleteTargetURL = url
   }
 
-  private func moveToTrash(_ url: URL) {
+  func moveToTrash() {
+    defer { cancelDelete() }
+
     do {
-      var trashedURL: NSURL?
-      try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
-      try RecentImagesStore.remove(path: url.filePath, in: modelContext)
+      if let url = deleteTargetURL {
+        var trashedURL: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
+        if let modelContext {
+          try RecentImagesStore.remove(path: url.filePath, in: modelContext)
+        }
+      }
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Move Item to Trash",
@@ -405,16 +432,21 @@ struct HomeView: View {
     }
   }
 
-  private func beginRename(_ item: RecentImage) {
+  func cancelDelete() {
+    deleteTargetURL = nil
+  }
+
+  func beginRename(_ item: RecentImage) {
     renameText = item.url.lastPathComponent
     renameTarget = item
   }
 
-  private func rename(_ url: URL, to newName: String) {
-    let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty, trimmedName != url.lastPathComponent else { return }
+  func rename(_ url: URL) {
+    defer { cancelRename() }
 
-    let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedName)
+    guard !trimmedRenameText.isEmpty, trimmedRenameText != url.lastPathComponent else { return }
+
+    let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedRenameText)
     do {
       try FileManager.default.moveItem(at: url, to: newURL)
     } catch {
@@ -427,11 +459,13 @@ struct HomeView: View {
 
     Task {
       do {
-        try await RecentImagesStore.updateLocation(
-          from: url.filePath,
-          to: newURL,
-          in: modelContext,
-        )
+        if let modelContext {
+          try await RecentImagesStore.updateLocation(
+            from: url.filePath,
+            to: newURL,
+            in: modelContext,
+          )
+        }
       } catch {
         operationAlert = HomeOperationAlert(
           title: "Failed to Update Recent Images",
@@ -441,12 +475,38 @@ struct HomeView: View {
     }
   }
 
-  private func clearRecentImages() {
+  func cancelRename() {
+    renameTarget = nil
+  }
+
+  func clearRecentImages() {
     do {
-      try RecentImagesStore.clear(in: modelContext)
+      if let modelContext {
+        try RecentImagesStore.clear(in: modelContext)
+      }
     } catch {
       operationAlert = HomeOperationAlert(
         title: "Failed to Clear Recent Images",
+        message: error.localizedDescription,
+      )
+    }
+  }
+
+  func openImageFromPasteboard() {
+    do {
+      guard let image = try extractImageFromPasteboard() else { return }
+      openWindow?(
+        id: "image",
+        value: ImageWindowRequest(
+          url: image.url,
+          addsToRecent: false,
+          temporaryURL: image.temporaryURL,
+        ),
+      )
+      dismissWindow?(id: "home")
+    } catch {
+      operationAlert = HomeOperationAlert(
+        title: "Failed to Load Image from Pasteboard",
         message: error.localizedDescription,
       )
     }

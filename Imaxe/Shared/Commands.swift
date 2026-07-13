@@ -8,40 +8,24 @@
 import SwiftData
 import SwiftUI
 
-private struct OpenImageActionKey: FocusedValueKey {
-  typealias Value = () -> Void
-}
-
 private struct RecentImagesKey: FocusedValueKey {
   typealias Value = [RecentImage]
 }
 
-private struct OpenRecentImageActionKey: FocusedValueKey {
-  typealias Value = (RecentImage) -> Void
-}
-
 extension FocusedValues {
-  var openImageAction: (() -> Void)? {
-    get { self[OpenImageActionKey.self] }
-    set { self[OpenImageActionKey.self] = newValue }
-  }
-
   var recentImages: [RecentImage]? {
     get { self[RecentImagesKey.self] }
     set { self[RecentImagesKey.self] = newValue }
   }
-
-  var openRecentImageAction: ((RecentImage) -> Void)? {
-    get { self[OpenRecentImageActionKey.self] }
-    set { self[OpenRecentImageActionKey.self] = newValue }
-  }
 }
+
+// MARK: - FileOperationCommands
 
 struct FileOperationCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
-  @FocusedValue(\.openImageAction) private var openImageAction
+  @FocusedValue(HomeViewModel.self) private var homeViewModel
   @FocusedValue(\.recentImages) private var recentImagesValue
-  @FocusedValue(\.openRecentImageAction) private var openRecentImageAction
+  @Environment(\.openWindow) private var openWindow
 
   let modelContainer: ModelContainer
 
@@ -56,23 +40,34 @@ struct FileOperationCommands: Commands {
   }
 
   var body: some Commands {
-    CommandGroup(after: .newItem) {
+    CommandGroup(replacing: .newItem) {
+      Button("Open Home Window") {
+        openWindow(id: "home")
+      }
+      .keyboardShortcut("n", modifiers: [.command])
+      .disabled(imageSession == nil && homeViewModel != nil)
+
       Divider()
 
       Button("Open Image...") {
         if let imageSession {
           imageSession.isImporterPresented = true
         } else {
-          openImageAction?()
+          homeViewModel?.isImporterPresented = true
         }
       }
       .keyboardShortcut("o", modifiers: .command)
-      .disabled(imageSession == nil && openImageAction == nil)
+      .disabled(imageSession == nil && homeViewModel == nil)
 
       Button("Open from Pasteboard") {
-        imageSession?.openImageFromPasteboard()
+        if let imageSession {
+          imageSession.openImageFromPasteboard()
+        } else if let homeViewModel {
+          homeViewModel.openImageFromPasteboard()
+        }
       }
-      .disabled(imageSession == nil)
+      .keyboardShortcut("v", modifiers: [.command, .option])
+      .disabled(imageSession == nil && homeViewModel == nil)
 
       Menu("Open Recent") {
         if recentImages.isEmpty {
@@ -83,11 +78,11 @@ struct FileOperationCommands: Commands {
             Button(recentImage.fileName) {
               if let imageSession {
                 imageSession.openRecentImage(recentImage)
-              } else if let openRecentImageAction {
-                openRecentImageAction(recentImage)
+              } else if let homeViewModel {
+                homeViewModel.openRecentImage(recentImage)
               }
             }
-            .disabled(imageSession == nil && openRecentImageAction == nil)
+            .disabled(imageSession == nil && homeViewModel == nil)
           }
 
           Divider()
@@ -117,11 +112,13 @@ struct FileOperationCommands: Commands {
   }
 }
 
+// MARK: - ViewCommands
+
 struct ViewCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
 
   var body: some Commands {
-    CommandGroup(after: .sidebar) {
+    CommandGroup(replacing: .sidebar) {
       Button("Previous Image") {
         imageSession?.navigateToPreviousImage()
       }

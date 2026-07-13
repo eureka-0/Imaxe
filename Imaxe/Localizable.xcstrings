@@ -255,10 +255,16 @@
     "None" : {
 
     },
+    "OK" : {
+
+    },
     "Open" : {
 
     },
     "Open from Pasteboard" : {
+
+    },
+    "Open Home Window" : {
 
     },
     "Open Image" : {

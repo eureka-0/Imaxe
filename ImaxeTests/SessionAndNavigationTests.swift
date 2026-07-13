@@ -184,6 +184,65 @@ struct SessionAndNavigationTests {
     #expect(session.currentImageInfo?.url == url)
   }
 
+  @Test func `temporary image is removed after switching images`() async throws {
+    let temporaryURL = URL.temporaryDirectory
+      .appending(path: "imaxe-temporary-image-\(UUID().uuidString).png")
+    let replacementURL = URL.temporaryDirectory
+      .appending(path: "imaxe-replacement-image-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: temporaryURL)
+    try TestSupport.pngData(width: 20, height: 10).write(to: replacementURL)
+    defer {
+      try? FileManager.default.removeItem(at: temporaryURL)
+      try? FileManager.default.removeItem(at: replacementURL)
+    }
+
+    let session = ImageSession()
+    session.loadImage(from: temporaryURL, addToRecent: false, temporaryURL: temporaryURL)
+    try await TestSupport.waitUntil { !session.isLoading }
+
+    #expect(FileManager.default.fileExists(atPath: temporaryURL.path))
+
+    session.loadImage(from: replacementURL, addToRecent: false)
+    try await TestSupport.waitUntil { !session.isLoading }
+
+    #expect(!FileManager.default.fileExists(atPath: temporaryURL.path))
+  }
+
+  @Test func `temporary image is removed when image window closes`() async throws {
+    let temporaryURL = URL.temporaryDirectory
+      .appending(path: "imaxe-closed-temporary-image-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: temporaryURL)
+    defer { try? FileManager.default.removeItem(at: temporaryURL) }
+
+    let session = ImageSession()
+    session.loadImage(from: temporaryURL, addToRecent: false, temporaryURL: temporaryURL)
+    try await TestSupport.waitUntil { !session.isLoading }
+
+    session.close()
+
+    #expect(!FileManager.default.fileExists(atPath: temporaryURL.path))
+  }
+
+  @Test func `failed initial recent image load removes record and reports failure`() async throws {
+    let missingURL = URL.temporaryDirectory
+      .appending(path: "imaxe-missing-recent-\(UUID().uuidString).png")
+    let session = ImageSession()
+    var removedPath: String?
+    var didFail = false
+    session.removeRecentImage = { removedPath = $0 }
+
+    session.loadImage(
+      from: missingURL,
+      recentImagePathToRemoveOnFileNotFound: missingURL.filePath,
+      onFailure: { didFail = true },
+    )
+    try await TestSupport.waitUntil { !session.isLoading }
+
+    #expect(removedPath == missingURL.filePath)
+    #expect(didFail)
+    #expect(session.alert?.title == "Recent Image Removed")
+  }
+
   @Test func `failed navigation preserves displayed image and position`() async throws {
     let goodURL = TestSupport.sampleImageURL("sample_1280×853.png")
     let initialImage = ImageContainer(url: goodURL, nsImage: TestSupport.bitmapImage())

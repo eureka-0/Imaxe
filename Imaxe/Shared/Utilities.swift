@@ -15,6 +15,76 @@ func fileSizeDescription(for fileSize: Int) -> String {
   ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
 }
 
+struct ImageWindowRequest: Codable, Hashable {
+  let url: URL
+  let addsToRecent: Bool
+  let recentImagePath: String?
+  let temporaryURL: URL?
+
+  init(
+    url: URL,
+    addsToRecent: Bool = true,
+    recentImagePath: String? = nil,
+    temporaryURL: URL? = nil,
+  ) {
+    self.url = url
+    self.addsToRecent = addsToRecent
+    self.recentImagePath = recentImagePath
+    self.temporaryURL = temporaryURL
+  }
+}
+
+enum PasteboardImage {
+  case existingFile(URL)
+  case temporaryFile(URL)
+
+  var url: URL {
+    switch self {
+    case let .existingFile(url), let .temporaryFile(url):
+      url
+    }
+  }
+
+  var temporaryURL: URL? {
+    guard case let .temporaryFile(url) = self else { return nil }
+    return url
+  }
+}
+
+func extractImageFromPasteboard() throws -> PasteboardImage? {
+  let pasteboard = NSPasteboard.general
+  if let imageType = pasteboard.availableType(from: [.fileURL, .URL, .png, .tiff]) {
+    switch imageType {
+    case .fileURL:
+      if let url = pasteboard.readObjects(
+        forClasses: [NSURL.self],
+        options: [.urlReadingFileURLsOnly: true],
+      )?.first as? URL {
+        return .existingFile(url)
+      }
+    case .URL:
+      if let urlString = pasteboard.string(forType: .URL), let url = URL(string: urlString) {
+        return .existingFile(url)
+      }
+    case .png, .tiff:
+      if let data = pasteboard.data(forType: imageType) {
+        let tempFileURL = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+          .appendingPathExtension(imageType == .png ? "png" : "tiff")
+        do {
+          try data.write(to: tempFileURL, options: .atomic)
+          return .temporaryFile(tempFileURL)
+        } catch {
+          try? FileManager.default.removeItem(at: tempFileURL)
+          throw error
+        }
+      }
+    default:
+      break
+    }
+  }
+  return nil
+}
+
 // MARK: - IntSize
 
 nonisolated struct IntSize: Hashable {

@@ -78,8 +78,8 @@ struct ImaxeApp: App {
     .defaultLaunchBehavior(.presented)
     .restorationBehavior(.disabled)
 
-    WindowGroup("Image", id: "image", for: URL.self) { $url in
-      ContentView(url: url)
+    WindowGroup("Image", id: "image", for: ImageWindowRequest.self) { $request in
+      ContentView(request: request)
         .ignoresSafeArea()
         .applyAppearance(appearance)
         .frame(
@@ -101,9 +101,7 @@ struct ImaxeApp: App {
     .restorationBehavior(.disabled)
     .handlesExternalEvents(matching: ["*"])
     .commands {
-      CommandGroup(replacing: .newItem) {}
       CommandGroup(replacing: .toolbar) {}
-      CommandGroup(replacing: .sidebar) {}
       FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
     }
