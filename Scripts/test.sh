@@ -38,41 +38,41 @@ suite_count=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-ui)
-      if [[ "$test_mode" == "ui" ]]; then
-        echo "error: --skip-ui cannot be used with --ui-only" >&2
-        exit 2
-      fi
-      test_mode="unit"
-      ;;
-    --ui-only)
-      if [[ "$test_mode" == "unit" ]]; then
-        echo "error: --ui-only cannot be used with --skip-ui" >&2
-        exit 2
-      fi
-      test_mode="ui"
-      ;;
-    --suite)
-      require_value "$1" "${2:-}"
-      suite_filters+=("$2")
-      suite_count=$((suite_count + 1))
-      shift
-      ;;
-    --no-coverage)
-      coverage_enabled="NO"
-      ;;
-    --coverage-report)
-      coverage_report="YES"
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    *)
-      echo "error: unknown option: $1" >&2
-      usage >&2
+  --skip-ui)
+    if [[ "$test_mode" == "ui" ]]; then
+      echo "error: --skip-ui cannot be used with --ui-only" >&2
       exit 2
-      ;;
+    fi
+    test_mode="unit"
+    ;;
+  --ui-only)
+    if [[ "$test_mode" == "unit" ]]; then
+      echo "error: --ui-only cannot be used with --skip-ui" >&2
+      exit 2
+    fi
+    test_mode="ui"
+    ;;
+  --suite)
+    require_value "$1" "${2:-}"
+    suite_filters+=("$2")
+    suite_count=$((suite_count + 1))
+    shift
+    ;;
+  --no-coverage)
+    coverage_enabled="NO"
+    ;;
+  --coverage-report)
+    coverage_report="YES"
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "error: unknown option: $1" >&2
+    usage >&2
+    exit 2
+    ;;
   esac
   shift
 done
@@ -92,6 +92,37 @@ DERIVED_DATA_DIRECTORY="./Build/DerivedData/Tests"
 mkdir -p "${RESULTS_DIRECTORY}"
 RESULT_BUNDLE="${RESULTS_DIRECTORY}/Imaxe-$(date '+%Y%m%d-%H%M%S').xcresult"
 
+cleanup_result_bundles() {
+  local result_bundles
+  local bundle
+  local oldest_bundle
+  local retained_bundles
+
+  shopt -s nullglob
+  result_bundles=("${RESULTS_DIRECTORY}"/*.xcresult)
+  shopt -u nullglob
+
+  while ((${#result_bundles[@]} > 7)); do
+    oldest_bundle="${result_bundles[0]}"
+    for bundle in "${result_bundles[@]:1}"; do
+      if [[ "${bundle}" -ot "${oldest_bundle}" ]]; then
+        oldest_bundle="${bundle}"
+      fi
+    done
+
+    retained_bundles=()
+    for bundle in "${result_bundles[@]}"; do
+      if [[ "${bundle}" != "${oldest_bundle}" ]]; then
+        retained_bundles+=("${bundle}")
+      fi
+    done
+
+    rm -rf "${oldest_bundle}"
+    result_bundles=("${retained_bundles[@]}")
+  done
+}
+trap cleanup_result_bundles EXIT
+
 xcodebuild_arguments=(
   test
   -project Imaxe.xcodeproj
@@ -104,15 +135,15 @@ xcodebuild_arguments=(
 )
 
 case "$test_mode" in
-  unit)
-    xcodebuild_arguments+=("-skip-testing:ImaxeUITests")
-    ;;
-  ui)
-    xcodebuild_arguments+=("-only-testing:ImaxeUITests")
-    ;;
+unit)
+  xcodebuild_arguments+=("-skip-testing:ImaxeUITests")
+  ;;
+ui)
+  xcodebuild_arguments+=("-only-testing:ImaxeUITests")
+  ;;
 esac
 
-if (( suite_count > 0 )); then
+if ((suite_count > 0)); then
   for suite in "${suite_filters[@]}"; do
     xcodebuild_arguments+=("-only-testing:ImaxeTests/${suite}")
   done

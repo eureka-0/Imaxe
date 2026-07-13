@@ -34,8 +34,8 @@ require_value() {
 
 BUILD_SETTINGS="$(xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
   -configuration "${CONFIGURATION}" -destination "platform=macOS,arch=arm64" -showBuildSettings)"
-VERSION="$(awk '/ MARKETING_VERSION = / { print $3; exit }' <<< "${BUILD_SETTINGS}")"
-BUILD_NUMBER="$(awk '/ CURRENT_PROJECT_VERSION = / { print $3; exit }' <<< "${BUILD_SETTINGS}")"
+VERSION="$(awk '/ MARKETING_VERSION = / { print $3; exit }' <<<"${BUILD_SETTINGS}")"
+BUILD_NUMBER="$(awk '/ CURRENT_PROJECT_VERSION = / { print $3; exit }' <<<"${BUILD_SETTINGS}")"
 COMMIT="$(git rev-parse HEAD)"
 SHORT_COMMIT="$(git rev-parse --short=12 HEAD)"
 
@@ -86,7 +86,7 @@ fi
 
 shopt -s nullglob
 EXISTING_BUILD_ARTIFACTS=("${PRODUCTS_DIR}/${SCHEME}-${VERSION}-${BUILD_NUMBER}-"*)
-if (( ${#EXISTING_BUILD_ARTIFACTS[@]} > 0 )); then
+if ((${#EXISTING_BUILD_ARTIFACTS[@]} > 0)); then
   echo "error: version ${VERSION} build ${BUILD_NUMBER} already maps to another artifact" >&2
   exit 1
 fi
@@ -132,11 +132,11 @@ echo "Creating ${STAGING_ZIP}..."
 ditto -c -k --sequesterRsrc --keepParent "${ARCHIVED_APP}" "${STAGING_ZIP}"
 CHECKSUM="$(shasum -a 256 "${STAGING_ZIP}" | awk '{ print $1 }')"
 
-cat > "${STAGING_NOTES}" <<EOF
+cat >"${STAGING_NOTES}" <<EOF
 ## Imaxe ${VERSION} (${BUILD_NUMBER})
 EOF
 
-echo "${CHECKSUM}  ${ZIP_NAME}" > "${STAGING_CHECKSUM}"
+echo "${CHECKSUM}  ${ZIP_NAME}" >"${STAGING_CHECKSUM}"
 
 mv "${STAGING_DIR}" "${OUTPUT_DIR}"
 trap - EXIT
