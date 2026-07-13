@@ -61,6 +61,8 @@ final class ImageSession {
   @ObservationIgnored let viewportController = ImageViewportController()
   @ObservationIgnored private var topBarHideTask: Task<Void, Never>?
   @ObservationIgnored private var imageLoadTask: Task<Void, Never>?
+  @ObservationIgnored private var loadingTimerTask: Task<Void, Never>?
+  @ObservationIgnored private weak var loadingTimerOperation: ImageLoadOperation?
   @ObservationIgnored private var activeImageLoad = ImageLoadOperation()
   @ObservationIgnored private var imageFileWatcher: ImageFileWatcher?
   @ObservationIgnored private var displayedTemporaryURL: URL?
@@ -81,6 +83,10 @@ final class ImageSession {
 
   @ObservationIgnored var loadFolderImageURLs: @Sendable (URL) async -> [URL]? = {
     await FolderNavigator.imageURLs(for: $0)
+  }
+
+  @ObservationIgnored var hasActiveLoadingTimer: Bool {
+    loadingTimerTask != nil
   }
 
   init(imageContainer: ImageContainer? = nil) {
@@ -198,6 +204,11 @@ final class ImageSession {
     viewportController.zoomOut()
   }
 
+  func pan(horizontal: CGFloat, vertical: CGFloat) {
+    alwaysFitToWindow = false
+    viewportController.pan(horizontal: horizontal, vertical: vertical)
+  }
+
   func openImageFromPasteboard() {
     do {
       guard let image = try extractImageFromPasteboard() else { return }
@@ -276,17 +287,10 @@ final class ImageSession {
 
     imageLoadTask = Task { @MainActor [weak self] in
       guard let self, imageLoad === activeImageLoad, !Task.isCancelled else { return }
-
-      let timerTask = Task { @MainActor [weak self] in
-        while !Task.isCancelled {
-          try? await Task.sleep(for: .seconds(0.05))
-          guard let self, !Task.isCancelled else { return }
-          loadingElapsedTime += 0.05
-        }
-      }
+      startLoadingTimer(for: imageLoad)
 
       defer {
-        timerTask.cancel()
+        stopLoadingTimer(for: imageLoad)
         if imageLoad === activeImageLoad {
           isLoading = false
           loadingElapsedTime = 0
@@ -394,6 +398,7 @@ final class ImageSession {
 
   private func cancelCurrentImageLoad() {
     imageLoadTask?.cancel()
+    stopLoadingTimer(for: activeImageLoad)
     removeTemporaryFile(pendingTemporaryURL)
     pendingTemporaryURL = nil
     let requestID = activeImageLoad.requestID
@@ -421,14 +426,42 @@ final class ImageSession {
           currentImage != nil
     else { return }
 
-    imageFileWatcher = ImageFileWatcher(url: url) { [weak self] in
-      guard let self,
-            folderNavigator?.currentImageURL == url,
-            pendingURL == nil
-      else { return }
+    imageFileWatcher = ImageFileWatcher(url: url) { [weak self] event in
+      guard let self, folderNavigator?.currentImageURL == url else { return }
 
-      loadImage(from: url, preservingViewportOnReload: true)
+      switch event {
+      case .modified, .replaced, .recreated:
+        guard pendingURL == nil else { return }
+        loadImage(from: url, preservingViewportOnReload: true)
+      case .deleted:
+        alertTitle = "Image File Deleted"
+        alertMessage = String(localized: "The image file was deleted:\n\(url.filePath)")
+      }
     }
+  }
+
+  private func startLoadingTimer(for imageLoad: ImageLoadOperation) {
+    loadingTimerTask?.cancel()
+    loadingTimerOperation = imageLoad
+    loadingTimerTask = Task { @MainActor [weak self, weak imageLoad] in
+      while let self, let imageLoad, !Task.isCancelled {
+        try? await Task.sleep(for: .milliseconds(50))
+        guard !Task.isCancelled,
+              loadingTimerOperation === imageLoad,
+              activeImageLoad === imageLoad
+        else { return }
+        loadingElapsedTime += 0.05
+      }
+    }
+  }
+
+  private func stopLoadingTimer(for imageLoad: ImageLoadOperation) {
+    guard loadingTimerOperation === imageLoad else { return }
+
+    loadingTimerTask?.cancel()
+    loadingTimerTask = nil
+    loadingTimerOperation = nil
+    loadingElapsedTime = 0
   }
 
   private func removeTemporaryFile(_ url: URL?) {

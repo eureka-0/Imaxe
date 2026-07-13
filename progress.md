@@ -14,33 +14,9 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] Preserve correct handling of orientation, alpha, color space, DPI, 16-bit, and multi-page images.
 - [ ] Use explicit, separate loading strategies for GIF, TIFF, SVG, and static bitmaps.
 
-### Asynchronous State Consistency
-
-- [x] Check request identity and cancellation after every `await`; stale requests must not commit results.
-- [x] Update the image, metadata, navigation position, and file watcher together through a single commit point.
-- [x] Distinguish `displayedURL` from `pendingURL`; reliably return to the original image when navigation to a corrupt image fails.
-- [x] Add deterministic tests for rapid A/B/C switching, delayed metadata, decode failures, and completion of stale animations.
-
-### Thumbnails and Cache
-
-- [x] Move thumbnail generation out of SwiftUI `body` and the main thread, using an asynchronous service that supports cancellation and request coalescing.
-- [x] Keep Quick Look thumbnail generation asynchronous and avoid synchronous semaphore waits.
-- [x] Use temporary files and atomic replacement for cache writes; validate that cached images can be decoded on cache hits.
-- [x] Fall back to no thumbnail when the cache directory or writes fail; this must not prevent opening the primary image or terminate the app.
-
-### Input, Limits, and Recovery
-
-- [x] Correctly parse `.fileURL` values from the Pasteboard without overriding `⌘V` in text inputs.
-- [x] Define and promptly clean up the lifecycle of temporary image files created from the Pasteboard.
-- [x] Limit SVG rasterization dimensions, pixel count, and memory use; return a clear error for invalid or oversized dimensions.
-- [x] Provide recoverable fallback paths when SwiftData, the cache directory, or disk writes fail.
-- [x] Hide user paths, file names, and search text in release logs by default, and cap log storage.
-
 ### Limited GitHub Distribution
 
-- [x] Ensure build scripts use only project-specific output and archive directories; never clean global Xcode Archives.
-- [x] Record the version, build number, and Git commit in release artifacts so the same build number never maps to different binaries.
-- [x] Distribute zip archives through GitHub Releases and state supported macOS versions and architectures in the release notes.
+- [ ] Include the supported macOS 15.6+ and Apple Silicon scope in generated GitHub Release notes.
 - [ ] Do not apply for an Apple Developer account: do not configure `Apple Development`, `Developer ID`, notarization, or stapling workflows.
 - [ ] Clearly document that unsigned or ad-hoc-signed artifacts may be blocked by Gatekeeper, including installation instructions for limited distribution.
 - [ ] Verify download, extraction, and first launch on a Mac without a development environment.
@@ -53,39 +29,6 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] Confirm the bottleneck with data before introducing `CATiledLayer`; splitting into tiles while retaining full decoded frames is not sufficient.
 - [ ] If tiled rendering is used, cap the tile cache, discard draw results from stale image generations, and verify the actual benefit.
 - [ ] Cover cold opens, 100% and high-magnification zooming, rapid large-image switching, slow volumes, and memory-pressure scenarios.
-
-### Files, Navigation, and Animation
-
-- [ ] Have file watching distinguish modifications, atomic replacements, deletions, and recreations, and recover after the watcher becomes invalid.
-- [ ] Support cancellation during large-directory scans and keep the current image correctly positioned in the navigation list.
-- [ ] Separate animation frame state from the shared image cache; pause animations when windows are not visible or the app is inactive.
-
-### Interaction and Accessibility
-
-- [ ] Anchor zooming on the viewport center or pointer position, and improve panning, fit behavior, and multi-display geometry handling.
-- [ ] Asynchronously prefetch file metadata and recent-image thumbnails on the home screen to avoid main-thread I/O.
-- [ ] Complete keyboard navigation, VoiceOver labels, and non-trackpad interaction paths.
-- [ ] Respect Reduce Motion and establish a String Catalog with localization for dynamic text.
-
-### Testing and Builds
-
-- [x] Serialize recent-image tests that temporarily mutate the host app's `UserDefaults`, and always restore the app default afterward; parallel or stale-value restoration could leave the Debug app's recent-image limit set to a test value such as 3.
-- [ ] Finish isolating recent-image limit tests; `recent images are trimmed to configured count limit` still fails when `RecentImagesTests` and `SessionAndNavigationTests` run together, but passes when the suite runs alone.
-- [ ] Add metadata, primary-image loading, thumbnail, corrupt-file, and permission-failure tests for every registered format.
-- [ ] Isolate loaders, caches, UserDefaults, and temporary directories used by tests to reduce flaky parallel tests.
-- [ ] Stabilize the timing-sensitive `image loading timer stops after a replaced request` test, which intermittently fails under the full suite.
-- [ ] Stabilize `failed initial recent image load removes record and reports failure` and `temporary image is removed when image window closes`; both failed during the full unit-test suite on 2026-07-13.
-- [ ] Make XCUI menu tests locale-independent; they currently look up English titles like `File` even when macOS presents localized menu names.
-- [ ] Remove machine-specific absolute paths from `buildServer.json`; document script dependencies and failure messages.
-- [ ] Define the minimum macOS version and support scope for Apple Silicon and universal binaries.
-
-## P3 — Maintenance and Polish
-
-- [x] Determine supported types using a combination of file extension, resource content type, and the actual ImageIO type.
-- [x] Differentiate image-loading errors: I/O, permissions, corrupt content, size limits, and cancellation.
-- [x] Show user-visible errors when clearing the cache fails in Settings; validate and normalize window-size settings.
-- [x] Reuse relative-date formatters and fix hover-state cleanup. Keep window restoration disabled so launches do not restore coordinates from unavailable displays.
-- [x] Add an `.xctestplan`, coverage reporting, and a small set of Finder, menu, and window XCUI smoke tests.
 
 ## References
 

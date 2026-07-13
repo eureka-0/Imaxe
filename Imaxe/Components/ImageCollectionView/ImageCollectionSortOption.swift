@@ -34,13 +34,13 @@ struct ImageCollectionSortValue {
 
 struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
   let id: String
-  let title: String
+  let title: LocalizedStringResource
   let compare: (Item, Item) -> ComparisonResult
   let sortValue: ((Item) -> ImageCollectionSortValue?)?
 
   init(
     _ id: String,
-    title: String,
+    title: LocalizedStringResource,
     compare: @escaping (Item, Item) -> ComparisonResult,
     sortValue: ((Item) -> ImageCollectionSortValue?)? = nil,
   ) {
@@ -52,7 +52,7 @@ struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
 
   init(
     _ id: String,
-    title: String,
+    title: LocalizedStringResource,
     value: @escaping (Item) -> some Comparable,
   ) {
     self.init(id, title: title) { first, second in
@@ -64,7 +64,7 @@ struct ImageCollectionSortOption<Item>: Identifiable, Equatable {
 
   init(
     _ id: String,
-    title: String,
+    title: LocalizedStringResource,
     optionalValue: @escaping (Item) -> (some Comparable)?,
   ) {
     self.init(id, title: title) { first, second in

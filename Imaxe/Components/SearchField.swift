@@ -16,6 +16,7 @@ struct SearchField: View {
   @FocusState private var isFocused: Bool
   @State private var isFolded: Bool = true
   @State private var isHoveringFoldedButton = false
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   private var cornerRadius: CGFloat = 8
   private var externalFocus: FocusState<Bool>.Binding?
@@ -57,8 +58,14 @@ struct SearchField: View {
     .frame(height: fieldHeight)
     .fixedSize(horizontal: false, vertical: true)
     .preservesTextFocusOnClick()
-    .animation(.interactiveSpring(response: 0.22), value: isFolded)
-    .animation(.easeOut(duration: 0.12), value: isTextFocused)
+    .animation(
+      accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.22),
+      value: isFolded,
+    )
+    .animation(
+      accessibilityReduceMotion ? nil : .easeOut(duration: 0.12),
+      value: isTextFocused,
+    )
     .onChange(of: isTextFocused) { _, newValue in
       isFocused = newValue
       if newValue, foldable {

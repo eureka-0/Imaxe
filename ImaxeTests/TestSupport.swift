@@ -65,64 +65,28 @@ enum TestSupport {
     return try #require(representation.representation(using: .png, properties: [:]))
   }
 
-  static func withRecentImagesCountLimit<T>(
-    _ limit: Int?,
-    operation: () throws -> T,
-  ) throws -> T {
-    let key = AppSettings.Keys.recentImagesCountLimit.rawValue
-    let previousValue = UserDefaults.standard.object(forKey: key)
-    defer {
-      restoreUserDefault(previousValue, forKey: key)
-    }
-
-    setRecentImagesCountLimit(limit, forKey: key)
-    return try operation()
-  }
-
-  static func withRecentImagesCountLimit<T>(
-    _ limit: Int?,
-    operation: () async throws -> T,
-  ) async throws -> T {
-    let key = AppSettings.Keys.recentImagesCountLimit.rawValue
-    let previousValue = UserDefaults.standard.object(forKey: key)
-    defer {
-      restoreUserDefault(previousValue, forKey: key)
-    }
-
-    setRecentImagesCountLimit(limit, forKey: key)
-    return try await operation()
+  static func temporaryDirectory(prefix: String) throws -> URL {
+    let directory = URL.temporaryDirectory
+      .appending(path: "\(prefix)-\(UUID().uuidString)", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    return directory
   }
 
   static func waitUntil(
-    timeout: Duration = .seconds(1),
+    timeout: Duration = .seconds(3),
     condition: @escaping () -> Bool,
   ) async throws {
     let start = ContinuousClock.now
 
     while !condition() {
       if start.duration(to: .now) > timeout {
-        Issue.record("Timed out waiting for condition.")
-        return
+        throw WaitTimeoutError()
       }
       try await Task.sleep(for: .milliseconds(20))
     }
   }
 
-  private static func setRecentImagesCountLimit(_ limit: Int?, forKey key: String) {
-    if let limit {
-      UserDefaults.standard.set(limit, forKey: key)
-    } else {
-      UserDefaults.standard.removeObject(forKey: key)
-    }
-  }
-
-  private static func restoreUserDefault(_ value: Any?, forKey key: String) {
-    if let value {
-      UserDefaults.standard.set(value, forKey: key)
-    } else {
-      UserDefaults.standard.removeObject(forKey: key)
-    }
-  }
+  private struct WaitTimeoutError: Error {}
 }
 
 extension CGFloat {

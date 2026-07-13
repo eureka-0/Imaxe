@@ -51,18 +51,12 @@
         }
       }
     },
-    "%lld image%@" : {
+    "^[%lld image](inflect: true)" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld image%2$@"
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld张图片"
+            "value" : "%lld 张图片"
           }
         }
       }
@@ -123,6 +117,9 @@
 
     },
     "Clear Menu" : {
+
+    },
+    "Clear Recent Images" : {
 
     },
     "Clear Search" : {
@@ -216,6 +213,9 @@
     "General" : {
 
     },
+    "Grid" : {
+
+    },
     "Height" : {
 
     },
@@ -234,6 +234,9 @@
     "Image" : {
 
     },
+    "Image File Deleted" : {
+
+    },
     "Image Info" : {
 
     },
@@ -246,7 +249,13 @@
     "Info" : {
 
     },
+    "Last Opened" : {
+
+    },
     "Light" : {
+
+    },
+    "List" : {
 
     },
     "Loading..." : {
@@ -259,6 +268,9 @@
 
     },
     "Medium" : {
+
+    },
+    "Modified" : {
 
     },
     "More" : {
@@ -303,6 +315,9 @@
     "Open Home Window" : {
 
     },
+    "Open image" : {
+
+    },
     "Open Image" : {
 
     },
@@ -316,6 +331,18 @@
 
     },
     "Order" : {
+
+    },
+    "Pan Down" : {
+
+    },
+    "Pan Left" : {
+
+    },
+    "Pan Right" : {
+
+    },
+    "Pan Up" : {
 
     },
     "Pin Window" : {
@@ -386,6 +413,9 @@
     "Show image info" : {
 
     },
+    "Size" : {
+
+    },
     "Sort" : {
 
     },
@@ -398,10 +428,16 @@
     "System" : {
 
     },
+    "The image file was deleted:\n%@" : {
+
+    },
     "Toggle window pinning" : {
 
     },
     "Top bar hide delay:" : {
+
+    },
+    "Unpin Window" : {
 
     },
     "Width" : {

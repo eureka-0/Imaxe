@@ -459,6 +459,9 @@ actor ImageLoader {
 
   private nonisolated static func validateImageContent(at url: URL) throws {
     if isSVG(url) {
+      guard let svgString = try? String(contentsOf: url, encoding: .utf8),
+            SVGDocumentSize(svgString: svgString).hasRootElement
+      else { throw ImageLoadingError.corruptImage(url) }
       return
     }
 
@@ -473,14 +476,24 @@ actor ImageLoader {
     _ imageSource: CGImageSource,
     at url: URL,
   ) throws {
+    guard CGImageSourceGetCount(imageSource) > 0 else {
+      throw ImageLoadingError.corruptImage(url)
+    }
+
     guard let properties = CGImageSourceCopyPropertiesAtIndex(
       imageSource,
       0,
       nil,
-    ) as? [CFString: Any],
-      let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-      let height = properties[kCGImagePropertyPixelHeight] as? NSNumber
-    else { return }
+    ) as? [CFString: Any]
+    else { throw ImageLoadingError.corruptImage(url) }
+
+    guard let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+          let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+          width.doubleValue.isFinite,
+          height.doubleValue.isFinite,
+          width.doubleValue > 0,
+          height.doubleValue > 0
+    else { throw ImageLoadingError.invalidDimensions(url) }
 
     if exceedsImageSizeLimit(NSSize(width: width.doubleValue, height: height.doubleValue)) {
       throw ImageLoadingError.sizeLimitExceeded(url)
@@ -504,7 +517,11 @@ actor ImageLoader {
       throw ImageLoadingError.corruptImage(url)
     }
 
-    return ImageContainer(url: url, nsImage: nsImage)
+    return ImageContainer(
+      url: url,
+      nsImage: nsImage,
+      animatedImageData: nsImage.animatedGIFRepresentation == nil ? nil : imageData,
+    )
   }
 
   private nonisolated static func loadSVG(from url: URL) throws -> ImageContainer {

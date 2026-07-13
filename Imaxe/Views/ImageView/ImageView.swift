@@ -12,6 +12,7 @@ struct ImageView: View {
   var onAlertAcknowledged: () -> Void = {}
 
   @Environment(\.openWindow) private var openWindow
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   @State private var isTopBarHovering = false
   @State private var isImageInfoPresented = false
@@ -34,7 +35,10 @@ struct ImageView: View {
 
           topBar
             .opacity(imageSession.showTopBar ? 1 : 0)
-            .animation(.easeInOut(duration: 0.2), value: imageSession.showTopBar)
+            .animation(
+              accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
+              value: imageSession.showTopBar,
+            )
             .allowsHitTesting(imageSession.showTopBar)
 
           HoverTrackingStrip { isHovering, window in
@@ -281,7 +285,10 @@ struct ImageView: View {
 
   private var pinWindowButton: some View {
     Button(action: imageSession.toggleWindowPinning) {
-      topBarIconLabel("Pin Window", systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin")
+      topBarIconLabel(
+        imageSession.isWindowPinned ? "Unpin Window" : "Pin Window",
+        systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin",
+      )
     }
     .buttonStyle(.borderedOnHover)
     .help(Text("Toggle window pinning"))

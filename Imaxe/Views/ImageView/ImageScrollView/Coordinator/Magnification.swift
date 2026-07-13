@@ -80,7 +80,7 @@ extension ImageScrollViewCoordinator {
     let targetZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
     let center = imageCenter(in: documentView)
 
-    if animated {
+    if animated, !shouldReduceMotion() {
       guard let zoomAnimation = prepareZoomAnimation(targetZoomScale, to: scrollView)
       else { return }
 
@@ -157,6 +157,24 @@ extension ImageScrollViewCoordinator {
   func clampScrollBounds(_ scrollView: NSScrollView) {
     let constrainedBounds = scrollView.contentView
       .constrainBoundsRect(scrollView.contentView.bounds)
+    scrollView.contentView.scroll(to: constrainedBounds.origin)
+    scrollView.reflectScrolledClipView(scrollView.contentView)
+  }
+
+  func panViewport(
+    _ scrollView: NSScrollView,
+    horizontal: CGFloat,
+    vertical: CGFloat,
+  ) {
+    cancelProgrammaticZoomAnimation()
+    let scale = max(scrollView.magnification, Constants.imageZoomScaleRange.lowerBound)
+    let proposedBounds = NSRect(
+      x: scrollView.contentView.bounds.origin.x + horizontal / scale,
+      y: scrollView.contentView.bounds.origin.y + vertical / scale,
+      width: scrollView.contentView.bounds.width,
+      height: scrollView.contentView.bounds.height,
+    )
+    let constrainedBounds = scrollView.contentView.constrainBoundsRect(proposedBounds)
     scrollView.contentView.scroll(to: constrainedBounds.origin)
     scrollView.reflectScrolledClipView(scrollView.contentView)
   }

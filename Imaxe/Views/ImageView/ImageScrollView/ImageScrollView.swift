@@ -207,6 +207,7 @@ struct ImageScrollView: NSViewRepresentable {
     var onSmartMagnification: (() -> Void)?
     var onDoubleClick: (() -> Void)?
     private var receivedMagnifyEvent = false
+    private var isPanning = false
 
     override var intrinsicContentSize: NSSize {
       NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
@@ -229,12 +230,18 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     override func mouseDown(with event: NSEvent) {
-      guard event.clickCount == 2 else {
+      if event.clickCount == 2 {
+        onDoubleClick?()
+        return
+      }
+
+      guard canPanDocument else {
         super.mouseDown(with: event)
         return
       }
 
-      onDoubleClick?()
+      isPanning = true
+      NSCursor.closedHand.set()
     }
 
     override func endGesture(with event: NSEvent) {
@@ -246,7 +253,52 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     override func mouseDragged(with event: NSEvent) {
-      window?.performDrag(with: event)
+      guard isPanning else {
+        window?.performDrag(with: event)
+        return
+      }
+
+      panDocument(by: NSSize(width: event.deltaX, height: event.deltaY))
+    }
+
+    override func mouseUp(with event: NSEvent) {
+      if isPanning {
+        isPanning = false
+        NSCursor.openHand.set()
+        return
+      }
+
+      super.mouseUp(with: event)
+    }
+
+    override func resetCursorRects() {
+      super.resetCursorRects()
+      if canPanDocument {
+        addCursorRect(bounds, cursor: .openHand)
+      }
+    }
+
+    var canPanDocument: Bool {
+      guard let documentView else { return false }
+
+      let displayedSize = NSSize(
+        width: documentView.bounds.width * magnification,
+        height: documentView.bounds.height * magnification,
+      )
+      return displayedSize.width > contentSize.width || displayedSize.height > contentSize.height
+    }
+
+    func panDocument(by mouseDelta: NSSize) {
+      let scale = max(magnification, Constants.imageZoomScaleRange.lowerBound)
+      let proposedBounds = NSRect(
+        x: contentView.bounds.origin.x - mouseDelta.width / scale,
+        y: contentView.bounds.origin.y + mouseDelta.height / scale,
+        width: contentView.bounds.width,
+        height: contentView.bounds.height,
+      )
+      let constrainedBounds = contentView.constrainBoundsRect(proposedBounds)
+      contentView.scroll(to: constrainedBounds.origin)
+      reflectScrolledClipView(contentView)
     }
   }
 

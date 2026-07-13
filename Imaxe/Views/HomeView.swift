@@ -98,6 +98,9 @@ struct HomeView: View {
     }
     .focusedSceneValue(viewModel)
     .focusedSceneValue(\.recentImages, recentImages)
+    .task(id: recentImages.map(\.path)) {
+      await viewModel.prefetchRecentImages(recentImages)
+    }
   }
 
   private var homeHero: some View {
@@ -251,31 +254,41 @@ struct HomeView: View {
     .onTapGesture(count: 2) {
       viewModel.openRecentImage(item)
     }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(Text(item.fileName))
+    .accessibilityHint(Text("Open image"))
+    .accessibilityAction {
+      viewModel.openRecentImage(item)
+    }
   }
 
   private func recentImageGridItem(
     _ item: RecentImage,
     state: ImageCollectionItemState,
   ) -> some View {
-    ImageThumbnailView(url: item.url, cacheKey: item.thumbnailCacheKey)
-      .overlay(alignment: .bottom) {
-        if state.isHovered || !state.searchText.isEmpty {
-          Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
-            .font(.system(size: 10, weight: .light))
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .padding(.bottom, 2)
+    Button {
+      viewModel.openRecentImage(item)
+    } label: {
+      ImageThumbnailView(url: item.url, cacheKey: item.thumbnailCacheKey)
+        .overlay(alignment: .bottom) {
+          if state.isHovered || !state.searchText.isEmpty {
+            Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
+              .font(.system(size: 10, weight: .light))
+              .foregroundStyle(.primary)
+              .lineLimit(1)
+              .truncationMode(.middle)
+              .padding(.horizontal, 4)
+              .padding(.vertical, 1)
+              .background(.regularMaterial)
+              .clipShape(RoundedRectangle(cornerRadius: 3))
+              .padding(.bottom, 2)
+          }
         }
-      }
-      .onTapGesture(count: 1) {
-        viewModel.openRecentImage(item)
-      }
-      .help(item.path)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(Text(item.fileName))
+    .accessibilityHint(Text("Open image"))
+    .help(item.path)
   }
 
   @ViewBuilder
@@ -503,6 +516,50 @@ final class HomeViewModel {
     } catch {
       alertTitle = "Failed to Load Image from Pasteboard"
       alertMessage = error.localizedDescription
+    }
+  }
+
+  func prefetchRecentImages(_ recentImages: [RecentImage]) async {
+    var didChange = false
+
+    for recentImage in recentImages {
+      guard !Task.isCancelled else { return }
+
+      let path = recentImage.path
+      let url = recentImage.url
+      let existingThumbnailCacheKey = recentImage.thumbnailCacheKey
+      async let fileSnapshot = Self.loadFileSnapshot(for: url)
+      async let thumbnailCacheKey = ImageThumbnailCache.thumbnailKey(
+        for: url,
+        preferredKey: existingThumbnailCacheKey,
+      )
+      let (snapshot, key) = await (fileSnapshot, thumbnailCacheKey)
+
+      guard !Task.isCancelled else { return }
+      guard recentImage.path == path else { continue }
+      didChange = recentImage.updatePrefetchedValues(
+        fileSnapshot: snapshot,
+        thumbnailCacheKey: key,
+      ) || didChange
+    }
+
+    guard didChange, let modelContext else { return }
+    do {
+      try modelContext.save()
+    } catch {
+      alertTitle = "Failed to Update Recent Images"
+      alertMessage = error.localizedDescription
+    }
+  }
+
+  private static func loadFileSnapshot(for url: URL) async -> FileSnapshot? {
+    let task = Task.detached(priority: .utility) {
+      FileSnapshot(url: url)
+    }
+    return await withTaskCancellationHandler {
+      await task.value
+    } onCancel: {
+      task.cancel()
     }
   }
 }

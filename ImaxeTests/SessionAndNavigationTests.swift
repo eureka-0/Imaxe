@@ -65,6 +65,32 @@ struct SessionAndNavigationTests {
     #expect(imageURLs.map(\.lastPathComponent) == ["a.png", "b.png"])
   }
 
+  @Test func `folder navigator keeps current image positioned when scan omits it`() {
+    let directory = URL(fileURLWithPath: "/tmp/imaxe-positioned-navigation")
+    let firstURL = directory.appending(path: "a.png")
+    let currentURL = directory.appending(path: "b.png")
+
+    let navigator = FolderNavigator(
+      for: currentURL,
+      enableLoopBrowsing: false,
+      imageURLs: [firstURL],
+    )
+
+    #expect(navigator.imageURLs == [firstURL, currentURL])
+    #expect(navigator.currentIndex == 1)
+    #expect(navigator.positionDescription == "2/2")
+  }
+
+  @Test func `folder scan propagates cancellation`() async {
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let task = Task {
+      await FolderNavigator.imageURLs(for: url)
+    }
+    task.cancel()
+
+    #expect(await task.value == nil)
+  }
+
   @Test func `image file watcher reports stable file change`() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-watched-image-\(UUID().uuidString).png")
@@ -72,9 +98,9 @@ struct SessionAndNavigationTests {
     let changedImageData = try TestSupport.pngData(width: 12, height: 24)
 
     var watcher: ImageFileWatcher?
-    let didChange = await withCheckedContinuation { continuation in
-      watcher = ImageFileWatcher(url: url) {
-        continuation.resume(returning: true)
+    let event = await withCheckedContinuation { continuation in
+      watcher = ImageFileWatcher(url: url) { event in
+        continuation.resume(returning: event)
       }
 
       DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(100)) {
@@ -86,7 +112,41 @@ struct SessionAndNavigationTests {
       }
     }
 
-    #expect(didChange)
+    #expect(event == .modified)
+    _ = watcher
+  }
+
+  @Test func `image file watcher distinguishes replacement deletion and recreation`() async throws {
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-file-watcher-events")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appending(path: "watched.png")
+    let replacementURL = directory.appending(path: "replacement.png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+
+    var events: [ImageFileWatcher.Event] = []
+    let watcher = ImageFileWatcher(url: url) { event in
+      events.append(event)
+    }
+
+    try TestSupport.pngData(width: 12, height: 24).write(to: replacementURL)
+    _ = try FileManager.default.replaceItemAt(url, withItemAt: replacementURL)
+    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+      events.contains(.replaced)
+    }
+
+    try FileManager.default.removeItem(at: url)
+    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+      events.contains(.deleted)
+    }
+
+    try TestSupport.pngData(width: 14, height: 28).write(to: url)
+    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+      events.contains(.recreated)
+    }
+
+    #expect(events.filter { $0 == .replaced }.count == 1)
+    #expect(events.filter { $0 == .deleted }.count == 1)
+    #expect(events.filter { $0 == .recreated }.count == 1)
     _ = watcher
   }
 
@@ -145,21 +205,26 @@ struct SessionAndNavigationTests {
     try TestSupport.pngData(width: 20, height: 20).write(to: secondURL)
 
     let session = ImageSession()
+    let loader = ImageLoader.shared
     session.loadImageInfo = { url, requestID in
-      try await Task.sleep(for: .milliseconds(150))
-      return try await ImageLoader.shared.loadInfo(from: url, requestID: requestID)
+      if url == firstURL {
+        try await Task.sleep(for: .seconds(5))
+      }
+      return try await loader.loadInfo(from: url, requestID: requestID)
     }
     session.loadImageContainer = { url, requestID in
-      try await Task.sleep(for: .milliseconds(150))
-      return try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
+      if url == firstURL {
+        try await Task.sleep(for: .seconds(5))
+      }
+      return try await loader.loadImage(from: url, requestID: requestID)
     }
+    session.loadFolderImageURLs = { [$0] }
 
     session.loadImage(from: firstURL, addToRecent: false)
-    try await TestSupport.waitUntil { session.loadingElapsedTime > 0 }
+    try await TestSupport.waitUntil { session.hasActiveLoadingTimer }
 
     session.loadImage(from: secondURL, addToRecent: false)
-    try await TestSupport.waitUntil { !session.isLoading }
-    try await Task.sleep(for: .milliseconds(100))
+    try await TestSupport.waitUntil { session.displayedURL == secondURL && !session.isLoading }
 
     #expect(session.loadingElapsedTime == 0)
   }
@@ -197,6 +262,7 @@ struct SessionAndNavigationTests {
     }
 
     let session = ImageSession()
+    configureImmediateLoading(session)
     session.loadImage(from: temporaryURL, addToRecent: false, temporaryURL: temporaryURL)
     try await TestSupport.waitUntil { !session.isLoading }
 
@@ -215,6 +281,7 @@ struct SessionAndNavigationTests {
     defer { try? FileManager.default.removeItem(at: temporaryURL) }
 
     let session = ImageSession()
+    configureImmediateLoading(session)
     session.loadImage(from: temporaryURL, addToRecent: false, temporaryURL: temporaryURL)
     try await TestSupport.waitUntil { !session.isLoading }
 
@@ -230,6 +297,13 @@ struct SessionAndNavigationTests {
     var removedPath: String?
     var didFail = false
     session.removeRecentImage = { removedPath = $0 }
+    session.loadImageInfo = { _, _ in
+      throw ImageLoadingError.fileNotFound(missingURL)
+    }
+    session.loadImageContainer = { _, _ in
+      throw ImageLoadingError.fileNotFound(missingURL)
+    }
+    session.loadFolderImageURLs = { [$0] }
 
     session.loadImage(
       from: missingURL,
@@ -265,7 +339,8 @@ struct SessionAndNavigationTests {
   @Test func `dismissing an alert clears its presentation state`() {
     let session = ImageSession()
 
-    session.presentAlert(title: "Test Alert", message: "Test Message")
+    session.alertTitle = "Test Alert"
+    session.alertMessage = "Test Message"
 
     #expect(session.isAlertPresented)
     #expect(session.alertTitle == "Test Alert")
@@ -274,7 +349,21 @@ struct SessionAndNavigationTests {
     session.isAlertPresented = false
 
     #expect(!session.isAlertPresented)
-    #expect(session.alertTitle.isEmpty)
+    #expect(session.alertTitle == "")
     #expect(session.alertMessage == nil)
+  }
+
+  private func configureImmediateLoading(_ session: ImageSession) {
+    let imageContainer = ImageContainer(
+      url: URL(fileURLWithPath: "/tmp/imaxe-test-image.png"),
+      nsImage: TestSupport.bitmapImage(),
+    )
+    session.loadImageInfo = { url, _ in
+      ImageInfo(url: url)
+    }
+    session.loadImageContainer = { _, _ in
+      imageContainer
+    }
+    session.loadFolderImageURLs = { [$0] }
   }
 }

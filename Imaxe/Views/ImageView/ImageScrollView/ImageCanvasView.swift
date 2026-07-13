@@ -11,8 +11,7 @@ final class ImageCanvasView: NSView {
   var imageContainer: ImageContainer {
     didSet {
       if oldValue.nsImage !== imageContainer.nsImage {
-        stopGIFAnimation()
-        currentGIFFrame = 0
+        resetGIFAnimation()
       }
       updateCanvasSize()
       needsDisplay = true
@@ -22,6 +21,7 @@ final class ImageCanvasView: NSView {
   var imageInfo: ImageInfo {
     didSet {
       updateCanvasSize()
+      updateAccessibility()
       needsDisplay = true
     }
   }
@@ -29,8 +29,12 @@ final class ImageCanvasView: NSView {
   private var lastBackingScale: CGFloat = 2.0
   private var gifTimer: Timer?
   private var gifBitmapRep: NSBitmapImageRep?
+  private var gifImage: NSImage?
   private var currentGIFFrame = 0
   private var userDefaultsObservers: [NSKeyValueObservation] = []
+  private var appObservers: [NSObjectProtocol] = []
+  private var windowObservers: [NSObjectProtocol] = []
+  private var accessibilityObserver: NSObjectProtocol?
 
   private var imageActualSizeStrategy: ImageActualSizeStrategy {
     UserDefaults.standard.imageActualSizeStrategyValue
@@ -50,6 +54,8 @@ final class ImageCanvasView: NSView {
     super.init(frame: NSRect())
     updateCanvasSize()
     setupObservation()
+    setupAnimationObservation()
+    updateAccessibility()
   }
 
   @available(*, unavailable)
@@ -84,9 +90,48 @@ final class ImageCanvasView: NSView {
     userDefaultsObservers = [actualSizeObservation, interpolationObservation]
   }
 
+  private func setupAnimationObservation() {
+    let notificationCenter = NotificationCenter.default
+    appObservers = [
+      notificationCenter.addObserver(
+        forName: NSApplication.didBecomeActiveNotification,
+        object: NSApp,
+        queue: .main,
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.updateGIFAnimationPlayback()
+        }
+      },
+      notificationCenter.addObserver(
+        forName: NSApplication.didResignActiveNotification,
+        object: NSApp,
+        queue: .main,
+      ) { [weak self] _ in
+        Task { @MainActor [weak self] in
+          self?.updateGIFAnimationPlayback()
+        }
+      },
+    ]
+
+    accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+      forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+      object: NSWorkspace.shared,
+      queue: .main,
+    ) { [weak self] _ in
+      Task { @MainActor [weak self] in
+        self?.updateGIFAnimationPlayback()
+      }
+    }
+  }
+
   deinit {
     userDefaultsObservers.forEach { $0.invalidate() }
     MainActor.assumeIsolated {
+      appObservers.forEach(NotificationCenter.default.removeObserver)
+      windowObservers.forEach(NotificationCenter.default.removeObserver)
+      if let accessibilityObserver {
+        NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver)
+      }
       gifTimer?.invalidate()
     }
   }
@@ -94,11 +139,42 @@ final class ImageCanvasView: NSView {
   override func viewDidMoveToWindow() {
     super.viewDidMoveToWindow()
 
-    if window == nil {
-      stopGIFAnimation()
-    } else {
+    windowObservers.forEach(NotificationCenter.default.removeObserver)
+    windowObservers = []
+    if let window {
+      let notificationCenter = NotificationCenter.default
+      windowObservers = [
+        notificationCenter.addObserver(
+          forName: NSWindow.didChangeOcclusionStateNotification,
+          object: window,
+          queue: .main,
+        ) { [weak self] _ in
+          Task { @MainActor [weak self] in
+            self?.updateGIFAnimationPlayback()
+          }
+        },
+        notificationCenter.addObserver(
+          forName: NSWindow.didMiniaturizeNotification,
+          object: window,
+          queue: .main,
+        ) { [weak self] _ in
+          Task { @MainActor [weak self] in
+            self?.updateGIFAnimationPlayback()
+          }
+        },
+        notificationCenter.addObserver(
+          forName: NSWindow.didDeminiaturizeNotification,
+          object: window,
+          queue: .main,
+        ) { [weak self] _ in
+          Task { @MainActor [weak self] in
+            self?.updateGIFAnimationPlayback()
+          }
+        },
+      ]
       updateCanvasSize()
     }
+    updateGIFAnimationPlayback()
   }
 
   override func viewDidChangeBackingProperties() {
@@ -163,7 +239,7 @@ final class ImageCanvasView: NSView {
     dirtyRect.fill()
 
     guard let currentContext = NSGraphicsContext.current else {
-      startGIFAnimationIfNeeded()
+      updateGIFAnimationPlayback()
       drawNSImage(hints: nil)
       return
     }
@@ -178,16 +254,17 @@ final class ImageCanvasView: NSView {
     currentContext.imageInterpolation = interpolation
     currentContext.cgContext.setShouldAntialias(false)
     currentContext.cgContext.interpolationQuality = cgInterpolationQuality
-    startGIFAnimationIfNeeded()
+    updateGIFAnimationPlayback()
     drawNSImage(hints: hints)
     NSGraphicsContext.restoreGraphicsState()
     currentContext.imageInterpolation = previousInterpolation
   }
 
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
-    imageContainer.nsImage.draw(
+    let image = gifImage ?? imageContainer.nsImage
+    image.draw(
       in: bounds,
-      from: NSRect(origin: .zero, size: imageContainer.nsImage.size),
+      from: NSRect(origin: .zero, size: image.size),
       operation: .copy,
       fraction: 1.0,
       respectFlipped: true,
@@ -195,30 +272,62 @@ final class ImageCanvasView: NSView {
     )
   }
 
-  private func startGIFAnimationIfNeeded() {
-    guard window != nil, gifTimer == nil else { return }
+  private var isGIFAnimationPlaybackEligible: Bool {
+    guard let window else { return false }
 
-    guard let bitmapRep = imageContainer.nsImage.animatedGIFRepresentation else {
-      stopGIFAnimation()
+    return NSApp.isActive
+      && window.isVisible
+      && window.occlusionState.contains(.visible)
+      && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
+
+  private func updateGIFAnimationPlayback() {
+    guard isGIFAnimationPlaybackEligible else {
+      pauseGIFAnimation()
       return
     }
 
-    gifBitmapRep = bitmapRep
-    currentGIFFrame = bitmapRep.currentGIFFrame ?? 0
+    guard gifTimer == nil else { return }
+    guard let bitmapRep = prepareGIFRepresentationIfNeeded() else {
+      resetGIFAnimation()
+      return
+    }
+
     scheduleNextGIFFrame(for: bitmapRep)
   }
 
-  private func stopGIFAnimation() {
+  private func prepareGIFRepresentationIfNeeded() -> NSBitmapImageRep? {
+    if let gifBitmapRep {
+      return gifBitmapRep
+    }
+
+    guard let bitmapRep = imageContainer.makeAnimatedBitmapRepresentation() else { return nil }
+
+    let image = NSImage(size: imageContainer.nsImage.size)
+    image.addRepresentation(bitmapRep)
+    gifBitmapRep = bitmapRep
+    gifImage = image
+    currentGIFFrame = bitmapRep.currentGIFFrame ?? 0
+    return bitmapRep
+  }
+
+  private func pauseGIFAnimation() {
     gifTimer?.invalidate()
     gifTimer = nil
+  }
+
+  private func resetGIFAnimation() {
+    pauseGIFAnimation()
     gifBitmapRep = nil
+    gifImage = nil
+    currentGIFFrame = 0
   }
 
   private func scheduleNextGIFFrame(for bitmapRep: NSBitmapImageRep) {
     guard let frameCount = bitmapRep.gifFrameCount,
           frameCount > 1
     else {
-      stopGIFAnimation()
+      resetGIFAnimation()
       return
     }
 
@@ -236,11 +345,15 @@ final class ImageCanvasView: NSView {
   }
 
   @objc private func advanceGIFFrame(_: Timer) {
+    guard isGIFAnimationPlaybackEligible else {
+      pauseGIFAnimation()
+      return
+    }
     guard let bitmapRep = gifBitmapRep else { return }
     guard let frameCount = bitmapRep.gifFrameCount,
           frameCount > 1
     else {
-      stopGIFAnimation()
+      resetGIFAnimation()
       return
     }
 
@@ -249,5 +362,11 @@ final class ImageCanvasView: NSView {
     needsDisplay = true
 
     scheduleNextGIFFrame(for: bitmapRep)
+  }
+
+  private func updateAccessibility() {
+    setAccessibilityElement(true)
+    setAccessibilityRole(.image)
+    setAccessibilityLabel(imageInfo.fileName)
   }
 }

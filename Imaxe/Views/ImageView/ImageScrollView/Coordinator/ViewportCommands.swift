@@ -75,6 +75,14 @@ extension ImageScrollViewCoordinator: ImageViewportCommandHandling {
         to: scrollView,
         animated: true,
       )
+
+    case let .pan(horizontal, vertical):
+      guard horizontal.isFinite, vertical.isFinite else { return }
+      clearFitToScreenRestoreState()
+      alwaysFitToWindow = false
+      magnificationState.pendingUserAlwaysFitDisable = false
+      onAlwaysFitToWindowChange(false)
+      panViewport(scrollView, horizontal: horizontal, vertical: vertical)
     }
 
     if !magnificationState.isLiveMagnifying {

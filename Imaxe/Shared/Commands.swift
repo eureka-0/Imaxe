@@ -154,6 +154,32 @@ struct ViewCommands: Commands {
       .disabled(imageSession?.currentImage == nil)
 
       Divider()
+
+      Button("Pan Left") {
+        imageSession?.pan(horizontal: -Constants.keyboardPanDistance, vertical: 0)
+      }
+      .keyboardShortcut(.leftArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Button("Pan Right") {
+        imageSession?.pan(horizontal: Constants.keyboardPanDistance, vertical: 0)
+      }
+      .keyboardShortcut(.rightArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Button("Pan Up") {
+        imageSession?.pan(horizontal: 0, vertical: -Constants.keyboardPanDistance)
+      }
+      .keyboardShortcut(.upArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Button("Pan Down") {
+        imageSession?.pan(horizontal: 0, vertical: Constants.keyboardPanDistance)
+      }
+      .keyboardShortcut(.downArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Divider()
     }
   }
 }

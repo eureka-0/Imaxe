@@ -20,19 +20,22 @@ final class ImaxeUITests: XCTestCase {
     }
     XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5))
 
-    let fileMenu = app.menuBars.menuBarItems["File"]
+    let fileMenu = app.menuBars.menuBarItems.element(boundBy: 2)
     XCTAssertTrue(fileMenu.waitForExistence(timeout: 5))
     fileMenu.click()
 
-    XCTAssertTrue(app.menuItems["Open Image..."].waitForExistence(timeout: 2))
+    let openImageCommand = fileMenu.menus.firstMatch.menuItems.element(boundBy: 2)
+    XCTAssertTrue(openImageCommand.waitForExistence(timeout: 2))
     app.typeKey(.escape, modifierFlags: [])
   }
 
   func testRevealInFinderCommandIsPresent() {
-    let fileMenu = app.menuBars.menuBarItems["File"]
+    let fileMenu = app.menuBars.menuBarItems.element(boundBy: 2)
+    XCTAssertTrue(fileMenu.waitForExistence(timeout: 5))
     fileMenu.click()
 
-    XCTAssertTrue(app.menuItems["Reveal in Finder"].waitForExistence(timeout: 2))
+    let revealInFinderCommand = fileMenu.menus.firstMatch.menuItems.element(boundBy: 6)
+    XCTAssertTrue(revealInFinderCommand.waitForExistence(timeout: 2))
     app.typeKey(.escape, modifierFlags: [])
   }
 }

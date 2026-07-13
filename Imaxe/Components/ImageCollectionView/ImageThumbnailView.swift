@@ -44,16 +44,17 @@ struct ImageThumbnailView: View {
     }
     .task(id: cacheKey ?? url.absoluteString) {
       thumbnailImage = nil
-      let key: String? = if let cacheKey, ImageThumbnailCache.isValidThumbnail(for: cacheKey) {
-        cacheKey
-      } else {
-        await ImageThumbnailCache.ensureThumbnail(for: url)
-      }
+      let key = await ImageThumbnailCache.thumbnailKey(for: url, preferredKey: cacheKey)
 
       guard let key,
             !Task.isCancelled
       else { return }
-      thumbnailImage = NSImage(contentsOf: ImageThumbnailCache.thumbnailURL(for: key))
+      let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: key)
+      let image = await Task.detached(priority: .utility) {
+        NSImage(contentsOf: thumbnailURL)
+      }.value
+      guard !Task.isCancelled else { return }
+      thumbnailImage = image
     }
   }
 
