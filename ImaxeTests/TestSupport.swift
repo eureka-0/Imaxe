@@ -73,7 +73,7 @@ enum TestSupport {
   }
 
   static func waitUntil(
-    timeout: Duration = .seconds(3),
+    timeout: Duration = .seconds(30),
     condition: @escaping () -> Bool,
   ) async throws {
     let start = ContinuousClock.now

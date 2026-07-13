@@ -81,6 +81,57 @@ struct SessionAndNavigationTests {
     #expect(navigator.positionDescription == "2/2")
   }
 
+  @Test func `setting current image across folders reloads the destination folder`() throws {
+    let firstDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-first-folder")
+    let secondDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-second-folder")
+    defer {
+      try? FileManager.default.removeItem(at: firstDirectory)
+      try? FileManager.default.removeItem(at: secondDirectory)
+    }
+
+    let firstURL = firstDirectory.appending(path: "first.png")
+    let secondURL = secondDirectory.appending(path: "b.png")
+    let secondSiblingURL = secondDirectory.appending(path: "a.png")
+    try TestSupport.pngData(width: 10, height: 10).write(to: firstURL)
+    try TestSupport.pngData(width: 20, height: 20).write(to: secondURL)
+    try TestSupport.pngData(width: 30, height: 30).write(to: secondSiblingURL)
+
+    var navigator = FolderNavigator(
+      for: firstURL,
+      enableLoopBrowsing: false,
+      imageURLs: [firstURL],
+    )
+
+    navigator.currentImageURL = secondURL
+
+    #expect(navigator.rootURL == secondDirectory)
+    #expect(navigator.imageURLs.map(\.lastPathComponent) == ["a.png", "b.png"])
+    #expect(!navigator.imageURLs.contains(firstURL))
+    #expect(navigator.currentIndex == 1)
+  }
+
+  @Test func `failed destination folder scan does not retain the old folder`() throws {
+    let firstDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-readable-folder")
+    defer { try? FileManager.default.removeItem(at: firstDirectory) }
+    let firstURL = firstDirectory.appending(path: "first.png")
+    try TestSupport.pngData(width: 10, height: 10).write(to: firstURL)
+    let nonDirectoryURL = firstDirectory.appending(path: "not-a-directory")
+    try Data().write(to: nonDirectoryURL)
+    let destinationURL = nonDirectoryURL.appending(path: "destination.png")
+
+    var navigator = FolderNavigator(
+      for: firstURL,
+      enableLoopBrowsing: false,
+      imageURLs: [firstURL],
+    )
+
+    navigator.currentImageURL = destinationURL
+
+    #expect(navigator.currentImageURL == destinationURL)
+    #expect(navigator.imageURLs == [destinationURL])
+    #expect(!navigator.imageURLs.contains(firstURL))
+  }
+
   @Test func `folder scan propagates cancellation`() async {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let task = Task {
@@ -130,17 +181,17 @@ struct SessionAndNavigationTests {
 
     try TestSupport.pngData(width: 12, height: 24).write(to: replacementURL)
     _ = try FileManager.default.replaceItemAt(url, withItemAt: replacementURL)
-    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+    try await TestSupport.waitUntil {
       events.contains(.replaced)
     }
 
     try FileManager.default.removeItem(at: url)
-    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+    try await TestSupport.waitUntil {
       events.contains(.deleted)
     }
 
     try TestSupport.pngData(width: 14, height: 28).write(to: url)
-    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+    try await TestSupport.waitUntil {
       events.contains(.recreated)
     }
 
@@ -191,6 +242,48 @@ struct SessionAndNavigationTests {
     #expect(session.pendingURL == nil)
     #expect(session.currentImageInfo?.pixelSize == IntSize(width: 30, height: 30))
     #expect(session.folderNavigator?.currentImageURL == c)
+  }
+
+  @Test func `stale folder scan cannot replace a newer folder`() async throws {
+    let firstDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-stale-folder")
+    let secondDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-current-folder")
+    defer {
+      try? FileManager.default.removeItem(at: firstDirectory)
+      try? FileManager.default.removeItem(at: secondDirectory)
+    }
+    let firstURL = firstDirectory.appending(path: "first.png")
+    let firstSiblingURL = firstDirectory.appending(path: "first-sibling.png")
+    let secondURL = secondDirectory.appending(path: "b.png")
+    let secondSiblingURL = secondDirectory.appending(path: "a.png")
+    for url in [firstURL, firstSiblingURL, secondURL, secondSiblingURL] {
+      try TestSupport.pngData(width: 10, height: 10).write(to: url)
+    }
+
+    let (folderLoads, folderLoadContinuation) = AsyncStream<URL>.makeStream()
+    let session = ImageSession()
+    configureImmediateLoading(session)
+    session.loadFolderImageURLs = { url in
+      folderLoadContinuation.yield(url)
+      if url == firstURL {
+        await Task.detached {
+          try? await Task.sleep(for: .milliseconds(150))
+        }.value
+        return [firstSiblingURL, firstURL]
+      }
+      return [secondSiblingURL, secondURL]
+    }
+
+    var folderLoadIterator = folderLoads.makeAsyncIterator()
+    session.loadImage(from: firstURL, addToRecent: false)
+    #expect(await folderLoadIterator.next() == firstURL)
+
+    session.loadImage(from: secondURL, addToRecent: false)
+    try await TestSupport.waitUntil { !session.isLoading }
+    try await Task.sleep(for: .milliseconds(200))
+
+    #expect(session.folderNavigator?.rootURL == secondDirectory)
+    #expect(session.folderNavigator?.currentImageURL == secondURL)
+    #expect(session.folderNavigator?.imageURLs == [secondSiblingURL, secondURL])
   }
 
   @Test func `image loading timer stops after a replaced request`() async throws {

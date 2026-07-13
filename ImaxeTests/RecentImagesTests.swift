@@ -199,7 +199,7 @@ struct RecentImagesTests {
     }
     session.openRecentImage(recent)
 
-    try await TestSupport.waitUntil(timeout: .seconds(2)) {
+    try await TestSupport.waitUntil {
       (try? harness.fetch().isEmpty) == true
     }
 

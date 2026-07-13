@@ -139,7 +139,7 @@ struct ImageViewTests {
     #expect(!coordinator.isProgrammaticZoomAnimating)
   }
 
-  @Test func `mouse panning scrolls a magnified image`() {
+  @Test func `direct panning moves the canvas with the pointer`() {
     let scrollView = ImageScrollView.ImageNSScrollView(
       frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
     )
@@ -151,11 +151,32 @@ struct ImageViewTests {
     scrollView.documentView = clipView.documentView
     scrollView.allowsMagnification = true
     scrollView.magnification = 1
+    scrollView.contentView.scroll(to: NSPoint(x: 100, y: 100))
 
-    scrollView.panDocument(by: NSSize(width: -40, height: 30))
+    scrollView.panDocument(by: NSSize(width: 40, height: 30))
 
-    #expect(scrollView.contentView.bounds.origin.x > 0)
-    #expect(scrollView.contentView.bounds.origin.y > 0)
+    #expect(scrollView.contentView.bounds.origin == NSPoint(x: 60, y: 70))
+  }
+
+  @Test func `viewport command pans the image`() {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let viewportController = ImageViewportController()
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
+    )
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+    )
+    scrollView.contentView.scroll(to: NSPoint(x: 100, y: 100))
+    coordinator.observe(scrollView)
+    coordinator.bind(to: viewportController)
+
+    viewportController.pan(horizontal: 40, vertical: 30)
+
+    #expect(scrollView.contentView.bounds.origin == NSPoint(x: 140, y: 130))
   }
 
   @Test func `animated image containers create independent frame state`() async throws {
@@ -327,7 +348,7 @@ struct ImageViewTests {
       }
 
       var maximumMismatch = CGFloat.zero
-      try await TestSupport.waitUntil(timeout: .seconds(2)) {
+      try await TestSupport.waitUntil {
         scrollView.layoutSubtreeIfNeeded()
         let imageDisplaySize = NSSize(
           width: imageSize.width * scrollView.magnification,

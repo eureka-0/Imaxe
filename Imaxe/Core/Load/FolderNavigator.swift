@@ -11,8 +11,7 @@ nonisolated struct FolderNavigator {
   var currentImageURL: URL {
     didSet {
       if !imageURLs.contains(currentImageURL) {
-        imageURLs.append(currentImageURL)
-        imageURLs.sort(by: Self.compareImageURLs)
+        reload()
       }
     }
   }

@@ -101,7 +101,6 @@ xcodebuild_arguments=(
   -derivedDataPath "${DERIVED_DATA_DIRECTORY}"
   -enableCodeCoverage "${coverage_enabled}"
   -resultBundlePath "${RESULT_BUNDLE}"
-  -quiet
 )
 
 case "$test_mode" in

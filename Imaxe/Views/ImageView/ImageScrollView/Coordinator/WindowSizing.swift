@@ -113,12 +113,10 @@ extension ImageScrollViewCoordinator {
     clearFitToScreenRestoreState()
     windowSizingState.suppressAlwaysFitForProgrammaticResize = true
     windowSizingState.suppressedAlwaysFitViewportSize = nil
-    let restoreScreen = NSScreen.bestMatch(for: restoreState.windowFrame) ?? window.screen
     applyWindowFrame(
       scrollView,
       window: window,
-      frame: restoreScreen.map { restoreState.windowFrame.constrained(to: $0.visibleFrame) }
-        ?? restoreState.windowFrame,
+      frame: restoreState.windowFrame,
       simultaneousZoomScale: restoreState.zoomScale,
       targetImageFittedToViewport: restoreState.imageFittedToViewport,
     )
