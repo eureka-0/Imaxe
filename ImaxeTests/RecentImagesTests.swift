@@ -227,7 +227,7 @@ struct RecentImagesTests {
 
       #expect(try context.fetch(descriptor).isEmpty)
       #expect(!FileManager.default.fileExists(atPath: thumbnailURL.filePath))
-      #expect(session.alert?.title == "Recent Image Removed")
+      #expect(session.alertTitle == "Recent Image Removed")
     }
   }
 

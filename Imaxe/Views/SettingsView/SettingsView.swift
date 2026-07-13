@@ -7,11 +7,6 @@
 
 import SwiftUI
 
-private struct CacheClearError: Identifiable {
-  let id = UUID()
-  let message: String
-}
-
 struct SettingsView: View {
   var body: some View {
     TabView {
@@ -47,7 +42,17 @@ struct GeneralSettingsView: View {
   private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
 
   @State private var totalCacheSize: Int = ImageThumbnailCache.totalCacheSizeInBytes()
-  @State private var cacheClearError: CacheClearError?
+  @State private var cacheClearErrorMessage: String?
+
+  private var isCacheClearErrorPresented: Binding<Bool> {
+    Binding {
+      cacheClearErrorMessage != nil
+    } set: { isPresented in
+      if !isPresented {
+        cacheClearErrorMessage = nil
+      }
+    }
+  }
 
   var body: some View {
     Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 20) {
@@ -160,7 +165,7 @@ struct GeneralSettingsView: View {
                     category: .persistence,
                   )
                 #endif
-                cacheClearError = CacheClearError(message: error.localizedDescription)
+                cacheClearErrorMessage = error.localizedDescription
               }
             } label: {
               Label("Clear", systemImage: "trash")
@@ -184,11 +189,14 @@ struct GeneralSettingsView: View {
     ) { _ in
       refreshCacheSize()
     }
-    .alert(item: $cacheClearError) { error in
-      Alert(
-        title: Text("Could Not Clear Thumbnail Cache"),
-        message: Text(error.message),
-      )
+    .alert(
+      "Could Not Clear Thumbnail Cache",
+      isPresented: isCacheClearErrorPresented,
+      presenting: cacheClearErrorMessage,
+    ) { _ in
+      Button("OK") {}
+    } message: { message in
+      Text(message)
     }
   }
 

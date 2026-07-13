@@ -156,6 +156,42 @@
         }
       }
     },
+    "Failed to Clear Recent Images" : {
+
+    },
+    "Failed to Load Image" : {
+
+    },
+    "Failed to Load Image from Pasteboard" : {
+
+    },
+    "Failed to Move Item to Trash" : {
+
+    },
+    "Failed to Open Image" : {
+
+    },
+    "Failed to Open Images" : {
+
+    },
+    "Failed to Open Recent Image" : {
+
+    },
+    "Failed to Refresh Recent Images" : {
+
+    },
+    "Failed to Remove Item" : {
+
+    },
+    "Failed to Remove Recent Image" : {
+
+    },
+    "Failed to Rename Item" : {
+
+    },
+    "Failed to Update Recent Images" : {
+
+    },
     "File name %@" : {
 
     },
@@ -295,6 +331,12 @@
 
     },
     "Previous Image" : {
+
+    },
+    "Recent Image Missing" : {
+
+    },
+    "Recent Image Removed" : {
 
     },
     "Recent Images" : {

@@ -34,31 +34,25 @@ struct ContentView: View {
   @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue)
   private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
 
-  private var isShowingImageInterface: Bool {
-    imageSession.currentImage != nil || imageSession.isLoading
+  private var imageSessionPreferences: ImageSession.Preferences {
+    ImageSession.Preferences(
+      topBarHideDelay: topBarHideDelay,
+      enableLoopBrowsing: enableLoopBrowsing,
+      actionOnImageFileChange: actionOnImageFileChange,
+    )
   }
 
   var body: some View {
-    Group {
-      if isShowingImageInterface {
-        ImageView(imageSession: imageSession)
-      } else {
-        Color.clear
-      }
-    }
-    .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
+    ImageView(
+      imageSession: imageSession,
+      onAlertAcknowledged: handleImageAlertAcknowledged,
+    )
+    .navigationTitle(imageSession.currentImageInfo?.fileName ?? "Imaxe")
     .focusedSceneValue(imageSession)
+    .focusedSceneValue(\.recentImages, recentImages)
     .dismissTextFocusOnClickOutside()
     .onAppear {
-      imageSession.topBarHideDelay = topBarHideDelay
-      imageSession.enableLoopBrowsing = enableLoopBrowsing
-      imageSession.actionOnImageFileChange = actionOnImageFileChange
-      imageSession.recordRecentImage = { url in
-        try await RecentImagesStore.recordOpened(url, in: modelContext)
-      }
-      imageSession.removeRecentImage = { path in
-        try RecentImagesStore.remove(path: path, in: modelContext)
-      }
+      configureImageSession()
       refreshRecentImages()
       loadInitialRequestIfNeeded()
       dismissWindow(id: "home")
@@ -79,50 +73,38 @@ struct ContentView: View {
     } isTargeted: { isTargeted in
       isTargetedForDrop = isTargeted
     }
-    .onChange(of: recentImages) { _, newValue in
-      imageSession.recentImages = newValue
+    .onChange(of: imageSessionPreferences) { _, newValue in
+      imageSession.apply(newValue)
     }
-    .onChange(of: topBarHideDelay) { _, newValue in
-      imageSession.topBarHideDelay = newValue
-    }
-    .onChange(of: enableLoopBrowsing) { _, newValue in
-      imageSession.enableLoopBrowsing = newValue
-    }
-    .onChange(of: actionOnImageFileChange) { _, newValue in
-      imageSession.actionOnImageFileChange = newValue
-    }
-    .onChange(of: recentImagesCountLimit) { _, _ in
+    .onChange(of: recentImagesCountLimit) {
       refreshRecentImages()
-    }
-    .onChange(of: isShowingImageInterface) { _, newValue in
-      if !newValue {
-        imageSession.restoreStandardWindowButtons()
-      }
-    }
-    .fileImporter(
-      isPresented: $imageSession.isImporterPresented,
-      allowedContentTypes: ImageLoader.supportedImageTypes,
-    ) { result in
-      imageSession.onOpenImage(result: result, openWindow: openWindow)
-    }
-    .alert(imageSession.alert?.title ?? "", isPresented: $imageSession.showAlert) {
-      Button("OK") {
-        guard didFailInitialRequest else { return }
-        if let request {
-          DispatchQueue.main.async {
-            dismissWindow(id: "image", value: request)
-          }
-        }
-        openWindow(id: "home")
-      }
-    } message: {
-      Text(imageSession.alert?.message ?? "")
     }
     .onOpenURL { url in
       imageSession.loadImage(from: url)
       dismissWindow(id: "home")
     }
     .handlesExternalEvents(preferring: [], allowing: [])
+  }
+
+  private func configureImageSession() {
+    imageSession.apply(imageSessionPreferences)
+    imageSession.recordRecentImage = { url in
+      try await RecentImagesStore.recordOpened(url, in: modelContext)
+    }
+    imageSession.removeRecentImage = { path in
+      try RecentImagesStore.remove(path: path, in: modelContext)
+    }
+  }
+
+  private func handleImageAlertAcknowledged() {
+    guard didFailInitialRequest else { return }
+    didFailInitialRequest = false
+    if let request {
+      DispatchQueue.main.async {
+        dismissWindow(id: "image", value: request)
+      }
+    }
+    openWindow(id: "home")
   }
 
   private func loadInitialRequestIfNeeded() {
@@ -141,13 +123,10 @@ struct ContentView: View {
 
   private func refreshRecentImages() {
     do {
-      imageSession.recentImages = try RecentImagesStore.fetchRecentImages(in: modelContext)
+      _ = try RecentImagesStore.fetchRecentImages(in: modelContext)
     } catch {
-      imageSession.recentImages = recentImages
-      imageSession.alert = ImageAlert(
-        title: "Failed to Refresh Recent Images",
-        message: error.localizedDescription,
-      )
+      imageSession.alertTitle = "Failed to Refresh Recent Images"
+      imageSession.alertMessage = error.localizedDescription
     }
   }
 

@@ -9,6 +9,9 @@ import SwiftUI
 
 struct ImageView: View {
   @Bindable var imageSession: ImageSession
+  var onAlertAcknowledged: () -> Void = {}
+
+  @Environment(\.openWindow) private var openWindow
 
   @State private var isTopBarHovering = false
   @State private var isImageInfoPresented = false
@@ -46,14 +49,27 @@ struct ImageView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .alert(item: $imageSession.alert) { alert in
-      Alert(title: Text(alert.title), message: Text(alert.message))
+    .alert(imageSession.alertTitle, isPresented: $imageSession.isAlertPresented) {
+      Button("OK", action: onAlertAcknowledged)
+    } message: {
+      Text(imageSession.alertMessage ?? "")
     }
-    .onChange(of: isPopoverPresented) { _, _ in
+    .onChange(of: isPopoverPresented) {
       updateTopBarVisibility()
     }
-    .onChange(of: imageSession.isLoading) { _, _ in
-      updateTopBarVisibility()
+    .onChange(of: imageSession.isLoading) { _, newValue in
+      if !newValue, imageSession.currentImage == nil {
+        imageSession.restoreStandardWindowButtons()
+      } else {
+        updateTopBarVisibility()
+      }
+    }
+    .fileImporter(
+      isPresented: $imageSession.isImporterPresented,
+      allowedContentTypes: ImageLoader.supportedImageTypes,
+      allowsMultipleSelection: true,
+    ) { result in
+      imageSession.onOpenImage(result: result, openWindow: openWindow)
     }
   }
 

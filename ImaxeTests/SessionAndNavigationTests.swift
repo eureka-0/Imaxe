@@ -240,7 +240,7 @@ struct SessionAndNavigationTests {
 
     #expect(removedPath == missingURL.filePath)
     #expect(didFail)
-    #expect(session.alert?.title == "Recent Image Removed")
+    #expect(session.alertTitle == "Recent Image Removed")
   }
 
   @Test func `failed navigation preserves displayed image and position`() async throws {
@@ -259,6 +259,22 @@ struct SessionAndNavigationTests {
     #expect(session.displayedURL == goodURL)
     #expect(session.folderNavigator?.currentImageURL == goodURL)
     #expect(session.pendingURL == nil)
-    #expect(session.alert?.title == "Failed to Load Image")
+    #expect(session.alertTitle == "Failed to Load Image")
+  }
+
+  @Test func `dismissing an alert clears its presentation state`() {
+    let session = ImageSession()
+
+    session.presentAlert(title: "Test Alert", message: "Test Message")
+
+    #expect(session.isAlertPresented)
+    #expect(session.alertTitle == "Test Alert")
+    #expect(session.alertMessage == "Test Message")
+
+    session.isAlertPresented = false
+
+    #expect(!session.isAlertPresented)
+    #expect(session.alertTitle.isEmpty)
+    #expect(session.alertMessage == nil)
   }
 }

@@ -30,9 +30,7 @@ struct FileOperationCommands: Commands {
   let modelContainer: ModelContainer
 
   private var recentImages: [RecentImage] {
-    if let imageSession {
-      Array(imageSession.recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu))
-    } else if let recentImagesValue {
+    if let recentImagesValue {
       Array(recentImagesValue.prefix(Constants.maximumRecentImagesToDisplayInMenu))
     } else {
       []
@@ -91,10 +89,8 @@ struct FileOperationCommands: Commands {
             do {
               try RecentImagesStore.clear(in: modelContainer.mainContext)
             } catch {
-              imageSession?.alert = ImageAlert(
-                title: "Failed to Clear Recent Images",
-                message: error.localizedDescription,
-              )
+              imageSession?.alertTitle = "Failed to Clear Recent Images"
+              imageSession?.alertMessage = error.localizedDescription
             }
           }
         }

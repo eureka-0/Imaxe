@@ -8,14 +8,14 @@
 import AppKit
 import SwiftUI
 
-struct ImageAlert: Identifiable {
-  let id = UUID()
-  let title: String
-  let message: String
-}
-
 @Observable
 final class ImageSession {
+  struct Preferences: Equatable {
+    let topBarHideDelay: TimeInterval
+    let enableLoopBrowsing: Bool
+    let actionOnImageFileChange: ActionOnImageFileChange
+  }
+
   private(set) var currentImage: ImageContainer?
   private(set) var currentImageInfo: ImageInfo?
   private(set) var displayedURL: URL?
@@ -29,29 +29,30 @@ final class ImageSession {
   private(set) var shouldApplyLoadedImageWindowSize = true
   private(set) var showTopBar = false
   private(set) var folderNavigator: FolderNavigator?
-  var recentImages: [RecentImage] = []
 
-  var topBarHideDelay: TimeInterval = AppSettings.Defaults.topBarHideDelay
+  private(set) var topBarHideDelay: TimeInterval = AppSettings.Defaults.topBarHideDelay
 
-  var enableLoopBrowsing: Bool = AppSettings.Defaults.enableLoopBrowsing {
+  private(set) var enableLoopBrowsing: Bool = AppSettings.Defaults.enableLoopBrowsing {
     didSet {
       folderNavigator?.enableLoopBrowsing = enableLoopBrowsing
     }
   }
 
-  var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange {
+  private(set) var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange {
     didSet {
       updateImageFileWatcher()
     }
   }
 
-  var alert: ImageAlert?
+  var alertTitle: LocalizedStringResource = ""
+  var alertMessage: String?
 
-  var showAlert: Bool {
-    get { alert != nil }
+  var isAlertPresented: Bool {
+    get { alertMessage != nil }
     set {
       if !newValue {
-        alert = nil
+        alertTitle = ""
+        alertMessage = nil
       }
     }
   }
@@ -94,19 +95,25 @@ final class ImageSession {
     }
   }
 
+  func apply(_ preferences: Preferences) {
+    topBarHideDelay = preferences.topBarHideDelay
+    enableLoopBrowsing = preferences.enableLoopBrowsing
+    actionOnImageFileChange = preferences.actionOnImageFileChange
+  }
+
   deinit {
+    MainActor.assumeIsolated {
+      close()
+    }
+  }
+
+  func close() {
     topBarHideTask?.cancel()
-    imageLoadTask?.cancel()
-    if let displayedTemporaryURL {
-      try? FileManager.default.removeItem(at: displayedTemporaryURL)
-    }
-    if let pendingTemporaryURL {
-      try? FileManager.default.removeItem(at: pendingTemporaryURL)
-    }
-    let requestID = activeImageLoad.requestID
-    Task {
-      await ImageLoader.shared.cancelLoads(for: requestID)
-    }
+    topBarHideTask = nil
+    cancelCurrentImageLoad()
+    imageLoadTask = nil
+    removeTemporaryFile(displayedTemporaryURL)
+    displayedTemporaryURL = nil
     imageFileWatcher = nil
   }
 
@@ -201,23 +208,24 @@ final class ImageSession {
         temporaryURL: image.temporaryURL,
       )
     } catch {
-      alert = ImageAlert(
-        title: "Failed to Load Image from Pasteboard",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Load Image from Pasteboard"
+      alertMessage = error.localizedDescription
     }
   }
 
-  func onOpenImage(result: Result<URL, Error>, openWindow: OpenWindowAction? = nil) {
+  func onOpenImage(result: Result<[URL], Error>, openWindow: OpenWindowAction? = nil) {
     switch result {
-    case let .success(url):
+    case let .success(urls):
       if let openWindow {
-        openWindow(id: "image", value: ImageWindowRequest(url: url))
-      } else {
+        for url in urls {
+          openWindow(id: "image", value: ImageWindowRequest(url: url))
+        }
+      } else if let url = urls.first {
         loadImage(from: url, failureTitle: "Failed to Open Image")
       }
     case let .failure(error):
-      alert = ImageAlert(title: "Failed to Open Image", message: error.localizedDescription)
+      alertTitle = "Failed to Open Image"
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -246,7 +254,7 @@ final class ImageSession {
 
   func loadImage(
     from url: URL,
-    failureTitle: String? = nil,
+    failureTitle: LocalizedStringResource? = nil,
     addToRecent: Bool = true,
     preservingViewportOnReload: Bool = false,
     recentImagePathToRemoveOnFileNotFound: String? = nil,
@@ -322,10 +330,8 @@ final class ImageSession {
             try await recordRecentImage?(url)
             guard imageLoad === activeImageLoad, !Task.isCancelled else { return }
           } catch {
-            alert = ImageAlert(
-              title: "Failed to Update Recent Images",
-              message: error.localizedDescription,
-            )
+            alertTitle = "Failed to Update Recent Images"
+            alertMessage = error.localizedDescription
           }
         }
 
@@ -342,16 +348,6 @@ final class ImageSession {
     }
   }
 
-  func close() {
-    topBarHideTask?.cancel()
-    topBarHideTask = nil
-    cancelCurrentImageLoad()
-    imageLoadTask = nil
-    removeTemporaryFile(displayedTemporaryURL)
-    displayedTemporaryURL = nil
-    imageFileWatcher = nil
-  }
-
   private final class ImageLoadOperation {
     let requestID = ImageLoader.LoadRequestID()
   }
@@ -359,37 +355,29 @@ final class ImageSession {
   private func handleImageLoadFailure(
     _ error: Error,
     url: URL,
-    failureTitle: String?,
+    failureTitle: LocalizedStringResource?,
     recentImagePathToRemoveOnFileNotFound: String?,
   ) {
     if let recentImagePathToRemoveOnFileNotFound, Self.isFileNotFound(error) {
       guard let removeRecentImage else {
-        alert = ImageAlert(
-          title: "Recent Image Missing",
-          message: "The file no longer exists:\n\(url.filePath)",
-        )
+        alertTitle = "Recent Image Missing"
+        alertMessage = "The file no longer exists:\n\(url.filePath)"
         return
       }
 
       do {
         try removeRecentImage(recentImagePathToRemoveOnFileNotFound)
-        alert = ImageAlert(
-          title: "Recent Image Removed",
-          message: "The file no longer exists and was removed from Recent Images:\n\(url.filePath)",
-        )
+        alertTitle = "Recent Image Removed"
+        alertMessage = "The file no longer exists and was removed from Recent Images:\n\(url.filePath)"
       } catch {
-        alert = ImageAlert(
-          title: "Failed to Remove Recent Image",
-          message: error.localizedDescription,
-        )
+        alertTitle = "Failed to Remove Recent Image"
+        alertMessage = error.localizedDescription
       }
       return
     }
 
-    alert = ImageAlert(
-      title: failureTitle ?? "Failed to Load Image",
-      message: error.localizedDescription,
-    )
+    alertTitle = failureTitle ?? "Failed to Load Image"
+    alertMessage = error.localizedDescription
   }
 
   private static func isFileNotFound(_ error: Error) -> Bool {

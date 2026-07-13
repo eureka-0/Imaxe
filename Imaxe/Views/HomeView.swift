@@ -10,12 +10,6 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-private struct HomeOperationAlert: Identifiable {
-  let id = UUID()
-  let title: String
-  let message: String
-}
-
 // MARK: - HomeView
 
 struct HomeView: View {
@@ -78,8 +72,10 @@ struct HomeView: View {
     } message: {
       Text(viewModel.deleteTargetURL?.filePath ?? "")
     }
-    .alert(item: $viewModel.operationAlert) { alert in
-      Alert(title: Text(alert.title), message: Text(alert.message))
+    .alert(viewModel.alertTitle, isPresented: viewModel.isAlertPresented) {
+      Button("OK") {}
+    } message: {
+      Text(viewModel.alertMessage ?? "")
     }
     .fileImporter(
       isPresented: $viewModel.isImporterPresented,
@@ -345,7 +341,8 @@ final class HomeViewModel {
   var isTargetedForDrop = false
   var renameTarget: RecentImage?
   var renameText = ""
-  fileprivate var operationAlert: HomeOperationAlert?
+  var alertTitle: LocalizedStringResource = ""
+  var alertMessage: String?
 
   @ObservationIgnored var modelContext: ModelContext?
   @ObservationIgnored var openWindow: OpenWindowAction?
@@ -357,6 +354,17 @@ final class HomeViewModel {
     } set: { isPresented in
       if !isPresented {
         self.deleteTargetURL = nil
+      }
+    }
+  }
+
+  var isAlertPresented: Binding<Bool> {
+    Binding {
+      self.alertMessage != nil
+    } set: { isPresented in
+      if !isPresented {
+        self.alertTitle = ""
+        self.alertMessage = nil
       }
     }
   }
@@ -378,10 +386,8 @@ final class HomeViewModel {
     case let .success(urls):
       openImages(at: urls)
     case let .failure(error):
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Open Images",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Open Images"
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -402,10 +408,8 @@ final class HomeViewModel {
         try RecentImagesStore.remove(path: path, in: modelContext)
       }
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Remove Item",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Remove Item"
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -425,10 +429,8 @@ final class HomeViewModel {
         }
       }
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Move Item to Trash",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Move Item to Trash"
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -450,10 +452,8 @@ final class HomeViewModel {
     do {
       try FileManager.default.moveItem(at: url, to: newURL)
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Rename Item",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Rename Item"
+      alertMessage = error.localizedDescription
       return
     }
 
@@ -467,10 +467,8 @@ final class HomeViewModel {
           )
         }
       } catch {
-        operationAlert = HomeOperationAlert(
-          title: "Failed to Update Recent Images",
-          message: error.localizedDescription,
-        )
+        alertTitle = "Failed to Update Recent Images"
+        alertMessage = error.localizedDescription
       }
     }
   }
@@ -485,10 +483,8 @@ final class HomeViewModel {
         try RecentImagesStore.clear(in: modelContext)
       }
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Clear Recent Images",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Clear Recent Images"
+      alertMessage = error.localizedDescription
     }
   }
 
@@ -505,10 +501,8 @@ final class HomeViewModel {
       )
       dismissWindow?(id: "home")
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Load Image from Pasteboard",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Load Image from Pasteboard"
+      alertMessage = error.localizedDescription
     }
   }
 }
