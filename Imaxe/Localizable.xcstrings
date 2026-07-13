@@ -1,0 +1,466 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ""
+          }
+        }
+      }
+    },
+    "%" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%"
+          }
+        }
+      }
+    },
+    "%.1f second" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f秒"
+          }
+        }
+      }
+    },
+    "%.1f seconds" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%.1f秒"
+          }
+        }
+      }
+    },
+    "%lld" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld"
+          }
+        }
+      }
+    },
+    "^[%lld image](inflect: true)" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 张图片"
+          }
+        }
+      }
+    },
+    "1 image pixel corresponds to 1 screen pixel" : {
+
+    },
+    "1 image pixel corresponds to 1 screen point" : {
+
+    },
+    "100" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100"
+          }
+        }
+      }
+    },
+    "Action on image file change:" : {
+
+    },
+    "Actual print size based on image DPI and screen PPI" : {
+
+    },
+    "Actual size" : {
+
+    },
+    "Actual Size" : {
+
+    },
+    "Actual size (limited to screen)" : {
+
+    },
+    "Appearance:" : {
+
+    },
+    "Apply" : {
+
+    },
+    "Ascending" : {
+
+    },
+    "Background color:" : {
+
+    },
+    "Browsing:" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Choose zoom level" : {
+
+    },
+    "Clear" : {
+
+    },
+    "Clear Menu" : {
+
+    },
+    "Clear Recent Images" : {
+
+    },
+    "Clear Search" : {
+
+    },
+    "Could Not Clear Thumbnail Cache" : {
+
+    },
+    "Current thumbnail caches: %@" : {
+
+    },
+    "Dark" : {
+
+    },
+    "Default zoom level:" : {
+
+    },
+    "Define %@ zoom as:" : {
+
+    },
+    "Descending" : {
+
+    },
+    "Drop images here to open" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "拖放图片到这里打开"
+          }
+        }
+      }
+    },
+    "Failed to Clear Recent Images" : {
+
+    },
+    "Failed to Load Image" : {
+
+    },
+    "Failed to Load Image from Pasteboard" : {
+
+    },
+    "Failed to Move Item to Trash" : {
+
+    },
+    "Failed to Open Image" : {
+
+    },
+    "Failed to Open Images" : {
+
+    },
+    "Failed to Open Recent Image" : {
+
+    },
+    "Failed to Refresh Recent Images" : {
+
+    },
+    "Failed to Remove Item" : {
+
+    },
+    "Failed to Remove Recent Image" : {
+
+    },
+    "Failed to Rename Item" : {
+
+    },
+    "Failed to Update Recent Images" : {
+
+    },
+    "File name %@" : {
+
+    },
+    "Fill screen" : {
+
+    },
+    "Fit the image to the window" : {
+
+    },
+    "Fit to screen" : {
+
+    },
+    "Fit to Window" : {
+
+    },
+    "Fit Window to Image" : {
+
+    },
+    "Fixed size" : {
+
+    },
+    "General" : {
+
+    },
+    "Grid" : {
+
+    },
+    "Height" : {
+
+    },
+    "Height:" : {
+
+    },
+    "High" : {
+
+    },
+    "Home" : {
+
+    },
+    "Ignore" : {
+
+    },
+    "Image" : {
+
+    },
+    "Image File Deleted" : {
+
+    },
+    "Image Info" : {
+
+    },
+    "Image interpolation:" : {
+
+    },
+    "Image position %@" : {
+
+    },
+    "Info" : {
+
+    },
+    "Last Opened" : {
+
+    },
+    "Light" : {
+
+    },
+    "List" : {
+
+    },
+    "Loading..." : {
+
+    },
+    "Loop browsing" : {
+
+    },
+    "Low" : {
+
+    },
+    "Medium" : {
+
+    },
+    "Modified" : {
+
+    },
+    "More" : {
+
+    },
+    "Move to Trash" : {
+
+    },
+    "Move to Trash?" : {
+
+    },
+    "Name" : {
+
+    },
+    "Next image" : {
+
+    },
+    "Next Image" : {
+
+    },
+    "No images yet" : {
+
+    },
+    "No recent images yet" : {
+
+    },
+    "No Recent Items" : {
+
+    },
+    "None" : {
+
+    },
+    "OK" : {
+
+    },
+    "Open" : {
+
+    },
+    "Open from Pasteboard" : {
+
+    },
+    "Open Home Window" : {
+
+    },
+    "Open image" : {
+
+    },
+    "Open Image" : {
+
+    },
+    "Open Image..." : {
+
+    },
+    "Open Recent" : {
+
+    },
+    "Open Settings" : {
+
+    },
+    "Order" : {
+
+    },
+    "Pan Down" : {
+
+    },
+    "Pan Left" : {
+
+    },
+    "Pan Right" : {
+
+    },
+    "Pan Up" : {
+
+    },
+    "Pin Window" : {
+
+    },
+    "Pixels" : {
+
+    },
+    "Points" : {
+
+    },
+    "Previous image" : {
+
+    },
+    "Previous Image" : {
+
+    },
+    "Recent Image Missing" : {
+
+    },
+    "Recent Image Removed" : {
+
+    },
+    "Recent Images" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近打开"
+          }
+        }
+      }
+    },
+    "Recent images count limit:" : {
+
+    },
+    "Reload" : {
+
+    },
+    "Remove from Recents" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Resize the window to fit the image" : {
+
+    },
+    "Reveal in Finder" : {
+
+    },
+    "Search" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索"
+          }
+        }
+      }
+    },
+    "Settings" : {
+
+    },
+    "Show image info" : {
+
+    },
+    "Size" : {
+
+    },
+    "Sort" : {
+
+    },
+    "Sort by" : {
+
+    },
+    "Sort menu." : {
+
+    },
+    "System" : {
+
+    },
+    "The image file was deleted:\n%@" : {
+
+    },
+    "Toggle window pinning" : {
+
+    },
+    "Top bar hide delay:" : {
+
+    },
+    "Unpin Window" : {
+
+    },
+    "Width" : {
+
+    },
+    "Width:" : {
+
+    },
+    "Zoom" : {
+
+    },
+    "Zoom in" : {
+
+    },
+    "Zoom In" : {
+
+    },
+    "Zoom out" : {
+
+    },
+    "Zoom Out" : {
+
+    }
+  },
+  "version" : "1.2"
+}

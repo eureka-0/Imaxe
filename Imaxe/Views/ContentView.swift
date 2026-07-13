@@ -10,10 +10,16 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
+  let request: ImageWindowRequest?
+
+  @Environment(\.dismissWindow) private var dismissWindow
+  @Environment(\.openWindow) private var openWindow
   @Environment(\.modelContext) private var modelContext
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
   @State private var imageSession = ImageSession()
+  @State private var didFailInitialRequest = false
+  @State private var didLoadInitialURL = false
   @State private var isTargetedForDrop = false
 
   @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
@@ -28,19 +34,32 @@ struct ContentView: View {
   @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue)
   private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
 
-  private var isShowingImageInterface: Bool {
-    imageSession.currentImage != nil || imageSession.isLoading
+  private var imageSessionPreferences: ImageSession.Preferences {
+    ImageSession.Preferences(
+      topBarHideDelay: topBarHideDelay,
+      enableLoopBrowsing: enableLoopBrowsing,
+      actionOnImageFileChange: actionOnImageFileChange,
+    )
   }
 
   var body: some View {
-    Group {
-      if isShowingImageInterface {
-        ImageView(imageSession: imageSession)
-      } else {
-        HomeView(imageSession: imageSession)
-      }
+    ImageView(
+      imageSession: imageSession,
+      onAlertAcknowledged: handleImageAlertAcknowledged,
+    )
+    .navigationTitle(imageSession.currentImageInfo?.fileName ?? "Imaxe")
+    .focusedSceneValue(imageSession)
+    .focusedSceneValue(\.recentImages, recentImages)
+    .dismissTextFocusOnClickOutside()
+    .onAppear {
+      configureImageSession()
+      refreshRecentImages()
+      loadInitialRequestIfNeeded()
+      dismissWindow(id: "home")
     }
-    .navigationTitle(imageSession.folderNavigator?.currentImageURL.lastPathComponent ?? "Imaxe")
+    .onDisappear {
+      imageSession.close()
+    }
     .overlay(
       ContainerRelativeShape()
         .strokeBorder(
@@ -48,76 +67,75 @@ struct ContentView: View {
           lineWidth: 3,
         ),
     )
-    .focusedSceneValue(imageSession)
-    .dismissTextFocusOnClickOutside()
-    .onAppear {
-      imageSession.topBarHideDelay = topBarHideDelay
-      imageSession.enableLoopBrowsing = enableLoopBrowsing
-      imageSession.actionOnImageFileChange = actionOnImageFileChange
-      imageSession.recordRecentImage = { url in
-        try await RecentImagesStore.recordOpened(url, in: modelContext)
-      }
-      imageSession.removeRecentImage = { path in
-        try RecentImagesStore.remove(path: path, in: modelContext)
-      }
-      refreshRecentImages()
-    }
-    .onChange(of: recentImages) { _, newValue in
-      imageSession.recentImages = newValue
-    }
-    .onChange(of: topBarHideDelay) { _, newValue in
-      imageSession.topBarHideDelay = newValue
-    }
-    .onChange(of: enableLoopBrowsing) { _, newValue in
-      imageSession.enableLoopBrowsing = newValue
-    }
-    .onChange(of: actionOnImageFileChange) { _, newValue in
-      imageSession.actionOnImageFileChange = newValue
-    }
-    .onChange(of: recentImagesCountLimit) { _, _ in
-      refreshRecentImages()
-    }
-    .onChange(of: isShowingImageInterface) { _, newValue in
-      if !newValue {
-        imageSession.restoreStandardWindowButtons()
-      }
-    }
-    .fileImporter(
-      isPresented: $imageSession.isImporterPresented,
-      allowedContentTypes: ImageLoader.supportedImageTypes,
-      onCompletion: imageSession.onOpenImage,
-    )
-    .alert(item: $imageSession.alert) { alert in
-      Alert(title: Text(alert.title), message: Text(alert.message))
-    }
     .dropDestination(for: URL.self) { urls, _ in
-      guard let url = urls.first else { return false }
-
-      imageSession.loadImage(from: url)
-      return true
+      openImages(at: urls)
+      return !urls.isEmpty
     } isTargeted: { isTargeted in
       isTargetedForDrop = isTargeted
     }
+    .onChange(of: imageSessionPreferences) { _, newValue in
+      imageSession.apply(newValue)
+    }
+    .onChange(of: recentImagesCountLimit) {
+      refreshRecentImages()
+    }
     .onOpenURL { url in
       imageSession.loadImage(from: url)
+      dismissWindow(id: "home")
     }
+    .handlesExternalEvents(preferring: [], allowing: [])
+  }
+
+  private func configureImageSession() {
+    imageSession.apply(imageSessionPreferences)
+    imageSession.recordRecentImage = { url in
+      try await RecentImagesStore.recordOpened(url, in: modelContext)
+    }
+    imageSession.removeRecentImage = { path in
+      try RecentImagesStore.remove(path: path, in: modelContext)
+    }
+  }
+
+  private func handleImageAlertAcknowledged() {
+    guard didFailInitialRequest else { return }
+    didFailInitialRequest = false
+    if let request {
+      DispatchQueue.main.async {
+        dismissWindow(id: "image", value: request)
+      }
+    }
+    openWindow(id: "home")
+  }
+
+  private func loadInitialRequestIfNeeded() {
+    guard !didLoadInitialURL, let request else { return }
+    didLoadInitialURL = true
+    imageSession.loadImage(
+      from: request.url,
+      addToRecent: request.addsToRecent,
+      recentImagePathToRemoveOnFileNotFound: request.recentImagePath,
+      temporaryURL: request.temporaryURL,
+      onFailure: {
+        didFailInitialRequest = true
+      },
+    )
   }
 
   private func refreshRecentImages() {
     do {
-      try RecentImagesStore.removeMissingFiles(in: modelContext)
-      imageSession.recentImages = try RecentImagesStore.fetchRecentImages(in: modelContext)
+      _ = try RecentImagesStore.fetchRecentImages(in: modelContext)
     } catch {
-      imageSession.recentImages = recentImages
-      imageSession.alert = ImageAlert(
-        title: "Failed to Refresh Recent Images",
-        message: error.localizedDescription,
-      )
+      imageSession.alertTitle = "Failed to Refresh Recent Images"
+      imageSession.alertMessage = error.localizedDescription
     }
   }
-}
 
-#Preview {
-  ContentView()
-    .modelContainer(for: [RecentImage.self], inMemory: true)
+  private func openImages(at urls: [URL]) {
+    guard !urls.isEmpty else { return }
+
+    for url in urls {
+      openWindow(id: "image", value: ImageWindowRequest(url: url))
+    }
+    dismissWindow(id: "home")
+  }
 }

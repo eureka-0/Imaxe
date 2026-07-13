@@ -18,6 +18,9 @@ final class ImageScrollViewCoordinator: NSObject {
   var magnificationState = MagnificationState()
   var windowSizingState = WindowSizingState()
   var windowAnimationState = WindowAnimationState()
+  var shouldReduceMotion: () -> Bool = {
+    NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+  }
 
   private var imageIdentifier: ObjectIdentifier?
   private weak var viewportController: ImageViewportController?

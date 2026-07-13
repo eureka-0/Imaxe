@@ -207,6 +207,7 @@ struct ImageScrollView: NSViewRepresentable {
     var onSmartMagnification: (() -> Void)?
     var onDoubleClick: (() -> Void)?
     private var receivedMagnifyEvent = false
+    private var isPanning = false
 
     override var intrinsicContentSize: NSSize {
       NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
@@ -228,15 +229,6 @@ struct ImageScrollView: NSViewRepresentable {
       super.smartMagnify(with: event)
     }
 
-    override func mouseDown(with event: NSEvent) {
-      guard event.clickCount == 2 else {
-        super.mouseDown(with: event)
-        return
-      }
-
-      onDoubleClick?()
-    }
-
     override func endGesture(with event: NSEvent) {
       super.endGesture(with: event)
 
@@ -245,8 +237,68 @@ struct ImageScrollView: NSViewRepresentable {
       onLiveMagnificationEnd?()
     }
 
+    override func mouseDown(with event: NSEvent) {
+      if event.clickCount == 2 {
+        onDoubleClick?()
+        return
+      }
+
+      guard canPanDocument else {
+        super.mouseDown(with: event)
+        return
+      }
+
+      isPanning = true
+      NSCursor.openHand.set()
+    }
+
     override func mouseDragged(with event: NSEvent) {
-      window?.performDrag(with: event)
+      if isPanning {
+        panDocument(by: NSSize(width: event.deltaX, height: event.deltaY))
+      } else {
+        window?.performDrag(with: event)
+        return
+      }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+      if isPanning {
+        isPanning = false
+        NSCursor.arrow.set()
+        return
+      }
+
+      super.mouseUp(with: event)
+    }
+
+    override func resetCursorRects() {
+      super.resetCursorRects()
+      if canPanDocument {
+        addCursorRect(bounds, cursor: .openHand)
+      }
+    }
+
+    var canPanDocument: Bool {
+      guard let documentView else { return false }
+
+      let displayedSize = NSSize(
+        width: documentView.bounds.width * magnification,
+        height: documentView.bounds.height * magnification,
+      )
+      return displayedSize.width > contentSize.width || displayedSize.height > contentSize.height
+    }
+
+    func panDocument(by directManipulationDelta: NSSize) {
+      let scale = max(magnification, Constants.imageZoomScaleRange.lowerBound)
+      let proposedBounds = NSRect(
+        x: contentView.bounds.origin.x - directManipulationDelta.width / scale,
+        y: contentView.bounds.origin.y - directManipulationDelta.height / scale,
+        width: contentView.bounds.width,
+        height: contentView.bounds.height,
+      )
+      let constrainedBounds = contentView.constrainBoundsRect(proposedBounds)
+      contentView.scroll(to: constrainedBounds.origin)
+      reflectScrolledClipView(contentView)
     }
   }
 

@@ -11,7 +11,7 @@ nonisolated struct FolderNavigator {
   var currentImageURL: URL {
     didSet {
       if !imageURLs.contains(currentImageURL) {
-        imageURLs = [currentImageURL]
+        reload()
       }
     }
   }
@@ -53,7 +53,7 @@ nonisolated struct FolderNavigator {
   init(for url: URL, enableLoopBrowsing: Bool, imageURLs: [URL]? = nil) {
     currentImageURL = url
     self.enableLoopBrowsing = enableLoopBrowsing
-    self.imageURLs = imageURLs ?? [url]
+    self.imageURLs = Self.positionedImageURLs(imageURLs ?? [url], currentURL: url)
   }
 
   static func isRegularFile(_ url: URL) -> Bool {
@@ -61,40 +61,80 @@ nonisolated struct FolderNavigator {
   }
 
   mutating func reload() {
-    imageURLs = Self.imageURLs(in: rootURL, fallbackURL: currentImageURL)
+    imageURLs = (try? Self.imageURLs(in: rootURL, fallbackURL: currentImageURL)) ??
+      [currentImageURL]
   }
 
   mutating func replaceImageURLs(_ imageURLs: [URL]) {
-    self.imageURLs = imageURLs
+    self.imageURLs = Self.positionedImageURLs(imageURLs, currentURL: currentImageURL)
   }
 
   static func imageURLs(for url: URL) async -> [URL]? {
     let rootURL = url.deletingLastPathComponent()
 
-    return try? await Task.detached(priority: .userInitiated) {
-      try Task.checkCancellation()
-      let imageURLs = Self.imageURLs(in: rootURL, fallbackURL: url)
-      try Task.checkCancellation()
-      return imageURLs
-    }.value
+    let scanTask = Task.detached(priority: .userInitiated) {
+      try Self.imageURLs(in: rootURL, fallbackURL: url)
+    }
+
+    return await withTaskCancellationHandler {
+      try? await scanTask.value
+    } onCancel: {
+      scanTask.cancel()
+    }
   }
 
-  private static func imageURLs(in rootURL: URL, fallbackURL: URL) -> [URL] {
-    guard let contents = try? FileManager.default.contentsOfDirectory(
-      at: rootURL,
-      includingPropertiesForKeys: [.isRegularFileKey],
-      options: [.skipsHiddenFiles],
-    ) else {
+  private static func imageURLs(in rootURL: URL, fallbackURL: URL) throws -> [URL] {
+    let contents: [URL]
+    do {
+      contents = try FileManager.default.contentsOfDirectory(
+        at: rootURL,
+        includingPropertiesForKeys: [.isRegularFileKey],
+        options: [.skipsHiddenFiles],
+      )
+    } catch {
       return [fallbackURL]
     }
 
-    return contents
-      .filter { Self.isRegularFile($0) && ImageLoader.isSupportedImage($0) }
-      .sorted { first, second in
-        let fn1 = first.lastPathComponent
-        let fn2 = second.lastPathComponent
-        return fn1.localizedStandardCompare(fn2) == .orderedAscending
+    var imageURLs: [URL] = []
+    imageURLs.reserveCapacity(contents.count)
+    for url in contents {
+      try Task.checkCancellation()
+      if Self.isRegularFile(url), ImageLoader.isSupportedImage(url) {
+        imageURLs.append(url)
       }
+    }
+
+    try Task.checkCancellation()
+    imageURLs.sort(by: compareImageURLs)
+    try Task.checkCancellation()
+    return positionedImageURLs(imageURLs, currentURL: fallbackURL)
+  }
+
+  private static func positionedImageURLs(_ imageURLs: [URL], currentURL: URL) -> [URL] {
+    var positionedURLs = imageURLs.filter { !sameFile($0, currentURL) }
+    positionedURLs.append(currentURL)
+    positionedURLs.sort(by: compareImageURLs)
+    return positionedURLs
+  }
+
+  private static func sameFile(_ first: URL, _ second: URL) -> Bool {
+    if first == second {
+      return true
+    }
+
+    if let firstSnapshot = FileSnapshot(url: first),
+       let secondSnapshot = FileSnapshot(url: second),
+       firstSnapshot.hasSameFileIdentity(as: secondSnapshot)
+    {
+      return true
+    }
+
+    return first.standardizedFileURL.resolvingSymlinksInPath().filePath
+      == second.standardizedFileURL.resolvingSymlinksInPath().filePath
+  }
+
+  private static func compareImageURLs(_ first: URL, _ second: URL) -> Bool {
+    first.lastPathComponent.localizedStandardCompare(second.lastPathComponent) == .orderedAscending
   }
 
   mutating func moveToPrevious() -> Bool {

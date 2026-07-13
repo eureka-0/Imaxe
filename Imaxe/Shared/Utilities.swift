@@ -15,6 +15,76 @@ func fileSizeDescription(for fileSize: Int) -> String {
   ByteCountFormatter.string(fromByteCount: Int64(fileSize), countStyle: .file)
 }
 
+struct ImageWindowRequest: Codable, Hashable {
+  let url: URL
+  let addsToRecent: Bool
+  let recentImagePath: String?
+  let temporaryURL: URL?
+
+  init(
+    url: URL,
+    addsToRecent: Bool = true,
+    recentImagePath: String? = nil,
+    temporaryURL: URL? = nil,
+  ) {
+    self.url = url
+    self.addsToRecent = addsToRecent
+    self.recentImagePath = recentImagePath
+    self.temporaryURL = temporaryURL
+  }
+}
+
+enum PasteboardImage {
+  case existingFile(URL)
+  case temporaryFile(URL)
+
+  var url: URL {
+    switch self {
+    case let .existingFile(url), let .temporaryFile(url):
+      url
+    }
+  }
+
+  var temporaryURL: URL? {
+    guard case let .temporaryFile(url) = self else { return nil }
+    return url
+  }
+}
+
+func extractImageFromPasteboard() throws -> PasteboardImage? {
+  let pasteboard = NSPasteboard.general
+  if let imageType = pasteboard.availableType(from: [.fileURL, .URL, .png, .tiff]) {
+    switch imageType {
+    case .fileURL:
+      if let url = pasteboard.readObjects(
+        forClasses: [NSURL.self],
+        options: [.urlReadingFileURLsOnly: true],
+      )?.first as? URL {
+        return .existingFile(url)
+      }
+    case .URL:
+      if let urlString = pasteboard.string(forType: .URL), let url = URL(string: urlString) {
+        return .existingFile(url)
+      }
+    case .png, .tiff:
+      if let data = pasteboard.data(forType: imageType) {
+        let tempFileURL = URL.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+          .appendingPathExtension(imageType == .png ? "png" : "tiff")
+        do {
+          try data.write(to: tempFileURL, options: .atomic)
+          return .temporaryFile(tempFileURL)
+        } catch {
+          try? FileManager.default.removeItem(at: tempFileURL)
+          throw error
+        }
+      }
+    default:
+      break
+    }
+  }
+  return nil
+}
+
 // MARK: - IntSize
 
 nonisolated struct IntSize: Hashable {
@@ -289,7 +359,7 @@ extension NSImage {
     return pixelSize
   }
 
-  var animatedGIFRepresentation: NSBitmapImageRep? {
+  nonisolated var animatedGIFRepresentation: NSBitmapImageRep? {
     representations
       .compactMap { $0 as? NSBitmapImageRep }
       .first { bitmapRep in
@@ -300,15 +370,15 @@ extension NSImage {
 }
 
 extension NSBitmapImageRep {
-  var gifFrameCount: Int? {
+  nonisolated var gifFrameCount: Int? {
     (value(forProperty: .frameCount) as? NSNumber)?.intValue
   }
 
-  var currentGIFFrame: Int? {
+  nonisolated var currentGIFFrame: Int? {
     (value(forProperty: .currentFrame) as? NSNumber)?.intValue
   }
 
-  func currentGIFFrameDuration(fallback: Double = 0.1) -> Double {
+  nonisolated func currentGIFFrameDuration(fallback: Double = 0.1) -> Double {
     let duration = (value(forProperty: .currentFrameDuration) as? NSNumber)?.doubleValue
     if let duration, duration > 0 {
       return duration
@@ -346,6 +416,17 @@ extension NSRect {
 // MARK: - NSScreen extensions.
 
 extension NSScreen {
+  static func bestMatch(for frame: NSRect) -> NSScreen? {
+    let frameCenter = NSPoint(x: frame.midX, y: frame.midY)
+    if let containingScreen = screens.first(where: { $0.frame.contains(frameCenter) }) {
+      return containingScreen
+    }
+
+    return screens.max { first, second in
+      first.frame.intersection(frame).area < second.frame.intersection(frame).area
+    }
+  }
+
   func getPPI() -> (width: CGFloat, height: CGFloat)? {
     guard let displayID =
       deviceDescription[NSDeviceDescriptionKey(rawValue: "NSScreenNumber")] as? CGDirectDisplayID
@@ -362,6 +443,13 @@ extension NSScreen {
     let ppiWidth = frame.width * backingScaleFactor / physicalSizeInInches.width
     let ppiHeight = frame.height * backingScaleFactor / physicalSizeInInches.height
     return (width: ppiWidth, height: ppiHeight)
+  }
+}
+
+private extension NSRect {
+  var area: CGFloat {
+    guard !isNull, !isEmpty else { return 0 }
+    return width * height
   }
 }
 
@@ -566,167 +654,5 @@ extension UserDefaults {
   var imageInterpolationStrategyValue: ImageInterpolationStrategy {
     imageInterpolationStrategy.flatMap { ImageInterpolationStrategy(rawValue: $0) }
       ?? AppSettings.Defaults.imageInterpolationStrategy
-  }
-}
-
-// MARK: - View extensions.
-
-extension View {
-  func dismissTextFocusOnClickOutside() -> some View {
-    background(DismissTextFocusOnClickOutside().frame(width: 0, height: 0))
-  }
-
-  func preservesTextFocusOnClick() -> some View {
-    overlay {
-      TextFocusPreservingArea()
-        .allowsHitTesting(false)
-    }
-  }
-}
-
-extension NSView {
-  var preservesTextFocus: Bool {
-    if self is TextFocusPreservingView {
-      return true
-    }
-
-    return superview?.preservesTextFocus ?? false
-  }
-
-  var isInsideTextInput: Bool {
-    if self is NSTextField || self is NSTextView || self is NSSearchField {
-      return true
-    }
-
-    return superview?.isInsideTextInput ?? false
-  }
-
-  func backingAlignedSize(
-    _ size: NSSize,
-    options: AlignmentOptions = [.alignAllEdgesNearest],
-  ) -> NSSize {
-    backingAlignedRect(NSRect(origin: .zero, size: size), options: options).size
-  }
-
-  func backingAlignedPoint(
-    _ point: NSPoint,
-    options: AlignmentOptions = [.alignAllEdgesNearest],
-  ) -> NSPoint {
-    backingAlignedRect(NSRect(origin: point, size: .zero), options: options).origin
-  }
-}
-
-private struct DismissTextFocusOnClickOutside: NSViewRepresentable {
-  func makeCoordinator() -> Coordinator {
-    Coordinator()
-  }
-
-  func makeNSView(context: Context) -> NSView {
-    let view = WindowTrackingView(frame: .zero)
-    view.onWindowChange = { [weak coordinator = context.coordinator] window in
-      coordinator?.trackedWindow = window
-    }
-    context.coordinator.install()
-    return view
-  }
-
-  func updateNSView(_ nsView: NSView, context: Context) {
-    context.coordinator.trackedWindow = nsView.window
-  }
-
-  static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-    if let view = nsView as? WindowTrackingView {
-      view.onWindowChange = nil
-    }
-    coordinator.trackedWindow = nil
-    coordinator.uninstall()
-  }
-
-  final class Coordinator {
-    private var monitor: Any?
-    weak var trackedWindow: NSWindow?
-
-    func install() {
-      guard monitor == nil else { return }
-
-      monitor = NSEvent.addLocalMonitorForEvents(matching: [
-        .leftMouseDown,
-        .rightMouseDown,
-      ]) { [weak self] event in
-        guard
-          let self,
-          let window = event.window,
-          window === trackedWindow,
-          let contentView = window.contentView
-        else {
-          return event
-        }
-
-        let location = contentView.convert(event.locationInWindow, from: nil)
-        if let hitView = contentView.hitTest(location),
-           !TextFocusPreservingRegistry.shared.contains(event.locationInWindow, in: window),
-           !hitView.preservesTextFocus,
-           !hitView.isInsideTextInput
-        {
-          window.makeFirstResponder(nil)
-        }
-
-        return event
-      }
-    }
-
-    func uninstall() {
-      if let monitor {
-        NSEvent.removeMonitor(monitor)
-        self.monitor = nil
-      }
-    }
-  }
-}
-
-private final class WindowTrackingView: NSView {
-  var onWindowChange: ((NSWindow?) -> Void)?
-
-  override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-    onWindowChange?(window)
-  }
-}
-
-private struct TextFocusPreservingArea: NSViewRepresentable {
-  func makeNSView(context _: Context) -> NSView {
-    let view = TextFocusPreservingView(frame: .zero)
-    view.autoresizingMask = [.width, .height]
-    return view
-  }
-
-  func updateNSView(_ nsView: NSView, context _: Context) {
-    nsView.needsLayout = true
-  }
-}
-
-private final class TextFocusPreservingView: NSView {
-  override func viewDidMoveToWindow() {
-    super.viewDidMoveToWindow()
-    TextFocusPreservingRegistry.shared.register(self)
-  }
-}
-
-private final class TextFocusPreservingRegistry {
-  static let shared = TextFocusPreservingRegistry()
-
-  private let views = NSHashTable<TextFocusPreservingView>.weakObjects()
-
-  func register(_ view: TextFocusPreservingView) {
-    views.add(view)
-  }
-
-  func contains(_ locationInWindow: NSPoint, in window: NSWindow) -> Bool {
-    views.allObjects.contains { view in
-      guard view.window === window else { return false }
-
-      let locationInView = view.convert(locationInWindow, from: nil)
-      return view.bounds.contains(locationInView)
-    }
   }
 }

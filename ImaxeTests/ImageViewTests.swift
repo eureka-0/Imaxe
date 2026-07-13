@@ -99,6 +99,99 @@ struct ImageViewTests {
     #expect(didTriggerDoubleClick)
   }
 
+  @Test func `programmatic zoom anchors on image center`() throws {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
+    )
+    scrollView.allowsMagnification = true
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+    )
+
+    let animation = try #require(coordinator.prepareZoomAnimation(2, to: scrollView))
+
+    #expect(animation.center == NSPoint(x: 400, y: 300))
+  }
+
+  @Test func `reduce motion applies programmatic zoom without animation`() {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    coordinator.shouldReduceMotion = { true }
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
+    )
+    scrollView.allowsMagnification = true
+    scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
+    scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+    )
+
+    coordinator.applyZoomScale(2, to: scrollView, animated: true)
+
+    #expect(scrollView.magnification.isApproximatelyEqual(to: 2))
+    #expect(!coordinator.isProgrammaticZoomAnimating)
+  }
+
+  @Test func `direct panning moves the canvas with the pointer`() {
+    let scrollView = ImageScrollView.ImageNSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
+    )
+    let clipView = ImageScrollView.ImageClipView()
+    clipView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+    )
+    scrollView.contentView = clipView
+    scrollView.documentView = clipView.documentView
+    scrollView.allowsMagnification = true
+    scrollView.magnification = 1
+    scrollView.contentView.scroll(to: NSPoint(x: 100, y: 100))
+
+    scrollView.panDocument(by: NSSize(width: 40, height: 30))
+
+    #expect(scrollView.contentView.bounds.origin == NSPoint(x: 60, y: 70))
+  }
+
+  @Test func `viewport command pans the image`() {
+    let coordinator = ImageScrollView.Coordinator(
+      onZoomScaleChange: { _ in },
+      onAlwaysFitToWindowChange: { _ in },
+    )
+    let viewportController = ImageViewportController()
+    let scrollView = NSScrollView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)),
+    )
+    scrollView.documentView = NSView(
+      frame: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
+    )
+    scrollView.contentView.scroll(to: NSPoint(x: 100, y: 100))
+    coordinator.observe(scrollView)
+    coordinator.bind(to: viewportController)
+
+    viewportController.pan(horizontal: 40, vertical: 30)
+
+    #expect(scrollView.contentView.bounds.origin == NSPoint(x: 140, y: 130))
+  }
+
+  @Test func `animated image containers create independent frame state`() async throws {
+    let loader = ImageLoader.shared
+    let image = try await loader.loadImage(
+      from: TestSupport.sampleImageURL("sample_384×512.gif"),
+    )
+    let firstRepresentation = try #require(image.makeAnimatedBitmapRepresentation())
+    let secondRepresentation = try #require(image.makeAnimatedBitmapRepresentation())
+
+    #expect(firstRepresentation !== secondRepresentation)
+    firstRepresentation.setProperty(.currentFrame, withValue: 1)
+    #expect(secondRepresentation.currentGIFFrame == 0)
+  }
+
   @Test func `fit to screen command is queued`() {
     let coordinator = ImageScrollView.Coordinator(
       onZoomScaleChange: { _ in },
@@ -185,6 +278,7 @@ struct ImageViewTests {
       onZoomScaleChange: { _ in },
       onAlwaysFitToWindowChange: { _ in },
     )
+    coordinator.shouldReduceMotion = { false }
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 800, height: 600)),
       styleMask: [.titled, .resizable],
@@ -227,6 +321,7 @@ struct ImageViewTests {
       onZoomScaleChange: { _ in },
       onAlwaysFitToWindowChange: { _ in },
     )
+    coordinator.shouldReduceMotion = { false }
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 400, height: 300)),
       styleMask: [.titled, .resizable],
@@ -253,7 +348,7 @@ struct ImageViewTests {
       }
 
       var maximumMismatch = CGFloat.zero
-      try await TestSupport.waitUntil(timeout: .seconds(2)) {
+      try await TestSupport.waitUntil {
         scrollView.layoutSubtreeIfNeeded()
         let imageDisplaySize = NSSize(
           width: imageSize.width * scrollView.magnification,
@@ -292,6 +387,7 @@ struct ImageViewTests {
       onZoomScaleChange: { _ in },
       onAlwaysFitToWindowChange: { alwaysFitChanges.append($0) },
     )
+    coordinator.shouldReduceMotion = { false }
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 320, height: 240)),
       styleMask: [.titled, .resizable],
@@ -334,6 +430,7 @@ struct ImageViewTests {
       onZoomScaleChange: { _ in },
       onAlwaysFitToWindowChange: { _ in },
     )
+    coordinator.shouldReduceMotion = { false }
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 320, height: 240)),
       styleMask: [.titled, .resizable],

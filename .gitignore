@@ -15,5 +15,5 @@ build/
 ## Built applications
 Build/
 
-## Example image for file updating demonstration
-SampleImages/updating_example.png
+## SwiftPad generated files
+buildServer.json

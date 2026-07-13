@@ -13,6 +13,7 @@ struct BorderedOnHoverButtonStyle: ButtonStyle {
   var isActive: Bool = false
 
   @Environment(\.isEnabled) private var isEnabled
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
   @State private var isHovering = false
 
   func makeBody(configuration: Configuration) -> some View {
@@ -29,8 +30,14 @@ struct BorderedOnHoverButtonStyle: ButtonStyle {
       )
       .clipShape(.rect(cornerRadius: cornerRadius))
       .contentShape(.rect(cornerRadius: cornerRadius))
-      .animation(.easeOut(duration: 0.12), value: isHovering)
-      .animation(.easeOut(duration: 0.08), value: configuration.isPressed && applyPressedEffect)
+      .animation(
+        accessibilityReduceMotion ? nil : .easeOut(duration: 0.12),
+        value: isHovering,
+      )
+      .animation(
+        accessibilityReduceMotion ? nil : .easeOut(duration: 0.08),
+        value: configuration.isPressed && applyPressedEffect,
+      )
       .onHover { isHovering in
         self.isHovering = isHovering
       }

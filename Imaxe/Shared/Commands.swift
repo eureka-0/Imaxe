@@ -8,29 +8,64 @@
 import SwiftData
 import SwiftUI
 
+private struct RecentImagesKey: FocusedValueKey {
+  typealias Value = [RecentImage]
+}
+
+extension FocusedValues {
+  var recentImages: [RecentImage]? {
+    get { self[RecentImagesKey.self] }
+    set { self[RecentImagesKey.self] = newValue }
+  }
+}
+
+// MARK: - FileOperationCommands
+
 struct FileOperationCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
+  @FocusedValue(HomeViewModel.self) private var homeViewModel
+  @FocusedValue(\.recentImages) private var recentImagesValue
+  @Environment(\.openWindow) private var openWindow
 
   let modelContainer: ModelContainer
 
   private var recentImages: [RecentImage] {
-    Array(imageSession?.recentImages.prefix(Constants.maximumRecentImagesToDisplayInMenu) ?? [])
+    if let recentImagesValue {
+      Array(recentImagesValue.prefix(Constants.maximumRecentImagesToDisplayInMenu))
+    } else {
+      []
+    }
   }
 
   var body: some Commands {
-    CommandGroup(after: .newItem) {
+    CommandGroup(replacing: .newItem) {
+      Button("Open Home Window") {
+        openWindow(id: "home")
+      }
+      .keyboardShortcut("n", modifiers: [.command])
+      .disabled(imageSession == nil && homeViewModel != nil)
+
       Divider()
 
       Button("Open Image...") {
-        imageSession?.isImporterPresented = true
+        if let imageSession {
+          imageSession.isImporterPresented = true
+        } else {
+          homeViewModel?.isImporterPresented = true
+        }
       }
       .keyboardShortcut("o", modifiers: .command)
-      .disabled(imageSession == nil)
+      .disabled(imageSession == nil && homeViewModel == nil)
 
       Button("Open from Pasteboard") {
-        imageSession?.openImageFromPasteboard()
+        if let imageSession {
+          imageSession.openImageFromPasteboard()
+        } else if let homeViewModel {
+          homeViewModel.openImageFromPasteboard()
+        }
       }
-      .disabled(imageSession == nil)
+      .keyboardShortcut("v", modifiers: [.command, .option])
+      .disabled(imageSession == nil && homeViewModel == nil)
 
       Menu("Open Recent") {
         if recentImages.isEmpty {
@@ -39,14 +74,13 @@ struct FileOperationCommands: Commands {
         } else {
           ForEach(recentImages) { recentImage in
             Button(recentImage.fileName) {
-              guard let imageSession else {
-                NSSound.beep()
-                return
+              if let imageSession {
+                imageSession.openRecentImage(recentImage)
+              } else if let homeViewModel {
+                homeViewModel.openRecentImage(recentImage)
               }
-
-              imageSession.openRecentImage(recentImage)
             }
-            .disabled(imageSession == nil)
+            .disabled(imageSession == nil && homeViewModel == nil)
           }
 
           Divider()
@@ -55,10 +89,8 @@ struct FileOperationCommands: Commands {
             do {
               try RecentImagesStore.clear(in: modelContainer.mainContext)
             } catch {
-              imageSession?.alert = ImageAlert(
-                title: "Failed to Clear Recent Images",
-                message: error.localizedDescription,
-              )
+              imageSession?.alertTitle = "Failed to Clear Recent Images"
+              imageSession?.alertMessage = error.localizedDescription
             }
           }
         }
@@ -76,11 +108,13 @@ struct FileOperationCommands: Commands {
   }
 }
 
+// MARK: - ViewCommands
+
 struct ViewCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
 
   var body: some Commands {
-    CommandGroup(after: .sidebar) {
+    CommandGroup(replacing: .sidebar) {
       Button("Previous Image") {
         imageSession?.navigateToPreviousImage()
       }
@@ -117,6 +151,32 @@ struct ViewCommands: Commands {
         imageSession?.setZoomScale(1.0)
       }
       .keyboardShortcut("1", modifiers: .command)
+      .disabled(imageSession?.currentImage == nil)
+
+      Divider()
+
+      Button("Pan Left") {
+        imageSession?.pan(horizontal: -Constants.keyboardPanDistance, vertical: 0)
+      }
+      .keyboardShortcut(.leftArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Button("Pan Right") {
+        imageSession?.pan(horizontal: Constants.keyboardPanDistance, vertical: 0)
+      }
+      .keyboardShortcut(.rightArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Button("Pan Up") {
+        imageSession?.pan(horizontal: 0, vertical: -Constants.keyboardPanDistance)
+      }
+      .keyboardShortcut(.upArrow, modifiers: .option)
+      .disabled(imageSession?.currentImage == nil)
+
+      Button("Pan Down") {
+        imageSession?.pan(horizontal: 0, vertical: Constants.keyboardPanDistance)
+      }
+      .keyboardShortcut(.downArrow, modifiers: .option)
       .disabled(imageSession?.currentImage == nil)
 
       Divider()

@@ -17,7 +17,7 @@ enum ImageCollectionViewMode: String, CaseIterable, Identifiable {
     self
   }
 
-  var title: String {
+  var title: LocalizedStringResource {
     switch self {
     case .list: "List"
     case .grid: "Grid"
@@ -39,10 +39,10 @@ final class ImageCollectionItemState {
 }
 
 struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable {
-  var title: String?
-  var subtitle: String?
+  var title: LocalizedStringResource?
+  var subtitle: LocalizedStringResource?
   var useDefaultSubtitle: Bool = true
-  var emptyDescription: String?
+  var emptyDescription: LocalizedStringResource?
   var searchableText: ((Item) -> String)?
   var sortOptions: [ImageCollectionSortOption<Item>] = []
   var defaultSortOptionID: ImageCollectionSortOption<Item>.ID?
@@ -57,7 +57,7 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
     }
   }
 
-  var clearHelpText: String?
+  var clearHelpText: LocalizedStringResource?
   var onClear: (() -> Void)?
 
   var defaultViewMode: ImageCollectionViewMode = .grid
@@ -204,21 +204,26 @@ struct ImageCollectionView<
 
   @State private var viewModel = ImageCollectionViewModel<Item>()
   @State private var magnifyBaseGridItemSize: CGFloat?
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   // UI layout constants
   private let collectionToolBarHeight: CGFloat = 40
   private let collectionToolBarButtonHeight: CGFloat = 26
-  private let viewModeAnimation = Animation.spring(response: 0.32, dampingFraction: 0.84)
-  private let itemLayoutAnimation = Animation.spring(
-    response: 0.34,
-    dampingFraction: 0.86,
-    blendDuration: 0.05,
-  )
-  private let gridItemSizeAnimation = Animation.interactiveSpring(
-    response: 0.22,
-    dampingFraction: 0.88,
-    blendDuration: 0.08,
-  )
+  private var viewModeAnimation: Animation? {
+    accessibilityReduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.84)
+  }
+
+  private var itemLayoutAnimation: Animation? {
+    accessibilityReduceMotion
+      ? nil
+      : .spring(response: 0.34, dampingFraction: 0.86, blendDuration: 0.05)
+  }
+
+  private var gridItemSizeAnimation: Animation? {
+    accessibilityReduceMotion
+      ? nil
+      : .interactiveSpring(response: 0.22, dampingFraction: 0.88, blendDuration: 0.08)
+  }
 
   private var itemIDs: [Item.ID] {
     items.map(\.id)
@@ -408,7 +413,7 @@ struct ImageCollectionView<
 
           Group {
             if configuration.useDefaultSubtitle {
-              Text("\(visibleItemCount) image\(visibleItemCount == 1 ? "" : "s")")
+              Text("^[\(visibleItemCount) image](inflect: true)")
             } else if let subtitle = configuration.subtitle {
               Text(subtitle)
             }
@@ -497,7 +502,7 @@ struct ImageCollectionView<
         }
         .buttonStyle(.borderedOnHover)
         .disabled(items.isEmpty)
-        .help(clearHelpText)
+        .help(Text(clearHelpText))
       }
     }
     .padding(.horizontal, 12)
@@ -679,7 +684,10 @@ extension ImageCollectionView where GridItemContent == EmptyView, ContextMenuCon
 // MARK: - Modifiers
 
 extension ImageCollectionView {
-  func collectionTitle(_ title: String, subtitle: String? = nil) -> Self {
+  func collectionTitle(
+    _ title: LocalizedStringResource,
+    subtitle: LocalizedStringResource? = nil,
+  ) -> Self {
     var view = self
     view.configuration.title = title
     view.configuration.subtitle = subtitle
@@ -748,7 +756,10 @@ extension ImageCollectionView {
     return view
   }
 
-  func clearAction(_ helpText: String, _ action: @escaping () -> Void) -> Self {
+  func clearAction(
+    _ helpText: LocalizedStringResource,
+    _ action: @escaping () -> Void,
+  ) -> Self {
     var view = self
     view.configuration.clearHelpText = helpText
     view.configuration.onClear = action

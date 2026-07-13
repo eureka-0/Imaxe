@@ -9,6 +9,10 @@ import SwiftUI
 
 struct ImageView: View {
   @Bindable var imageSession: ImageSession
+  var onAlertAcknowledged: () -> Void = {}
+
+  @Environment(\.openWindow) private var openWindow
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   @State private var isTopBarHovering = false
   @State private var isImageInfoPresented = false
@@ -31,7 +35,10 @@ struct ImageView: View {
 
           topBar
             .opacity(imageSession.showTopBar ? 1 : 0)
-            .animation(.easeInOut(duration: 0.2), value: imageSession.showTopBar)
+            .animation(
+              accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
+              value: imageSession.showTopBar,
+            )
             .allowsHitTesting(imageSession.showTopBar)
 
           HoverTrackingStrip { isHovering, window in
@@ -42,18 +49,31 @@ struct ImageView: View {
           .frame(height: Constants.topBarHoverStripHeight)
         }
       } else {
-        HomeView(imageSession: imageSession)
+        Color.clear
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .alert(item: $imageSession.alert) { alert in
-      Alert(title: Text(alert.title), message: Text(alert.message))
+    .alert(imageSession.alertTitle, isPresented: $imageSession.isAlertPresented) {
+      Button("OK", action: onAlertAcknowledged)
+    } message: {
+      Text(imageSession.alertMessage ?? "")
     }
-    .onChange(of: isPopoverPresented) { _, _ in
+    .onChange(of: isPopoverPresented) {
       updateTopBarVisibility()
     }
-    .onChange(of: imageSession.isLoading) { _, _ in
-      updateTopBarVisibility()
+    .onChange(of: imageSession.isLoading) { _, newValue in
+      if !newValue, imageSession.currentImage == nil {
+        imageSession.restoreStandardWindowButtons()
+      } else {
+        updateTopBarVisibility()
+      }
+    }
+    .fileImporter(
+      isPresented: $imageSession.isImporterPresented,
+      allowedContentTypes: ImageLoader.supportedImageTypes,
+      allowsMultipleSelection: true,
+    ) { result in
+      imageSession.onOpenImage(result: result, openWindow: openWindow)
     }
   }
 
@@ -68,10 +88,15 @@ struct ImageView: View {
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
       )
       .viewportController(imageSession.viewportController)
+      .overlay {
+        if imageSession.isLoading, imageSession.loadingElapsedTime > 0.1 {
+          loadingImageView
+        }
+      }
     } else if imageSession.isLoading {
       loadingImageView
     } else {
-      HomeView(imageSession: imageSession)
+      Color.clear
     }
   }
 
@@ -85,6 +110,8 @@ struct ImageView: View {
         .foregroundStyle(.secondary)
     }
     .padding(24)
+    .background(.regularMaterial)
+    .clipShape(RoundedRectangle(cornerRadius: 12))
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(Text("Loading..."))
@@ -258,13 +285,16 @@ struct ImageView: View {
 
   private var pinWindowButton: some View {
     Button(action: imageSession.toggleWindowPinning) {
-      topBarIconLabel("Pin Window", systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin")
+      topBarIconLabel(
+        imageSession.isWindowPinned ? "Unpin Window" : "Pin Window",
+        systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin",
+      )
     }
     .buttonStyle(.borderedOnHover)
     .help(Text("Toggle window pinning"))
   }
 
-  private func topBarIconLabel(_ title: LocalizedStringKey, systemImage: String) -> some View {
+  private func topBarIconLabel(_ title: LocalizedStringResource, systemImage: String) -> some View {
     Label(title, systemImage: systemImage)
       .labelStyle(.iconOnly)
       .frame(width: Constants.topBarIconButtonWidth, height: Constants.topBarButtonHeight)

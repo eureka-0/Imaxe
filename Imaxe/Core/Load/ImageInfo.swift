@@ -129,6 +129,7 @@ nonisolated struct SVGDocumentSize {
   let viewBox: NSRect?
   let size: NSSize?
   let hasExplicitDimensions: Bool
+  let hasRootElement: Bool
 
   var bestSize: NSSize? {
     if let viewBox, viewBox.width > 0, viewBox.height > 0 {
@@ -143,8 +144,10 @@ nonisolated struct SVGDocumentSize {
   }
 
   init(svgString: String) {
-    let svgTag = Self.rootSVGTag(in: svgString) ?? ""
+    let rootSVGTag = Self.rootSVGTag(in: svgString)
+    let svgTag = rootSVGTag ?? ""
     let attributes = Self.attributes(in: svgTag)
+    hasRootElement = rootSVGTag != nil
     hasExplicitDimensions = attributes["viewBox"] != nil
       || attributes["width"] != nil
       || attributes["height"] != nil

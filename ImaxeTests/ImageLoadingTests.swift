@@ -13,10 +13,25 @@ import Testing
 @MainActor
 @Suite("Image Loading")
 struct ImageLoadingTests {
+  private let loader = ImageLoader.shared
+
+  private nonisolated static let registeredFormatSamples = [
+    "sample_1280×853.bmp",
+    "sample_384×512.gif",
+    "sample.heic",
+    "sample.heif",
+    "sample_1280×853.ico",
+    "sample_1280×853.jpeg",
+    "sample_1280×853.png",
+    "sample_1280×853.tiff",
+    "sample.webp",
+    "sample_1280×853.svg",
+  ]
+
   @Test func `image info loads sample metadata without image decode`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
-    let info = try await ImageLoader.shared.loadInfo(from: url)
+    let info = try await loader.loadInfo(from: url)
 
     #expect(info.url == url)
     #expect(info.fileName == "sample_1280×853.png")
@@ -25,11 +40,80 @@ struct ImageLoadingTests {
     #expect(info.fileSize > 0)
   }
 
+  @Test(arguments: registeredFormatSamples)
+  func `registered formats load metadata and primary image`(_ sampleName: String) async throws {
+    let url = TestSupport.sampleImageURL(sampleName)
+
+    let info = try await loader.loadInfo(from: url)
+    let image = try await loader.loadImage(from: url)
+
+    #expect(info.url == url)
+    #expect(info.pixelSize.width > 0)
+    #expect(info.pixelSize.height > 0)
+    #expect(image.pixelSize.width > 0)
+    #expect(image.pixelSize.height > 0)
+  }
+
+  @Test(arguments: registeredFormatSamples)
+  func `registered formats generate thumbnails`(_ sampleName: String) async throws {
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-format-thumbnail")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = TestSupport.sampleImageURL(sampleName)
+
+    let key = try #require(await ImageThumbnailCache.ensureThumbnail(
+      for: url,
+      directoryURL: directory,
+    ))
+
+    #expect(ImageThumbnailCache.isValidThumbnail(for: key, directoryURL: directory))
+  }
+
+  @Test(arguments: registeredFormatSamples)
+  func `registered formats report corrupt content`(_ sampleName: String) async throws {
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-format-corrupt")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appending(path: sampleName)
+    try Data("not an image".utf8).write(to: url)
+
+    await expectCorruptImage {
+      _ = try await loader.loadInfo(from: url)
+    }
+    await expectCorruptImage {
+      _ = try await loader.loadImage(from: url)
+    }
+  }
+
+  @Test(arguments: registeredFormatSamples)
+  func `registered formats report permission failures`(_ sampleName: String) async throws {
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-format-permission")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let sourceURL = TestSupport.sampleImageURL(sampleName)
+    let protectedURL = directory.appending(path: sampleName)
+    try FileManager.default.copyItem(at: sourceURL, to: protectedURL)
+    defer {
+      try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o600],
+        ofItemAtPath: protectedURL.filePath,
+      )
+    }
+    try FileManager.default.setAttributes(
+      [.posixPermissions: 0],
+      ofItemAtPath: protectedURL.filePath,
+    )
+
+    await expectPermissionDenied {
+      _ = try await loader.loadInfo(from: protectedURL)
+    }
+    await expectPermissionDenied {
+      _ = try await loader.loadImage(from: protectedURL)
+    }
+  }
+
   @Test func `svg loaded image rasterizes to bitmap and uses view box size`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.svg")
 
-    let imageInfo = try await ImageLoader.shared.loadInfo(from: url)
-    let imageContainer = try await ImageLoader.shared.loadImage(from: url)
+    let imageInfo = try await loader.loadInfo(from: url)
+    let imageContainer = try await loader.loadImage(from: url)
     let bitmapRep = try #require(imageContainer.nsImage.representations.first as? NSBitmapImageRep)
 
     #expect(imageInfo.pixelSize == IntSize(width: 1280, height: 853))
@@ -55,8 +139,8 @@ struct ImageLoadingTests {
     """
     try svg.write(to: url, atomically: true, encoding: .utf8)
 
-    let imageInfo = try await ImageLoader.shared.loadInfo(from: url)
-    let imageContainer = try await ImageLoader.shared.loadImage(from: url)
+    let imageInfo = try await loader.loadInfo(from: url)
+    let imageContainer = try await loader.loadImage(from: url)
     let bitmapRep = try #require(imageContainer.nsImage.representations.first as? NSBitmapImageRep)
 
     #expect(imageInfo.pixelSize == IntSize(width: 4267, height: 4267))
@@ -69,8 +153,8 @@ struct ImageLoadingTests {
   @Test func `image loader returns cached image container for same url`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
-    let firstImage = try await ImageLoader.shared.loadImage(from: url)
-    let secondImage = try await ImageLoader.shared.loadImage(from: url)
+    let firstImage = try await loader.loadImage(from: url)
+    let secondImage = try await loader.loadImage(from: url)
 
     #expect(firstImage === secondImage)
   }
@@ -79,7 +163,7 @@ struct ImageLoadingTests {
     let url = URL.temporaryDirectory.appending(path: "imaxe-missing-image-\(UUID().uuidString).png")
 
     do {
-      _ = try await ImageLoader.shared.loadImage(from: url)
+      _ = try await loader.loadImage(from: url)
       Issue.record("Expected loading a missing image to throw.")
     } catch let error as ImageLoadingError {
       if case let .fileNotFound(missingURL) = error {
@@ -105,7 +189,7 @@ struct ImageLoadingTests {
     try Data("not an image".utf8).write(to: url)
 
     do {
-      _ = try await ImageLoader.shared.loadImage(from: url)
+      _ = try await loader.loadImage(from: url)
       Issue.record("Expected corrupt image content to throw.")
     } catch let error as ImageLoadingError {
       if case let .corruptImage(corruptURL) = error {
@@ -137,10 +221,10 @@ struct ImageLoadingTests {
       .write(to: oversizedURL, atomically: true, encoding: .utf8)
 
     await #expect(throws: ImageLoadingError.self) {
-      _ = try await ImageLoader.shared.loadImage(from: invalidURL)
+      _ = try await loader.loadImage(from: invalidURL)
     }
     await #expect(throws: ImageLoadingError.self) {
-      _ = try await ImageLoader.shared.loadImage(from: oversizedURL)
+      _ = try await loader.loadImage(from: oversizedURL)
     }
   }
 
@@ -148,14 +232,14 @@ struct ImageLoadingTests {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let requestID = ImageLoader.LoadRequestID()
     let loadTask = Task {
-      try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
+      try await loader.loadImage(from: url, requestID: requestID)
     }
 
     loadTask.cancel()
-    await ImageLoader.shared.cancelLoads(for: requestID)
+    await loader.cancelLoads(for: requestID)
     _ = try? await loadTask.value
 
-    let image = try await ImageLoader.shared.loadImage(from: url)
+    let image = try await loader.loadImage(from: url)
 
     #expect(image.pixelSize == NSSize(width: 1280, height: 853))
   }
@@ -165,8 +249,8 @@ struct ImageLoadingTests {
       .appending(path: "imaxe-changing-image-\(UUID().uuidString).png")
 
     try TestSupport.pngData(width: 10, height: 20).write(to: url)
-    let firstImage = try await ImageLoader.shared.loadImage(from: url)
-    let firstInfo = try await ImageLoader.shared.loadInfo(from: url)
+    let firstImage = try await loader.loadImage(from: url)
+    let firstInfo = try await loader.loadInfo(from: url)
 
     try TestSupport.pngData(width: 12, height: 24).write(to: url)
     try FileManager.default.setAttributes(
@@ -174,8 +258,8 @@ struct ImageLoadingTests {
       ofItemAtPath: url.filePath,
     )
 
-    let secondImage = try await ImageLoader.shared.loadImage(from: url)
-    let secondInfo = try await ImageLoader.shared.loadInfo(from: url)
+    let secondImage = try await loader.loadImage(from: url)
+    let secondInfo = try await loader.loadInfo(from: url)
 
     #expect(firstImage !== secondImage)
     #expect(firstImage.pixelSize == NSSize(width: 10, height: 20))
@@ -186,9 +270,17 @@ struct ImageLoadingTests {
 
   @Test func `thumbnail cache generates svg thumbnail`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.svg")
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-svg-thumbnail")
+    defer { try? FileManager.default.removeItem(at: directory) }
 
-    let thumbnailKey = try #require(await ImageThumbnailCache.ensureThumbnail(for: url))
-    let thumbnailURL = ImageThumbnailCache.thumbnailURL(for: thumbnailKey)
+    let thumbnailKey = try #require(await ImageThumbnailCache.ensureThumbnail(
+      for: url,
+      directoryURL: directory,
+    ))
+    let thumbnailURL = ImageThumbnailCache.thumbnailURL(
+      for: thumbnailKey,
+      directoryURL: directory,
+    )
     let thumbnailImage = try #require(NSImage(contentsOf: thumbnailURL))
     let bitmapRep = try #require(thumbnailImage.representations.first as? NSBitmapImageRep)
 
@@ -202,26 +294,29 @@ struct ImageLoadingTests {
 
   @Test func `thumbnail cache replaces corrupt cache entry`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-corrupt-thumbnail")
+    defer { try? FileManager.default.removeItem(at: directory) }
     let key = try #require(ImageThumbnailCache.cacheKey(for: url))
-    let cacheURL = ImageThumbnailCache.thumbnailURL(for: key)
+    let cacheURL = ImageThumbnailCache.thumbnailURL(for: key, directoryURL: directory)
     try FileManager.default.ensureExists(for: cacheURL.deletingLastPathComponent())
     try Data("corrupt".utf8).write(to: cacheURL, options: .atomic)
 
-    let regeneratedKey = await ImageThumbnailCache.ensureThumbnail(for: url)
+    let regeneratedKey = await ImageThumbnailCache.ensureThumbnail(
+      for: url,
+      directoryURL: directory,
+    )
 
     #expect(regeneratedKey == key)
-    #expect(ImageThumbnailCache.isValidThumbnail(for: key))
+    #expect(ImageThumbnailCache.isValidThumbnail(for: key, directoryURL: directory))
   }
 
   @Test func `thumbnail cache total size sums regular files`() throws {
-    let testDirectory = URL.thumbnailCachesDirectory
-      .appending(path: "test-\(UUID().uuidString)", directoryHint: .isDirectory)
-    try FileManager.default.createDirectory(at: testDirectory, withIntermediateDirectories: true)
+    let testDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-thumbnail-size")
     defer {
       try? FileManager.default.removeItem(at: testDirectory)
     }
 
-    let initialSize = ImageThumbnailCache.totalCacheSizeInBytes()
+    let initialSize = ImageThumbnailCache.totalCacheSizeInBytes(directoryURL: testDirectory)
     let firstFile = testDirectory.appending(path: "first.png")
     let nestedDirectory = testDirectory.appending(path: "nested", directoryHint: .isDirectory)
     let nestedFile = nestedDirectory.appending(path: "second.png")
@@ -229,9 +324,39 @@ struct ImageLoadingTests {
     try Data(repeating: 1, count: 13).write(to: firstFile)
     try Data(repeating: 2, count: 29).write(to: nestedFile)
 
-    #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize + 42)
+    #expect(
+      ImageThumbnailCache.totalCacheSizeInBytes(directoryURL: testDirectory) == initialSize + 42,
+    )
 
     try FileManager.default.removeItem(at: testDirectory)
-    #expect(ImageThumbnailCache.totalCacheSizeInBytes() == initialSize)
+    #expect(ImageThumbnailCache.totalCacheSizeInBytes(directoryURL: testDirectory) == 0)
+  }
+
+  private func expectPermissionDenied(_ operation: () async throws -> Void) async {
+    do {
+      try await operation()
+      Issue.record("Expected a permission denied error.")
+    } catch let error as ImageLoadingError {
+      if case .permissionDenied = error {
+        return
+      }
+      Issue.record("Expected permissionDenied, got \(error).")
+    } catch {
+      Issue.record("Expected ImageLoadingError, got \(error).")
+    }
+  }
+
+  private func expectCorruptImage(_ operation: () async throws -> Void) async {
+    do {
+      try await operation()
+      Issue.record("Expected a corrupt image error.")
+    } catch let error as ImageLoadingError {
+      if case .corruptImage = error {
+        return
+      }
+      Issue.record("Expected corruptImage, got \(error).")
+    } catch {
+      Issue.record("Expected ImageLoadingError, got \(error).")
+    }
   }
 }

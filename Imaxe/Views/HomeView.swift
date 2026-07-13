@@ -10,34 +10,19 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
-private struct HomeOperationAlert: Identifiable {
-  let id = UUID()
-  let title: String
-  let message: String
-}
+// MARK: - HomeView
 
 struct HomeView: View {
-  @Bindable var imageSession: ImageSession
-
-  @AppStorage("recentImagesViewMode")
-  private var recentImagesViewModeRawValue = ImageCollectionViewMode.grid.rawValue
+  @AppStorage("recentImagesViewMode") private var recentImagesViewModeRawValue =
+    ImageCollectionViewMode.grid.rawValue
   @AppStorage("recentImagesGridItemSize") private var recentImagesGridItemSize = 120.0
 
+  @Environment(\.dismissWindow) private var dismissWindow
+  @Environment(\.openWindow) private var openWindow
   @Environment(\.modelContext) private var modelContext
-  @State private var deleteTargetURL: URL?
-  @State private var renameTarget: RecentImage?
-  @State private var renameText = ""
-  @State private var operationAlert: HomeOperationAlert?
+  @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
-  private var isDeleteConfirmationPresented: Binding<Bool> {
-    Binding {
-      deleteTargetURL != nil
-    } set: { isPresented in
-      if !isPresented {
-        deleteTargetURL = nil
-      }
-    }
-  }
+  @State private var viewModel = HomeViewModel()
 
   private var recentImagesViewMode: Binding<ImageCollectionViewMode> {
     Binding {
@@ -63,36 +48,64 @@ struct HomeView: View {
       homeHero
       recentImagesCollection
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .sheet(item: $renameTarget) { item in
+    .onAppear {
+      viewModel.modelContext = modelContext
+      viewModel.openWindow = openWindow
+      viewModel.dismissWindow = dismissWindow
+    }
+    .dismissTextFocusOnClickOutside()
+    .sheet(item: $viewModel.renameTarget) { item in
       fileRenameSheet(for: item)
     }
     .confirmationDialog(
       "Move to Trash?",
-      isPresented: isDeleteConfirmationPresented,
+      isPresented: viewModel.isDeleteConfirmationPresented,
       titleVisibility: .visible,
     ) {
       Button("Move to Trash", role: .destructive) {
-        if let deleteTargetURL {
-          moveToTrash(deleteTargetURL)
-        }
-        deleteTargetURL = nil
+        viewModel.moveToTrash()
       }
 
       Button("Cancel", role: .cancel) {
-        deleteTargetURL = nil
+        viewModel.cancelDelete()
       }
     } message: {
-      Text(deleteTargetURL?.filePath ?? "")
+      Text(viewModel.deleteTargetURL?.filePath ?? "")
     }
-    .alert(item: $operationAlert) { alert in
-      Alert(title: Text(alert.title), message: Text(alert.message))
+    .alert(viewModel.alertTitle, isPresented: viewModel.isAlertPresented) {
+      Button("OK") {}
+    } message: {
+      Text(viewModel.alertMessage ?? "")
+    }
+    .fileImporter(
+      isPresented: $viewModel.isImporterPresented,
+      allowedContentTypes: ImageLoader.supportedImageTypes,
+      allowsMultipleSelection: true,
+      onCompletion: viewModel.openImportedImages,
+    )
+    .overlay(
+      ContainerRelativeShape()
+        .strokeBorder(
+          viewModel.isTargetedForDrop ? Color.accentColor : .clear,
+          lineWidth: 3,
+        ),
+    )
+    .dropDestination(for: URL.self) { urls, _ in
+      viewModel.openImages(at: urls)
+      return !urls.isEmpty
+    } isTargeted: { isTargeted in
+      viewModel.isTargetedForDrop = isTargeted
+    }
+    .focusedSceneValue(viewModel)
+    .focusedSceneValue(\.recentImages, recentImages)
+    .task(id: recentImages.map(\.path)) {
+      await viewModel.prefetchRecentImages(recentImages)
     }
   }
 
   private var homeHero: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("Drop images anywhere")
+      Text("Drop images here to open")
         .font(.title.weight(.semibold))
         .lineLimit(1)
 
@@ -118,7 +131,7 @@ struct HomeView: View {
         .help("Open Settings")
 
         Button {
-          imageSession.isImporterPresented = true
+          viewModel.isImporterPresented = true
         } label: {
           Label("Open Image", systemImage: "photo.badge.plus")
             .padding(.vertical, 3)
@@ -132,7 +145,7 @@ struct HomeView: View {
     .padding(.bottom, 16)
     .frame(maxWidth: .infinity)
     .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
-      length * 0.5
+      length * 0.45
     }
   }
 
@@ -155,23 +168,23 @@ struct HomeView: View {
       ImageCollectionSortOption(
         "modifiedAt",
         title: "Modified",
-        optionalValue: \.url.contentModificationDate,
+        optionalValue: \.sourceContentModificationDate,
       ),
       ImageCollectionSortOption(
         "fileSize",
         title: "Size",
-        value: \.url.fileSize,
+        optionalValue: \.sourceFileSize,
       ),
     ]
     configuration.defaultSortOptionID = "lastOpenedAt"
     configuration.clearHelpText = "Clear Recent Images"
-    configuration.onClear = clearRecentImages
+    configuration.onClear = viewModel.clearRecentImages
     return configuration
   }
 
   private var recentImagesCollection: some View {
     ImageCollectionView(
-      imageSession.recentImages,
+      recentImages,
       configuration: imageCollectionConfiguration,
       listRow: recentImageListRow,
       gridItem: recentImageGridItem,
@@ -193,7 +206,7 @@ struct HomeView: View {
     state: ImageCollectionItemState,
   ) -> some View {
     HStack(spacing: 6) {
-      ImageThumbnailView(url: item.url)
+      ImageThumbnailView(url: item.url, cacheKey: item.thumbnailCacheKey)
         .frame(width: 28, height: 28)
 
       VStack(alignment: .leading, spacing: 2) {
@@ -215,7 +228,7 @@ struct HomeView: View {
         .foregroundStyle(.secondary)
         .frame(width: 90, alignment: .leading)
 
-      Text(fileSizeDescription(for: item.url.fileSize))
+      Text(item.sourceFileSize.map(fileSizeDescription(for:)) ?? "-")
         .font(.callout)
         .monospacedDigit()
         .foregroundStyle(.secondary)
@@ -239,7 +252,13 @@ struct HomeView: View {
     .background(state.isHovered ? Color.primary.opacity(0.1) : .clear)
     .clipShape(RoundedRectangle(cornerRadius: 8))
     .onTapGesture(count: 2) {
-      openRecentImage(item)
+      viewModel.openRecentImage(item)
+    }
+    .accessibilityElement(children: .contain)
+    .accessibilityLabel(Text(item.fileName))
+    .accessibilityHint(Text("Open image"))
+    .accessibilityAction {
+      viewModel.openRecentImage(item)
     }
   }
 
@@ -247,54 +266,54 @@ struct HomeView: View {
     _ item: RecentImage,
     state: ImageCollectionItemState,
   ) -> some View {
-    ImageThumbnailView(url: item.url)
-      .overlay(alignment: .bottom) {
-        if state.isHovered || !state.searchText.isEmpty {
-          Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
-            .font(.system(size: 10, weight: .light))
-            .foregroundStyle(.primary)
-            .lineLimit(1)
-            .truncationMode(.middle)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
-            .background(.regularMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 3))
-            .padding(.bottom, 2)
+    Button {
+      viewModel.openRecentImage(item)
+    } label: {
+      ImageThumbnailView(url: item.url, cacheKey: item.thumbnailCacheKey)
+        .overlay(alignment: .bottom) {
+          if state.isHovered || !state.searchText.isEmpty {
+            Text(item.fileName.searchHighlightedAttributedString(matching: state.searchText))
+              .font(.system(size: 10, weight: .light))
+              .foregroundStyle(.primary)
+              .lineLimit(1)
+              .truncationMode(.middle)
+              .padding(.horizontal, 4)
+              .padding(.vertical, 1)
+              .background(.regularMaterial)
+              .clipShape(RoundedRectangle(cornerRadius: 3))
+              .padding(.bottom, 2)
+          }
         }
-      }
-      .onTapGesture(count: 1) {
-        openRecentImage(item)
-      }
-      .help(item.path)
+    }
+    .buttonStyle(.plain)
+    .accessibilityLabel(Text(item.fileName))
+    .accessibilityHint(Text("Open image"))
+    .help(item.path)
   }
 
   @ViewBuilder
   private func recentImageActionsMenu(_ item: RecentImage) -> some View {
     Button("Open", systemImage: "photo") {
-      openRecentImage(item)
+      viewModel.openRecentImage(item)
     }
 
     Button("Rename", systemImage: "pencil") {
-      beginRename(item)
+      viewModel.beginRename(item)
     }
 
     Button("Move to Trash", systemImage: "trash", role: .destructive) {
-      confirmDelete(item.url)
+      viewModel.confirmDelete(item.url)
     }
 
     Divider()
 
     Button("Remove from Recents", systemImage: "minus.circle") {
-      remove(path: item.path)
+      viewModel.remove(path: item.path)
     }
 
     Button("Reveal in Finder", systemImage: "folder") {
-      imageSession.revealInFinder(for: [item.url])
+      NSWorkspace.shared.activateFileViewerSelecting([item.url])
     }
-  }
-
-  private func openRecentImage(_ item: RecentImage) {
-    imageSession.openRecentImage(item)
   }
 
   private func fileRenameSheet(for item: RecentImage) -> some View {
@@ -302,7 +321,7 @@ struct HomeView: View {
       Text("Rename")
         .font(.headline)
 
-      TextField("Name", text: $renameText)
+      TextField("Name", text: $viewModel.renameText)
         .textFieldStyle(.roundedBorder)
         .frame(width: 320)
 
@@ -310,94 +329,237 @@ struct HomeView: View {
         Spacer()
 
         Button("Cancel") {
-          renameTarget = nil
+          viewModel.cancelRename()
         }
         .keyboardShortcut(.cancelAction)
 
         Button("Rename") {
-          rename(item.url, to: renameText)
-          renameTarget = nil
+          viewModel.rename(item.url)
         }
         .keyboardShortcut(.defaultAction)
-        .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(viewModel.trimmedRenameText.isEmpty)
       }
     }
     .padding(20)
     .frame(width: 380)
   }
+}
 
-  private func remove(path: String) {
-    do {
-      try RecentImagesStore.remove(path: path, in: modelContext)
-    } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Remove Item",
-        message: error.localizedDescription,
-      )
+// MARK: - HomeViewModel
+
+@Observable
+final class HomeViewModel {
+  var deleteTargetURL: URL?
+  var isImporterPresented = false
+  var isTargetedForDrop = false
+  var renameTarget: RecentImage?
+  var renameText = ""
+  var alertTitle: LocalizedStringResource = ""
+  var alertMessage: String?
+
+  @ObservationIgnored var modelContext: ModelContext?
+  @ObservationIgnored var openWindow: OpenWindowAction?
+  @ObservationIgnored var dismissWindow: DismissWindowAction?
+
+  var isDeleteConfirmationPresented: Binding<Bool> {
+    Binding {
+      self.deleteTargetURL != nil
+    } set: { isPresented in
+      if !isPresented {
+        self.deleteTargetURL = nil
+      }
     }
   }
 
-  private func confirmDelete(_ url: URL) {
+  var isAlertPresented: Binding<Bool> {
+    Binding {
+      self.alertMessage != nil
+    } set: { isPresented in
+      if !isPresented {
+        self.alertTitle = ""
+        self.alertMessage = nil
+      }
+    }
+  }
+
+  var trimmedRenameText: String {
+    renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  func openRecentImage(_ item: RecentImage) {
+    openWindow?(
+      id: "image",
+      value: ImageWindowRequest(url: item.url, recentImagePath: item.path),
+    )
+    dismissWindow?(id: "home")
+  }
+
+  func openImportedImages(_ result: Result<[URL], Error>) {
+    switch result {
+    case let .success(urls):
+      openImages(at: urls)
+    case let .failure(error):
+      alertTitle = "Failed to Open Images"
+      alertMessage = error.localizedDescription
+    }
+  }
+
+  func openImages(at urls: [URL]) {
+    guard !urls.isEmpty else { return }
+
+    for url in urls {
+      openWindow?(id: "image", value: ImageWindowRequest(url: url))
+    }
+    DispatchQueue.main.async {
+      self.dismissWindow?(id: "home")
+    }
+  }
+
+  func remove(path: String) {
+    do {
+      if let modelContext {
+        try RecentImagesStore.remove(path: path, in: modelContext)
+      }
+    } catch {
+      alertTitle = "Failed to Remove Item"
+      alertMessage = error.localizedDescription
+    }
+  }
+
+  func confirmDelete(_ url: URL) {
     deleteTargetURL = url
   }
 
-  private func moveToTrash(_ url: URL) {
+  func moveToTrash() {
+    defer { cancelDelete() }
+
     do {
-      var trashedURL: NSURL?
-      try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
-      try RecentImagesStore.remove(path: url.filePath, in: modelContext)
+      if let url = deleteTargetURL {
+        var trashedURL: NSURL?
+        try FileManager.default.trashItem(at: url, resultingItemURL: &trashedURL)
+        if let modelContext {
+          try RecentImagesStore.remove(path: url.filePath, in: modelContext)
+        }
+      }
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Move Item to Trash",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Move Item to Trash"
+      alertMessage = error.localizedDescription
     }
   }
 
-  private func beginRename(_ item: RecentImage) {
+  func cancelDelete() {
+    deleteTargetURL = nil
+  }
+
+  func beginRename(_ item: RecentImage) {
     renameText = item.url.lastPathComponent
     renameTarget = item
   }
 
-  private func rename(_ url: URL, to newName: String) {
-    let trimmedName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedName.isEmpty, trimmedName != url.lastPathComponent else { return }
+  func rename(_ url: URL) {
+    defer { cancelRename() }
 
-    let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedName)
+    guard !trimmedRenameText.isEmpty, trimmedRenameText != url.lastPathComponent else { return }
+
+    let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedRenameText)
     do {
       try FileManager.default.moveItem(at: url, to: newURL)
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Rename Item",
-        message: error.localizedDescription,
-      )
+      alertTitle = "Failed to Rename Item"
+      alertMessage = error.localizedDescription
       return
     }
 
     Task {
       do {
-        try await RecentImagesStore.updateLocation(
-          from: url.filePath,
-          to: newURL,
-          in: modelContext,
-        )
+        if let modelContext {
+          try await RecentImagesStore.updateLocation(
+            from: url.filePath,
+            to: newURL,
+            in: modelContext,
+          )
+        }
       } catch {
-        operationAlert = HomeOperationAlert(
-          title: "Failed to Update Recent Images",
-          message: error.localizedDescription,
-        )
+        alertTitle = "Failed to Update Recent Images"
+        alertMessage = error.localizedDescription
       }
     }
   }
 
-  private func clearRecentImages() {
+  func cancelRename() {
+    renameTarget = nil
+  }
+
+  func clearRecentImages() {
     do {
-      try RecentImagesStore.clear(in: modelContext)
+      if let modelContext {
+        try RecentImagesStore.clear(in: modelContext)
+      }
     } catch {
-      operationAlert = HomeOperationAlert(
-        title: "Failed to Clear Recent Images",
-        message: error.localizedDescription,
+      alertTitle = "Failed to Clear Recent Images"
+      alertMessage = error.localizedDescription
+    }
+  }
+
+  func openImageFromPasteboard() {
+    do {
+      guard let image = try extractImageFromPasteboard() else { return }
+      openWindow?(
+        id: "image",
+        value: ImageWindowRequest(
+          url: image.url,
+          addsToRecent: false,
+          temporaryURL: image.temporaryURL,
+        ),
       )
+      dismissWindow?(id: "home")
+    } catch {
+      alertTitle = "Failed to Load Image from Pasteboard"
+      alertMessage = error.localizedDescription
+    }
+  }
+
+  func prefetchRecentImages(_ recentImages: [RecentImage]) async {
+    var didChange = false
+
+    for recentImage in recentImages {
+      guard !Task.isCancelled else { return }
+
+      let path = recentImage.path
+      let url = recentImage.url
+      let existingThumbnailCacheKey = recentImage.thumbnailCacheKey
+      async let fileSnapshot = Self.loadFileSnapshot(for: url)
+      async let thumbnailCacheKey = ImageThumbnailCache.thumbnailKey(
+        for: url,
+        preferredKey: existingThumbnailCacheKey,
+      )
+      let (snapshot, key) = await (fileSnapshot, thumbnailCacheKey)
+
+      guard !Task.isCancelled else { return }
+      guard recentImage.path == path else { continue }
+      didChange = recentImage.updatePrefetchedValues(
+        fileSnapshot: snapshot,
+        thumbnailCacheKey: key,
+      ) || didChange
+    }
+
+    guard didChange, let modelContext else { return }
+    do {
+      try modelContext.save()
+    } catch {
+      alertTitle = "Failed to Update Recent Images"
+      alertMessage = error.localizedDescription
+    }
+  }
+
+  private static func loadFileSnapshot(for url: URL) async -> FileSnapshot? {
+    let task = Task.detached(priority: .utility) {
+      FileSnapshot(url: url)
+    }
+    return await withTaskCancellationHandler {
+      await task.value
+    } onCancel: {
+      task.cancel()
     }
   }
 }
@@ -431,4 +593,9 @@ private extension String {
 
     return attributedString
   }
+}
+
+#Preview {
+  HomeView()
+    .modelContainer(for: [RecentImage.self], inMemory: true)
 }

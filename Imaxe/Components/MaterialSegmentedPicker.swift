@@ -14,6 +14,7 @@ struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeS
   var background: Background
 
   @Environment(\.appearsActive) private var appearsActive
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   init(
     _ selection: Binding<Item>,
@@ -62,7 +63,10 @@ struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeS
             .frame(width: selectedFrame.width, height: selectedFrame.height)
             .position(x: selectedFrame.midX, y: selectedFrame.midY)
             .animation(selectionAnimation, value: selection)
-            .animation(.easeOut(duration: 0.12), value: appearsActive)
+            .animation(
+              accessibilityReduceMotion ? nil : .easeOut(duration: 0.12),
+              value: appearsActive,
+            )
         }
       }
       .allowsHitTesting(false)
@@ -71,8 +75,8 @@ struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeS
     .background(background, in: .capsule)
   }
 
-  private var selectionAnimation: Animation {
-    .spring(response: 0.3, dampingFraction: 0.7)
+  private var selectionAnimation: Animation? {
+    accessibilityReduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7)
   }
 }
 

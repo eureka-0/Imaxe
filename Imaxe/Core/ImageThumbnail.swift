@@ -17,18 +17,24 @@ enum LibraryThumbnailReferences {
   static func removeThumbnailsIfUnused(
     _ keys: Set<String>,
     in modelContext: ModelContext,
+    thumbnailDirectoryURL: URL = .thumbnailCachesDirectory,
   ) throws {
     for key in keys {
-      try removeThumbnailIfUnused(key, in: modelContext)
+      try removeThumbnailIfUnused(
+        key,
+        in: modelContext,
+        thumbnailDirectoryURL: thumbnailDirectoryURL,
+      )
     }
   }
 
   static func removeThumbnailIfUnused(
     _ key: String,
     in modelContext: ModelContext,
+    thumbnailDirectoryURL: URL = .thumbnailCachesDirectory,
   ) throws {
     guard try !isThumbnailReferenced(key, in: modelContext) else { return }
-    try ImageThumbnailCache.removeThumbnail(for: key)
+    try ImageThumbnailCache.removeThumbnail(for: key, directoryURL: thumbnailDirectoryURL)
   }
 
   private static func isThumbnailReferenced(
@@ -46,19 +52,35 @@ enum LibraryThumbnailReferences {
 actor ImageThumbnailService {
   static let shared = ImageThumbnailService()
 
+  private struct PendingKey: Hashable {
+    let cacheKey: String
+    let directoryURL: URL
+  }
+
   private struct PendingThumbnail {
     let task: Task<Void, Never>
     var waiters: [UUID: CheckedContinuation<String?, Never>]
   }
 
-  private var pendingThumbnails: [String: PendingThumbnail] = [:]
+  private var pendingThumbnails: [PendingKey: PendingThumbnail] = [:]
 
-  func thumbnailKey(for url: URL) async -> String? {
+  func thumbnailKey(
+    for url: URL,
+    preferredKey: String? = nil,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) async -> String? {
+    if let preferredKey,
+       ImageThumbnailCache.isValidThumbnail(for: preferredKey, directoryURL: directoryURL)
+    {
+      return preferredKey
+    }
+
     guard let key = ImageThumbnailCache.cacheKey(for: url) else { return nil }
-    if ImageThumbnailCache.isValidThumbnail(for: key) {
+    if ImageThumbnailCache.isValidThumbnail(for: key, directoryURL: directoryURL) {
       return key
     }
 
+    let pendingKey = PendingKey(cacheKey: key, directoryURL: directoryURL)
     let waiterID = UUID()
     return await withTaskCancellationHandler {
       await withCheckedContinuation { continuation in
@@ -66,11 +88,11 @@ actor ImageThumbnailService {
           continuation.resume(returning: nil)
           return
         }
-        addWaiter(continuation, id: waiterID, key: key, url: url)
+        addWaiter(continuation, id: waiterID, pendingKey: pendingKey, url: url)
       }
     } onCancel: {
       Task {
-        await self.cancelWaiter(id: waiterID, key: key)
+        await self.cancelWaiter(id: waiterID, pendingKey: pendingKey)
       }
     }
   }
@@ -78,38 +100,42 @@ actor ImageThumbnailService {
   private func addWaiter(
     _ continuation: CheckedContinuation<String?, Never>,
     id: UUID,
-    key: String,
+    pendingKey: PendingKey,
     url: URL,
   ) {
-    if var pending = pendingThumbnails[key] {
+    if var pending = pendingThumbnails[pendingKey] {
       pending.waiters[id] = continuation
-      pendingThumbnails[key] = pending
+      pendingThumbnails[pendingKey] = pending
       return
     }
 
     let task = Task.detached(priority: .utility) {
-      let result = await ImageThumbnailCache.generateThumbnail(for: url, key: key) ? key : nil
-      await self.finish(key: key, result: result)
+      let result = await ImageThumbnailCache.generateThumbnail(
+        for: url,
+        key: pendingKey.cacheKey,
+        directoryURL: pendingKey.directoryURL,
+      ) ? pendingKey.cacheKey : nil
+      await self.finish(pendingKey: pendingKey, result: result)
     }
-    pendingThumbnails[key] = PendingThumbnail(task: task, waiters: [id: continuation])
+    pendingThumbnails[pendingKey] = PendingThumbnail(task: task, waiters: [id: continuation])
   }
 
-  private func cancelWaiter(id: UUID, key: String) {
-    guard var pending = pendingThumbnails[key],
+  private func cancelWaiter(id: UUID, pendingKey: PendingKey) {
+    guard var pending = pendingThumbnails[pendingKey],
           let continuation = pending.waiters.removeValue(forKey: id)
     else { return }
 
     continuation.resume(returning: nil)
     if pending.waiters.isEmpty {
       pending.task.cancel()
-      pendingThumbnails[key] = nil
+      pendingThumbnails[pendingKey] = nil
     } else {
-      pendingThumbnails[key] = pending
+      pendingThumbnails[pendingKey] = pending
     }
   }
 
-  private func finish(key: String, result: String?) {
-    guard let pending = pendingThumbnails.removeValue(forKey: key) else { return }
+  private func finish(pendingKey: PendingKey, result: String?) {
+    guard let pending = pendingThumbnails.removeValue(forKey: pendingKey) else { return }
     for continuation in pending.waiters.values {
       continuation.resume(returning: result)
     }
@@ -122,33 +148,53 @@ nonisolated enum ImageThumbnailCache {
 
   private static let cacheVersion = "v2"
 
-  static func ensureThumbnail(for url: URL) async -> String? {
-    await ImageThumbnailService.shared.thumbnailKey(for: url)
+  static func ensureThumbnail(
+    for url: URL,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) async -> String? {
+    await ImageThumbnailService.shared.thumbnailKey(for: url, directoryURL: directoryURL)
   }
 
-  static func thumbnailURL(for key: String) -> URL {
-    URL.thumbnailCachesDirectory.appendingPathComponent("\(key).png", isDirectory: false)
+  static func thumbnailKey(
+    for url: URL,
+    preferredKey: String?,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) async -> String? {
+    await ImageThumbnailService.shared.thumbnailKey(
+      for: url,
+      preferredKey: preferredKey,
+      directoryURL: directoryURL,
+    )
   }
 
-  static func removeThumbnail(for key: String) throws {
-    let url = thumbnailURL(for: key)
+  static func thumbnailURL(
+    for key: String,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) -> URL {
+    directoryURL.appendingPathComponent("\(key).png", isDirectory: false)
+  }
+
+  static func removeThumbnail(
+    for key: String,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) throws {
+    let url = thumbnailURL(for: key, directoryURL: directoryURL)
     if url.fileExists {
       try FileManager.default.removeItem(at: url)
       postDidChangeNotification()
     }
   }
 
-  static func removeAllThumbnails() throws {
-    let directoryURL = URL.thumbnailCachesDirectory
+  static func removeAllThumbnails(directoryURL: URL = .thumbnailCachesDirectory) throws {
     if directoryURL.fileExists {
       try FileManager.default.removeItem(at: directoryURL)
       postDidChangeNotification()
     }
   }
 
-  static func totalCacheSizeInBytes() -> Int {
+  static func totalCacheSizeInBytes(directoryURL: URL = .thumbnailCachesDirectory) -> Int {
     guard let enumerator = FileManager.default.enumerator(
-      at: URL.thumbnailCachesDirectory,
+      at: directoryURL,
       includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
     ) else { return 0 }
 
@@ -183,8 +229,11 @@ nonisolated enum ImageThumbnailCache {
       .joined()
   }
 
-  static func isValidThumbnail(for key: String) -> Bool {
-    let url = thumbnailURL(for: key)
+  static func isValidThumbnail(
+    for key: String,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) -> Bool {
+    let url = thumbnailURL(for: key, directoryURL: directoryURL)
     guard url.fileExists,
           let source = CGImageSourceCreateWithURL(url as CFURL, nil),
           CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
@@ -195,8 +244,12 @@ nonisolated enum ImageThumbnailCache {
     return true
   }
 
-  static func generateThumbnail(for sourceURL: URL, key: String) async -> Bool {
-    let outputURL = thumbnailURL(for: key)
+  static func generateThumbnail(
+    for sourceURL: URL,
+    key: String,
+    directoryURL: URL = .thumbnailCachesDirectory,
+  ) async -> Bool {
+    let outputURL = thumbnailURL(for: key, directoryURL: directoryURL)
     do {
       try Task.checkCancellation()
       try FileManager.default.ensureExists(for: outputURL.deletingLastPathComponent())

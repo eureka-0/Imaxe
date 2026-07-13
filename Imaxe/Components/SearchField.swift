@@ -10,12 +10,13 @@ import SwiftUI
 // MARK: - SearchField
 
 struct SearchField: View {
-  var placeholder: LocalizedStringKey = "Search"
+  var placeholder: LocalizedStringResource = "Search"
   @Binding var text: String
 
   @FocusState private var isFocused: Bool
   @State private var isFolded: Bool = true
   @State private var isHoveringFoldedButton = false
+  @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   private var cornerRadius: CGFloat = 8
   private var externalFocus: FocusState<Bool>.Binding?
@@ -28,7 +29,7 @@ struct SearchField: View {
   private var fieldHeight: CGFloat = 26
   private let iconLength: CGFloat = 16
 
-  init(_ placeholder: LocalizedStringKey = "Search", text: Binding<String>) {
+  init(_ placeholder: LocalizedStringResource = "Search", text: Binding<String>) {
     self.placeholder = placeholder
     _text = text
   }
@@ -57,8 +58,14 @@ struct SearchField: View {
     .frame(height: fieldHeight)
     .fixedSize(horizontal: false, vertical: true)
     .preservesTextFocusOnClick()
-    .animation(.interactiveSpring(response: 0.22), value: isFolded)
-    .animation(.easeOut(duration: 0.12), value: isTextFocused)
+    .animation(
+      accessibilityReduceMotion ? nil : .interactiveSpring(response: 0.22),
+      value: isFolded,
+    )
+    .animation(
+      accessibilityReduceMotion ? nil : .easeOut(duration: 0.12),
+      value: isTextFocused,
+    )
     .onChange(of: isTextFocused) { _, newValue in
       isFocused = newValue
       if newValue, foldable {
@@ -70,6 +77,11 @@ struct SearchField: View {
     .onChange(of: text) { _, newValue in
       if !newValue.isEmpty, foldable {
         isFolded = false
+      }
+    }
+    .onAppear {
+      DispatchQueue.main.async {
+        isFocused = false
       }
     }
     .onKeyPress(.escape) {
@@ -104,7 +116,7 @@ struct SearchField: View {
           expandAndFocus()
         }
 
-      TextField(placeholder, text: $text)
+      TextField(String(localized: placeholder), text: $text)
         .textFieldStyle(.plain)
         .onSubmit {
           submitAction()
