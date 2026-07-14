@@ -13,16 +13,16 @@ import Testing
 @MainActor
 @Suite("Session And Navigation")
 struct SessionAndNavigationTests {
-  @Test func `file change reload keeps current image while loading`() throws {
+  @Test func `file change reload keeps current document while loading`() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-session-reload-\(UUID().uuidString).png")
     try TestSupport.pngData(width: 10, height: 20).write(to: url)
-    let initialImage = ImageContainer(url: url, nsImage: TestSupport.bitmapImage())
-    let session = ImageSession(imageContainer: initialImage)
+    let initialDocument = try await ImageLoader.shared.loadDocument(from: url)
+    let session = ImageSession(imageDocument: initialDocument)
 
     session.loadImage(from: url, preservingViewportOnReload: true)
 
-    #expect(session.currentImage === initialImage)
+    #expect(session.currentDocument?.id == initialDocument.id)
     #expect(!session.shouldApplyLoadedImageWindowSize)
   }
 
@@ -215,21 +215,21 @@ struct SessionAndNavigationTests {
     try TestSupport.pngData(width: 30, height: 30).write(to: c)
 
     let session = ImageSession()
-    session.loadImageInfo = { url, requestID in
+    session.loadImageMetadata = { url, requestID in
       if url == a {
         try? await Task.sleep(for: .milliseconds(150))
       } else if url == b {
         try? await Task.sleep(for: .milliseconds(75))
       }
-      return try await ImageLoader.shared.loadInfo(from: url, requestID: requestID)
+      return try await ImageLoader.shared.loadMetadata(from: url, requestID: requestID)
     }
-    session.loadImageContainer = { url, requestID in
+    session.loadImageDocument = { url, requestID in
       if url == a {
         try? await Task.sleep(for: .milliseconds(150))
       } else if url == b {
         try? await Task.sleep(for: .milliseconds(75))
       }
-      return try await ImageLoader.shared.loadImage(from: url, requestID: requestID)
+      return try await ImageLoader.shared.loadDocument(from: url, requestID: requestID)
     }
 
     session.loadImage(from: a, addToRecent: false)
@@ -240,7 +240,7 @@ struct SessionAndNavigationTests {
 
     #expect(session.displayedURL == c)
     #expect(session.pendingURL == nil)
-    #expect(session.currentImageInfo?.pixelSize == IntSize(width: 30, height: 30))
+    #expect(session.currentMetadata?.displayPixelSize == IntSize(width: 30, height: 30))
     #expect(session.folderNavigator?.currentImageURL == c)
   }
 
@@ -299,17 +299,17 @@ struct SessionAndNavigationTests {
 
     let session = ImageSession()
     let loader = ImageLoader.shared
-    session.loadImageInfo = { url, requestID in
+    session.loadImageMetadata = { url, requestID in
       if url == firstURL {
         try await Task.sleep(for: .seconds(5))
       }
-      return try await loader.loadInfo(from: url, requestID: requestID)
+      return try await loader.loadMetadata(from: url, requestID: requestID)
     }
-    session.loadImageContainer = { url, requestID in
+    session.loadImageDocument = { url, requestID in
       if url == firstURL {
         try await Task.sleep(for: .seconds(5))
       }
-      return try await loader.loadImage(from: url, requestID: requestID)
+      return try await loader.loadDocument(from: url, requestID: requestID)
     }
     session.loadFolderImageURLs = { [$0] }
 
@@ -322,24 +322,38 @@ struct SessionAndNavigationTests {
     #expect(session.loadingElapsedTime == 0)
   }
 
-  @Test func `delayed metadata prevents partial image commit`() async throws {
+  @Test func `preloaded metadata is visible while document loads`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let session = ImageSession()
-    session.loadImageInfo = { url, requestID in
-      try await Task.sleep(for: .milliseconds(100))
-      return try await ImageLoader.shared.loadInfo(from: url, requestID: requestID)
+    session.loadImageDocument = { url, requestID in
+      try await Task.sleep(for: .milliseconds(150))
+      return try await ImageLoader.shared.loadDocument(from: url, requestID: requestID)
     }
 
     session.loadImage(from: url, addToRecent: false)
-    try await Task.sleep(for: .milliseconds(25))
+    try await TestSupport.waitUntil { session.currentMetadata?.url == url }
 
-    #expect(session.currentImage == nil)
-    #expect(session.currentImageInfo == nil)
+    #expect(session.currentDocument == nil)
     #expect(session.pendingURL == url)
 
     try await TestSupport.waitUntil { !session.isLoading }
-    #expect(session.currentImage != nil)
-    #expect(session.currentImageInfo?.url == url)
+    #expect(session.currentDocument != nil)
+    #expect(session.currentMetadata == session.currentDocument?.metadata)
+  }
+
+  @Test func `document commit does not wait for preloaded metadata`() async throws {
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let session = ImageSession()
+    session.loadImageMetadata = { _, _ in
+      try await Task.sleep(for: .seconds(5))
+      throw CancellationError()
+    }
+
+    session.loadImage(from: url, addToRecent: false)
+    try await TestSupport.waitUntil { !session.isLoading }
+
+    let document = try #require(session.currentDocument)
+    #expect(session.currentMetadata == document.metadata)
   }
 
   @Test func `temporary image is removed after switching images`() async throws {
@@ -390,10 +404,10 @@ struct SessionAndNavigationTests {
     var removedPath: String?
     var didFail = false
     session.removeRecentImage = { removedPath = $0 }
-    session.loadImageInfo = { _, _ in
+    session.loadImageMetadata = { _, _ in
       throw ImageLoadingError.fileNotFound(missingURL)
     }
-    session.loadImageContainer = { _, _ in
+    session.loadImageDocument = { _, _ in
       throw ImageLoadingError.fileNotFound(missingURL)
     }
     session.loadFolderImageURLs = { [$0] }
@@ -412,8 +426,8 @@ struct SessionAndNavigationTests {
 
   @Test func `failed navigation preserves displayed image and position`() async throws {
     let goodURL = TestSupport.sampleImageURL("sample_1280×853.png")
-    let initialImage = ImageContainer(url: goodURL, nsImage: TestSupport.bitmapImage())
-    let session = ImageSession(imageContainer: initialImage)
+    let initialDocument = try await ImageLoader.shared.loadDocument(from: goodURL)
+    let session = ImageSession(imageDocument: initialDocument)
     let corruptURL = URL.temporaryDirectory
       .appending(path: "imaxe-corrupt-navigation-\(UUID().uuidString).png")
     try Data("not an image".utf8).write(to: corruptURL)
@@ -422,7 +436,7 @@ struct SessionAndNavigationTests {
     session.loadImage(from: corruptURL, addToRecent: false)
     try await TestSupport.waitUntil { !session.isLoading }
 
-    #expect(session.currentImage === initialImage)
+    #expect(session.currentDocument?.id == initialDocument.id)
     #expect(session.displayedURL == goodURL)
     #expect(session.folderNavigator?.currentImageURL == goodURL)
     #expect(session.pendingURL == nil)
@@ -447,15 +461,11 @@ struct SessionAndNavigationTests {
   }
 
   private func configureImmediateLoading(_ session: ImageSession) {
-    let imageContainer = ImageContainer(
-      url: URL(fileURLWithPath: "/tmp/imaxe-test-image.png"),
-      nsImage: TestSupport.bitmapImage(),
-    )
-    session.loadImageInfo = { url, _ in
-      ImageInfo(url: url)
+    session.loadImageMetadata = { url, requestID in
+      try await ImageLoader.shared.loadMetadata(from: url, requestID: requestID)
     }
-    session.loadImageContainer = { _, _ in
-      imageContainer
+    session.loadImageDocument = { url, requestID in
+      try await ImageLoader.shared.loadDocument(from: url, requestID: requestID)
     }
     session.loadFolderImageURLs = { [$0] }
   }

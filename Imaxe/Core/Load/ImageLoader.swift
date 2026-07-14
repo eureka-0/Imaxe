@@ -45,30 +45,28 @@ enum ImageLoadingError: Error, LocalizedError {
 }
 
 actor ImageLoader {
-  private final nonisolated class ImageInfoBox {
-    let info: ImageInfo
+  private final nonisolated class ImageMetadataBox {
+    let metadata: ImageMetadata
     let fileSnapshot: FileSnapshot
 
-    init(info: ImageInfo, fileSnapshot: FileSnapshot) {
-      self.info = info
+    init(metadata: ImageMetadata, fileSnapshot: FileSnapshot) {
+      self.metadata = metadata
       self.fileSnapshot = fileSnapshot
     }
   }
 
-  private final nonisolated class ImageContainerBox {
-    let imageContainer: ImageContainer
-    let fileSnapshot: FileSnapshot
+  private final nonisolated class ImageDocumentBox {
+    let document: ImageDocument
 
-    init(imageContainer: ImageContainer, fileSnapshot: FileSnapshot) {
-      self.imageContainer = imageContainer
-      self.fileSnapshot = fileSnapshot
+    init(document: ImageDocument) {
+      self.document = document
     }
   }
 
-  private struct ImageInfoLoadTask {
+  private struct ImageMetadataLoadTask {
     let id: UUID
     let fileSnapshot: FileSnapshot
-    let task: Task<ImageInfo, Error>
+    let task: Task<ImageMetadata, Error>
     var requestIDs: Set<LoadRequestID>
     var uncancellableWaiterCount: Int
 
@@ -77,10 +75,10 @@ actor ImageLoader {
     }
   }
 
-  private struct ImageContainerLoadTask {
+  private struct ImageDocumentLoadTask {
     let id: UUID
     let fileSnapshot: FileSnapshot
-    let task: Task<ImageContainer, Error>
+    let task: Task<ImageDocument, Error>
     var requestIDs: Set<LoadRequestID>
     var uncancellableWaiterCount: Int
 
@@ -95,18 +93,18 @@ actor ImageLoader {
 
   static let shared = ImageLoader()
 
-  private var infoCache = NSCache<NSURL, ImageInfoBox>()
-  private var imageCache = NSCache<NSURL, ImageContainerBox>()
-  private var infoLoadTasks: [URL: ImageInfoLoadTask] = [:]
-  private var imageLoadTasks: [URL: ImageContainerLoadTask] = [:]
+  private var metadataCache = NSCache<NSURL, ImageMetadataBox>()
+  private var documentCache = NSCache<NSURL, ImageDocumentBox>()
+  private var metadataLoadTasks: [URL: ImageMetadataLoadTask] = [:]
+  private var documentLoadTasks: [URL: ImageDocumentLoadTask] = [:]
 
   private init() {
-    infoCache.name = "com.imaxe.Imaxe.infoCache"
-    infoCache.countLimit = 500
+    metadataCache.name = "com.imaxe.Imaxe.metadataCache"
+    metadataCache.countLimit = 500
 
-    imageCache.name = "com.imaxe.Imaxe.imageCache"
-    imageCache.countLimit = 50
-    imageCache.totalCostLimit = 100 * 1024 * 1024 // 100 MB
+    documentCache.name = "com.imaxe.Imaxe.documentCache"
+    documentCache.countLimit = 50
+    documentCache.totalCostLimit = 100 * 1024 * 1024 // 100 MB
   }
 
   nonisolated static let supportedImageTypes: [UTType] = [
@@ -184,7 +182,10 @@ actor ImageLoader {
     return UTType(identifier)
   }
 
-  func loadInfo(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageInfo {
+  func loadMetadata(
+    from url: URL,
+    requestID: LoadRequestID? = nil,
+  ) async throws -> ImageMetadata {
     try validateFileExists(at: url)
 
     guard Self.isSupportedImage(url) else {
@@ -196,36 +197,35 @@ actor ImageLoader {
     }
 
     let cacheKey = url as NSURL
-    if let cachedInfo = infoCache.object(forKey: cacheKey) {
-      if cachedInfo.fileSnapshot == fileSnapshot {
-        return cachedInfo.info
+    if let cachedMetadata = metadataCache.object(forKey: cacheKey) {
+      if cachedMetadata.fileSnapshot == fileSnapshot {
+        return cachedMetadata.metadata
       }
 
-      infoCache.removeObject(forKey: cacheKey)
+      metadataCache.removeObject(forKey: cacheKey)
     }
 
-    if let existingTask = infoLoadTasks[url] {
+    if let existingTask = metadataLoadTasks[url] {
       if existingTask.fileSnapshot == fileSnapshot {
-        registerInfoWaiter(requestID, for: url)
-        let info = try await value(of: existingTask.task, requestID: requestID)
+        registerMetadataWaiter(requestID, for: url)
+        let metadata = try await value(of: existingTask.task, requestID: requestID)
         try Task.checkCancellation()
-        cacheInfo(info, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
-        return info
+        cacheMetadata(metadata, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
+        return metadata
       }
 
       existingTask.task.cancel()
-      infoLoadTasks[url] = nil
+      metadataLoadTasks[url] = nil
     }
 
     let loadTaskID = UUID()
-    let task = Task.detached(priority: .userInitiated) { () throws -> ImageInfo in
+    let task = Task.detached(priority: .userInitiated) { () throws -> ImageMetadata in
       try Task.checkCancellation()
-      try Self.validateImageContent(at: url)
-      let info = ImageInfo(url: url)
+      let metadata = try ImageMetadata(url: url)
       try Task.checkCancellation()
-      return info
+      return metadata
     }
-    infoLoadTasks[url] = ImageInfoLoadTask(
+    metadataLoadTasks[url] = ImageMetadataLoadTask(
       id: loadTaskID,
       fileSnapshot: fileSnapshot,
       task: task,
@@ -234,22 +234,25 @@ actor ImageLoader {
     )
 
     do {
-      let info = try await value(of: task, requestID: requestID)
-      if infoLoadTasks[url]?.id == loadTaskID {
-        infoLoadTasks[url] = nil
+      let metadata = try await value(of: task, requestID: requestID)
+      if metadataLoadTasks[url]?.id == loadTaskID {
+        metadataLoadTasks[url] = nil
       }
       try Task.checkCancellation()
-      cacheInfo(info, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
-      return info
+      cacheMetadata(metadata, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
+      return metadata
     } catch {
-      if shouldRemoveInfoTask(at: url, id: loadTaskID, after: error) {
-        infoLoadTasks[url] = nil
+      if shouldRemoveMetadataTask(at: url, id: loadTaskID, after: error) {
+        metadataLoadTasks[url] = nil
       }
       throw Self.normalizedError(error, for: url)
     }
   }
 
-  func loadImage(from url: URL, requestID: LoadRequestID? = nil) async throws -> ImageContainer {
+  func loadDocument(
+    from url: URL,
+    requestID: LoadRequestID? = nil,
+  ) async throws -> ImageDocument {
     try validateFileExists(at: url)
 
     guard Self.isSupportedImage(url) else {
@@ -261,40 +264,40 @@ actor ImageLoader {
     }
 
     let cacheKey = url as NSURL
-    if let cachedImage = imageCache.object(forKey: cacheKey) {
-      if cachedImage.fileSnapshot == fileSnapshot {
-        return cachedImage.imageContainer
+    if let cachedDocument = documentCache.object(forKey: cacheKey) {
+      if cachedDocument.document.fileSnapshot == fileSnapshot {
+        return cachedDocument.document
       }
 
-      imageCache.removeObject(forKey: cacheKey)
+      documentCache.removeObject(forKey: cacheKey)
     }
 
-    if let existingTask = imageLoadTasks[url] {
+    if let existingTask = documentLoadTasks[url] {
       if existingTask.fileSnapshot == fileSnapshot {
-        registerImageWaiter(requestID, for: url)
-        let imageContainer = try await value(of: existingTask.task, requestID: requestID)
+        registerDocumentWaiter(requestID, for: url)
+        let document = try await value(of: existingTask.task, requestID: requestID)
         try Task.checkCancellation()
-        cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
-        return imageContainer
+        cacheDocument(document, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
+        return document
       }
 
       existingTask.task.cancel()
-      imageLoadTasks[url] = nil
+      documentLoadTasks[url] = nil
     }
 
     let loadTaskID = UUID()
-    let task = Task.detached(priority: .userInitiated) { () throws -> ImageContainer in
+    let task = Task.detached(priority: .userInitiated) { () throws -> ImageDocument in
       try Task.checkCancellation()
-      let imageContainer: ImageContainer = if Self.isSVG(url) {
-        try Self.loadSVG(from: url)
+      let document: ImageDocument = if Self.isSVG(url) {
+        try Self.loadSVG(from: url, fileSnapshot: fileSnapshot)
       } else {
-        try Self.loadBitmap(from: url)
+        try Self.loadBitmap(from: url, fileSnapshot: fileSnapshot)
       }
 
       try Task.checkCancellation()
-      return imageContainer
+      return document
     }
-    imageLoadTasks[url] = ImageContainerLoadTask(
+    documentLoadTasks[url] = ImageDocumentLoadTask(
       id: loadTaskID,
       fileSnapshot: fileSnapshot,
       task: task,
@@ -303,90 +306,90 @@ actor ImageLoader {
     )
 
     do {
-      let imageContainer = try await value(of: task, requestID: requestID)
-      if imageLoadTasks[url]?.id == loadTaskID {
-        imageLoadTasks[url] = nil
+      let document = try await value(of: task, requestID: requestID)
+      if documentLoadTasks[url]?.id == loadTaskID {
+        documentLoadTasks[url] = nil
       }
       try Task.checkCancellation()
-      cacheImage(imageContainer, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
-      return imageContainer
+      cacheDocument(document, for: url, cacheKey: cacheKey, fileSnapshot: fileSnapshot)
+      return document
     } catch {
-      if shouldRemoveImageTask(at: url, id: loadTaskID, after: error) {
-        imageLoadTasks[url] = nil
+      if shouldRemoveDocumentTask(at: url, id: loadTaskID, after: error) {
+        documentLoadTasks[url] = nil
       }
       throw Self.normalizedError(error, for: url)
     }
   }
 
   func cancelLoads(for requestID: LoadRequestID) {
-    for (url, var loadTask) in infoLoadTasks where loadTask.requestIDs.contains(requestID) {
+    for (url, var loadTask) in metadataLoadTasks where loadTask.requestIDs.contains(requestID) {
       loadTask.requestIDs.remove(requestID)
       if loadTask.requestIDs.isEmpty, loadTask.uncancellableWaiterCount == 0 {
         loadTask.task.cancel()
-        infoLoadTasks[url] = nil
+        metadataLoadTasks[url] = nil
       } else {
-        infoLoadTasks[url] = loadTask
+        metadataLoadTasks[url] = loadTask
       }
     }
 
-    for (url, var loadTask) in imageLoadTasks where loadTask.requestIDs.contains(requestID) {
+    for (url, var loadTask) in documentLoadTasks where loadTask.requestIDs.contains(requestID) {
       loadTask.requestIDs.remove(requestID)
       if loadTask.requestIDs.isEmpty, loadTask.uncancellableWaiterCount == 0 {
         loadTask.task.cancel()
-        imageLoadTasks[url] = nil
+        documentLoadTasks[url] = nil
       } else {
-        imageLoadTasks[url] = loadTask
+        documentLoadTasks[url] = loadTask
       }
     }
   }
 
-  private func registerInfoWaiter(_ requestID: LoadRequestID?, for url: URL) {
-    guard var loadTask = infoLoadTasks[url] else { return }
+  private func registerMetadataWaiter(_ requestID: LoadRequestID?, for url: URL) {
+    guard var loadTask = metadataLoadTasks[url] else { return }
 
     if let requestID {
       loadTask.requestIDs.insert(requestID)
     } else {
       loadTask.uncancellableWaiterCount += 1
     }
-    infoLoadTasks[url] = loadTask
+    metadataLoadTasks[url] = loadTask
   }
 
-  private func registerImageWaiter(_ requestID: LoadRequestID?, for url: URL) {
-    guard var loadTask = imageLoadTasks[url] else { return }
+  private func registerDocumentWaiter(_ requestID: LoadRequestID?, for url: URL) {
+    guard var loadTask = documentLoadTasks[url] else { return }
 
     if let requestID {
       loadTask.requestIDs.insert(requestID)
     } else {
       loadTask.uncancellableWaiterCount += 1
     }
-    imageLoadTasks[url] = loadTask
+    documentLoadTasks[url] = loadTask
   }
 
-  private func cacheInfo(
-    _ info: ImageInfo,
+  private func cacheMetadata(
+    _ metadata: ImageMetadata,
     for url: URL,
     cacheKey: NSURL,
     fileSnapshot: FileSnapshot,
   ) {
     if FileSnapshot(url: url) == fileSnapshot {
-      infoCache.setObject(
-        ImageInfoBox(info: info, fileSnapshot: fileSnapshot),
+      metadataCache.setObject(
+        ImageMetadataBox(metadata: metadata, fileSnapshot: fileSnapshot),
         forKey: cacheKey,
       )
     }
   }
 
-  private func cacheImage(
-    _ imageContainer: ImageContainer,
+  private func cacheDocument(
+    _ document: ImageDocument,
     for url: URL,
     cacheKey: NSURL,
     fileSnapshot: FileSnapshot,
   ) {
     if FileSnapshot(url: url) == fileSnapshot {
-      imageCache.setObject(
-        ImageContainerBox(imageContainer: imageContainer, fileSnapshot: fileSnapshot),
+      documentCache.setObject(
+        ImageDocumentBox(document: document),
         forKey: cacheKey,
-        cost: imageContainer.cacheCost,
+        cost: document.cacheCost,
       )
     }
   }
@@ -405,24 +408,24 @@ actor ImageLoader {
 
   private func removeCachedValues(for url: URL) {
     let cacheKey = url as NSURL
-    infoCache.removeObject(forKey: cacheKey)
-    imageCache.removeObject(forKey: cacheKey)
-    infoLoadTasks[url]?.task.cancel()
-    infoLoadTasks[url] = nil
-    imageLoadTasks[url]?.task.cancel()
-    imageLoadTasks[url] = nil
+    metadataCache.removeObject(forKey: cacheKey)
+    documentCache.removeObject(forKey: cacheKey)
+    metadataLoadTasks[url]?.task.cancel()
+    metadataLoadTasks[url] = nil
+    documentLoadTasks[url]?.task.cancel()
+    documentLoadTasks[url] = nil
   }
 
-  private func shouldRemoveInfoTask(at url: URL, id: UUID, after error: Error) -> Bool {
-    guard let loadTask = infoLoadTasks[url], loadTask.id == id else {
+  private func shouldRemoveMetadataTask(at url: URL, id: UUID, after error: Error) -> Bool {
+    guard let loadTask = metadataLoadTasks[url], loadTask.id == id else {
       return false
     }
 
     return !isCurrentTaskCancellation(error) || !loadTask.hasWaiters
   }
 
-  private func shouldRemoveImageTask(at url: URL, id: UUID, after error: Error) -> Bool {
-    guard let loadTask = imageLoadTasks[url], loadTask.id == id else {
+  private func shouldRemoveDocumentTask(at url: URL, id: UUID, after error: Error) -> Bool {
+    guard let loadTask = documentLoadTasks[url], loadTask.id == id else {
       return false
     }
 
@@ -457,105 +460,72 @@ actor ImageLoader {
     }
   }
 
-  private nonisolated static func validateImageContent(at url: URL) throws {
-    if isSVG(url) {
-      guard let svgString = try? String(contentsOf: url, encoding: .utf8),
-            SVGDocumentSize(svgString: svgString).hasRootElement
-      else { throw ImageLoadingError.corruptImage(url) }
-      return
+  private nonisolated static func loadBitmap(
+    from url: URL,
+    fileSnapshot: FileSnapshot,
+  ) throws -> ImageDocument {
+    let freshURL = url.freshFileURL
+    guard let imageSource = CGImageSourceCreateWithURL(freshURL as CFURL, nil) else {
+      throw ImageLoadingError.corruptImage(freshURL)
     }
-
-    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
-      throw ImageLoadingError.corruptImage(url)
-    }
-
-    try validateImageSize(imageSource, at: url)
-  }
-
-  private nonisolated static func validateImageSize(
-    _ imageSource: CGImageSource,
-    at url: URL,
-  ) throws {
-    guard CGImageSourceGetCount(imageSource) > 0 else {
-      throw ImageLoadingError.corruptImage(url)
-    }
-
-    guard let properties = CGImageSourceCopyPropertiesAtIndex(
-      imageSource,
-      0,
-      nil,
-    ) as? [CFString: Any]
-    else { throw ImageLoadingError.corruptImage(url) }
-
-    guard let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
-          let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
-          width.doubleValue.isFinite,
-          height.doubleValue.isFinite,
-          width.doubleValue > 0,
-          height.doubleValue > 0
-    else { throw ImageLoadingError.invalidDimensions(url) }
-
-    if exceedsImageSizeLimit(NSSize(width: width.doubleValue, height: height.doubleValue)) {
-      throw ImageLoadingError.sizeLimitExceeded(url)
-    }
-  }
-
-  private nonisolated static func loadBitmap(from url: URL) throws -> ImageContainer {
-    guard let imageSource = CGImageSourceCreateWithURL(url as CFURL, nil) else {
-      throw ImageLoadingError.corruptImage(url)
-    }
-    try validateImageSize(imageSource, at: url)
+    let metadata = try ImageMetadata(bitmapURL: freshURL, imageSource: imageSource)
 
     let imageData: Data
     do {
-      imageData = try Data(contentsOf: url)
+      imageData = try Data(contentsOf: freshURL, options: [.mappedIfSafe, .uncached])
     } catch {
-      throw normalizedError(error, for: url)
+      throw normalizedError(error, for: freshURL)
     }
 
     guard let nsImage = NSImage(data: imageData) else {
-      throw ImageLoadingError.corruptImage(url)
+      throw ImageLoadingError.corruptImage(freshURL)
     }
 
-    return ImageContainer(
-      url: url,
-      nsImage: nsImage,
-      animatedImageData: nsImage.animatedGIFRepresentation == nil ? nil : imageData,
+    let content: ImageContent = if metadata.isAnimated,
+                                   nsImage.animatedGIFRepresentation != nil
+    {
+      .animatedGIF(nsImage, data: imageData)
+    } else {
+      .staticBitmap(nsImage)
+    }
+
+    return ImageDocument(
+      url: freshURL,
+      fileSnapshot: fileSnapshot,
+      metadata: metadata,
+      content: content,
     )
   }
 
-  private nonisolated static func loadSVG(from url: URL) throws -> ImageContainer {
+  private nonisolated static func loadSVG(
+    from url: URL,
+    fileSnapshot: FileSnapshot,
+  ) throws -> ImageDocument {
+    let freshURL = url.freshFileURL
     let imageData: Data
     do {
-      imageData = try Data(contentsOf: url)
+      imageData = try Data(contentsOf: freshURL, options: [.mappedIfSafe, .uncached])
     } catch {
-      throw normalizedError(error, for: url)
+      throw normalizedError(error, for: freshURL)
     }
+    let metadata = try ImageMetadata(svgURL: freshURL, data: imageData)
 
     guard let sourceImage = NSImage(data: imageData) else {
-      throw ImageLoadingError.corruptImage(url)
+      throw ImageLoadingError.corruptImage(freshURL)
     }
 
-    let documentSize = String(data: imageData, encoding: .utf8)
-      .map(SVGDocumentSize.init(svgString:))
-    if let documentSize, documentSize.hasExplicitDimensions, documentSize.bestSize == nil {
-      throw ImageLoadingError.invalidDimensions(url)
-    }
-    let pixelSize = documentSize?.bestSize ?? sourceImage.size.validSize
-
-    guard pixelSize.width.isFinite, pixelSize.height.isFinite,
-          pixelSize.width > 0, pixelSize.height > 0
-    else { throw ImageLoadingError.invalidDimensions(url) }
-
-    if exceedsImageSizeLimit(pixelSize) {
-      throw ImageLoadingError.sizeLimitExceeded(url)
-    }
+    let pixelSize = metadata.displayPixelSize.nsSize
 
     guard let nsImage = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
-      throw ImageLoadingError.corruptImage(url)
+      throw ImageLoadingError.corruptImage(freshURL)
     }
 
-    return ImageContainer(url: url, nsImage: nsImage, pixelSize: pixelSize)
+    return ImageDocument(
+      url: freshURL,
+      fileSnapshot: fileSnapshot,
+      metadata: metadata,
+      content: .svg(nsImage),
+    )
   }
 
   private nonisolated static func normalizedError(
@@ -638,7 +608,7 @@ actor ImageLoader {
   }
 
   func clearCache() {
-    infoCache.removeAllObjects()
-    imageCache.removeAllObjects()
+    metadataCache.removeAllObjects()
+    documentCache.removeAllObjects()
   }
 }

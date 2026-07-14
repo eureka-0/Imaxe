@@ -28,30 +28,39 @@ struct ImageLoadingTests {
     "sample_1280×853.svg",
   ]
 
-  @Test func `image info loads sample metadata without image decode`() async throws {
+  @Test func `image metadata loads sample properties without image decode`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
-    let info = try await loader.loadInfo(from: url)
+    let metadata = try await loader.loadMetadata(from: url)
 
-    #expect(info.url == url)
-    #expect(info.fileName == "sample_1280×853.png")
-    #expect(info.pixelSize == IntSize(width: 1280, height: 853))
-    #expect(info.DPI == IntSize(width: 72, height: 72))
-    #expect(info.fileSize > 0)
+    #expect(metadata.url == url)
+    #expect(metadata.fileName == "sample_1280×853.png")
+    #expect(metadata.rawPixelSize == IntSize(width: 1280, height: 853))
+    #expect(metadata.displayPixelSize == IntSize(width: 1280, height: 853))
+    #expect(metadata.DPI == IntSize(width: 72, height: 72))
+    #expect(metadata.fileSize > 0)
+    #expect(metadata.imageCount == 1)
+    #expect(metadata.primaryImageIndex == 0)
+    #expect(metadata.orientation == .up)
+    #expect(metadata.estimatedFullFrameBytes == 1280 * 853 * 4)
+    #expect(!metadata.isAnimated)
+    #expect(!metadata.isMultiPage)
+    #expect(!metadata.isSVG)
   }
 
   @Test(arguments: registeredFormatSamples)
   func `registered formats load metadata and primary image`(_ sampleName: String) async throws {
     let url = TestSupport.sampleImageURL(sampleName)
 
-    let info = try await loader.loadInfo(from: url)
-    let image = try await loader.loadImage(from: url)
+    let metadata = try await loader.loadMetadata(from: url)
+    let document = try await loader.loadDocument(from: url)
 
-    #expect(info.url == url)
-    #expect(info.pixelSize.width > 0)
-    #expect(info.pixelSize.height > 0)
-    #expect(image.pixelSize.width > 0)
-    #expect(image.pixelSize.height > 0)
+    #expect(metadata.url == url)
+    #expect(metadata.displayPixelSize.width > 0)
+    #expect(metadata.displayPixelSize.height > 0)
+    #expect(document.pixelSize.width > 0)
+    #expect(document.pixelSize.height > 0)
+    #expect(document.metadata == metadata)
   }
 
   @Test(arguments: registeredFormatSamples)
@@ -76,10 +85,10 @@ struct ImageLoadingTests {
     try Data("not an image".utf8).write(to: url)
 
     await expectCorruptImage {
-      _ = try await loader.loadInfo(from: url)
+      _ = try await loader.loadMetadata(from: url)
     }
     await expectCorruptImage {
-      _ = try await loader.loadImage(from: url)
+      _ = try await loader.loadDocument(from: url)
     }
   }
 
@@ -102,23 +111,24 @@ struct ImageLoadingTests {
     )
 
     await expectPermissionDenied {
-      _ = try await loader.loadInfo(from: protectedURL)
+      _ = try await loader.loadMetadata(from: protectedURL)
     }
     await expectPermissionDenied {
-      _ = try await loader.loadImage(from: protectedURL)
+      _ = try await loader.loadDocument(from: protectedURL)
     }
   }
 
   @Test func `svg loaded image rasterizes to bitmap and uses view box size`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.svg")
 
-    let imageInfo = try await loader.loadInfo(from: url)
-    let imageContainer = try await loader.loadImage(from: url)
-    let bitmapRep = try #require(imageContainer.nsImage.representations.first as? NSBitmapImageRep)
+    let metadata = try await loader.loadMetadata(from: url)
+    let document = try await loader.loadDocument(from: url)
+    let bitmapRep = try #require(document.nsImage.representations.first as? NSBitmapImageRep)
 
-    #expect(imageInfo.pixelSize == IntSize(width: 1280, height: 853))
-    #expect(imageContainer.pixelSize == NSSize(width: 1280, height: 853))
-    #expect(imageContainer.nsImage.representations.count == 1)
+    #expect(metadata.displayPixelSize == IntSize(width: 1280, height: 853))
+    #expect(metadata.isSVG)
+    #expect(document.pixelSize == NSSize(width: 1280, height: 853))
+    #expect(document.nsImage.representations.count == 1)
     #expect(bitmapRep.pixelsWide == 1280)
     #expect(bitmapRep.pixelsHigh == 853)
   }
@@ -139,31 +149,46 @@ struct ImageLoadingTests {
     """
     try svg.write(to: url, atomically: true, encoding: .utf8)
 
-    let imageInfo = try await loader.loadInfo(from: url)
-    let imageContainer = try await loader.loadImage(from: url)
-    let bitmapRep = try #require(imageContainer.nsImage.representations.first as? NSBitmapImageRep)
+    let metadata = try await loader.loadMetadata(from: url)
+    let document = try await loader.loadDocument(from: url)
+    let bitmapRep = try #require(document.nsImage.representations.first as? NSBitmapImageRep)
 
-    #expect(imageInfo.pixelSize == IntSize(width: 4267, height: 4267))
-    #expect(imageContainer.pixelSize == NSSize(width: 4267, height: 4267))
-    #expect(imageContainer.nsImage.representations.count == 1)
+    #expect(metadata.displayPixelSize == IntSize(width: 4267, height: 4267))
+    #expect(document.pixelSize == NSSize(width: 4267, height: 4267))
+    #expect(document.nsImage.representations.count == 1)
     #expect(bitmapRep.pixelsWide == 4267)
     #expect(bitmapRep.pixelsHigh == 4267)
   }
 
-  @Test func `image loader returns cached image container for same url`() async throws {
+  @Test func `svg without explicit dimensions uses the image fallback size`() async throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-dimensionless-\(UUID().uuidString).svg")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try "<svg xmlns=\"http://www.w3.org/2000/svg\"><rect width=\"10\" height=\"20\"/></svg>"
+      .write(to: url, atomically: true, encoding: .utf8)
+
+    let document = try await loader.loadDocument(from: url)
+
+    #expect(document.metadata.isSVG)
+    #expect(document.metadata.displayPixelSize.isValid)
+    #expect(document.pixelSize.width > 0)
+    #expect(document.pixelSize.height > 0)
+  }
+
+  @Test func `image loader returns cached document for same url`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
-    let firstImage = try await loader.loadImage(from: url)
-    let secondImage = try await loader.loadImage(from: url)
+    let firstDocument = try await loader.loadDocument(from: url)
+    let secondDocument = try await loader.loadDocument(from: url)
 
-    #expect(firstImage === secondImage)
+    #expect(firstDocument.id == secondDocument.id)
   }
 
   @Test func `image loader reports missing files as file not found`() async throws {
     let url = URL.temporaryDirectory.appending(path: "imaxe-missing-image-\(UUID().uuidString).png")
 
     do {
-      _ = try await loader.loadImage(from: url)
+      _ = try await loader.loadDocument(from: url)
       Issue.record("Expected loading a missing image to throw.")
     } catch let error as ImageLoadingError {
       if case let .fileNotFound(missingURL) = error {
@@ -189,7 +214,7 @@ struct ImageLoadingTests {
     try Data("not an image".utf8).write(to: url)
 
     do {
-      _ = try await loader.loadImage(from: url)
+      _ = try await loader.loadDocument(from: url)
       Issue.record("Expected corrupt image content to throw.")
     } catch let error as ImageLoadingError {
       if case let .corruptImage(corruptURL) = error {
@@ -221,10 +246,10 @@ struct ImageLoadingTests {
       .write(to: oversizedURL, atomically: true, encoding: .utf8)
 
     await #expect(throws: ImageLoadingError.self) {
-      _ = try await loader.loadImage(from: invalidURL)
+      _ = try await loader.loadDocument(from: invalidURL)
     }
     await #expect(throws: ImageLoadingError.self) {
-      _ = try await loader.loadImage(from: oversizedURL)
+      _ = try await loader.loadDocument(from: oversizedURL)
     }
   }
 
@@ -232,16 +257,16 @@ struct ImageLoadingTests {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let requestID = ImageLoader.LoadRequestID()
     let loadTask = Task {
-      try await loader.loadImage(from: url, requestID: requestID)
+      try await loader.loadDocument(from: url, requestID: requestID)
     }
 
     loadTask.cancel()
     await loader.cancelLoads(for: requestID)
     _ = try? await loadTask.value
 
-    let image = try await loader.loadImage(from: url)
+    let document = try await loader.loadDocument(from: url)
 
-    #expect(image.pixelSize == NSSize(width: 1280, height: 853))
+    #expect(document.pixelSize == NSSize(width: 1280, height: 853))
   }
 
   @Test func `image loader reloads changed file at same url`() async throws {
@@ -249,8 +274,8 @@ struct ImageLoadingTests {
       .appending(path: "imaxe-changing-image-\(UUID().uuidString).png")
 
     try TestSupport.pngData(width: 10, height: 20).write(to: url)
-    let firstImage = try await loader.loadImage(from: url)
-    let firstInfo = try await loader.loadInfo(from: url)
+    let firstDocument = try await loader.loadDocument(from: url)
+    let firstMetadata = try await loader.loadMetadata(from: url)
 
     try TestSupport.pngData(width: 12, height: 24).write(to: url)
     try FileManager.default.setAttributes(
@@ -258,14 +283,14 @@ struct ImageLoadingTests {
       ofItemAtPath: url.filePath,
     )
 
-    let secondImage = try await loader.loadImage(from: url)
-    let secondInfo = try await loader.loadInfo(from: url)
+    let secondDocument = try await loader.loadDocument(from: url)
+    let secondMetadata = try await loader.loadMetadata(from: url)
 
-    #expect(firstImage !== secondImage)
-    #expect(firstImage.pixelSize == NSSize(width: 10, height: 20))
-    #expect(firstInfo.pixelSize == IntSize(width: 10, height: 20))
-    #expect(secondImage.pixelSize == NSSize(width: 12, height: 24))
-    #expect(secondInfo.pixelSize == IntSize(width: 12, height: 24))
+    #expect(firstDocument.id != secondDocument.id)
+    #expect(firstDocument.pixelSize == NSSize(width: 10, height: 20))
+    #expect(firstMetadata.displayPixelSize == IntSize(width: 10, height: 20))
+    #expect(secondDocument.pixelSize == NSSize(width: 12, height: 24))
+    #expect(secondMetadata.displayPixelSize == IntSize(width: 12, height: 24))
   }
 
   @Test func `thumbnail cache generates svg thumbnail`() async throws {

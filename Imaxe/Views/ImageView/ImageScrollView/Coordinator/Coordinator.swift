@@ -22,7 +22,7 @@ final class ImageScrollViewCoordinator: NSObject {
     NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
   }
 
-  private var imageIdentifier: ObjectIdentifier?
+  private var imageIdentifier: UUID?
   private weak var viewportController: ImageViewportController?
   private weak var observedWindow: NSWindow?
   private var magnificationObservation: NSKeyValueObservation?
@@ -79,10 +79,10 @@ final class ImageScrollViewCoordinator: NSObject {
   }
 
   func prepareForImage(
-    _ imageContainer: ImageContainer,
+    _ document: ImageDocument,
     shouldApplyLoadedImageWindowSize: Bool,
   ) {
-    let newIdentifier = ObjectIdentifier(imageContainer.nsImage)
+    let newIdentifier = document.id
     if imageIdentifier != newIdentifier {
       imageIdentifier = newIdentifier
       prepareCommandsForNewImage(

@@ -47,7 +47,7 @@ struct ContentView: View {
       imageSession: imageSession,
       onAlertAcknowledged: handleImageAlertAcknowledged,
     )
-    .navigationTitle(imageSession.currentImageInfo?.fileName ?? "Imaxe")
+    .navigationTitle(imageSession.currentMetadata?.fileName ?? "Imaxe")
     .focusedSceneValue(imageSession)
     .focusedSceneValue(\.recentImages, recentImages)
     .dismissTextFocusOnClickOutside()

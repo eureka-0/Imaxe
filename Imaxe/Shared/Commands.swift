@@ -103,7 +103,7 @@ struct FileOperationCommands: Commands {
         imageSession?.revealInFinder()
       }
       .keyboardShortcut("r", modifiers: [.command, .shift])
-      .disabled(imageSession?.currentImageInfo == nil && imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentMetadata == nil && imageSession?.currentDocument == nil)
     }
   }
 }
@@ -133,25 +133,25 @@ struct ViewCommands: Commands {
         imageSession?.zoomIn()
       }
       .keyboardShortcut("+", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Zoom Out") {
         imageSession?.zoomOut()
       }
       .keyboardShortcut("-", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Fit to Window") {
         imageSession?.fitToWindow()
       }
       .keyboardShortcut("0", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Actual Size") {
         imageSession?.setZoomScale(1.0)
       }
       .keyboardShortcut("1", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Divider()
 
@@ -159,25 +159,25 @@ struct ViewCommands: Commands {
         imageSession?.pan(horizontal: -Constants.keyboardPanDistance, vertical: 0)
       }
       .keyboardShortcut(.leftArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Pan Right") {
         imageSession?.pan(horizontal: Constants.keyboardPanDistance, vertical: 0)
       }
       .keyboardShortcut(.rightArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Pan Up") {
         imageSession?.pan(horizontal: 0, vertical: -Constants.keyboardPanDistance)
       }
       .keyboardShortcut(.upArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Pan Down") {
         imageSession?.pan(horizontal: 0, vertical: Constants.keyboardPanDistance)
       }
       .keyboardShortcut(.downArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Divider()
     }

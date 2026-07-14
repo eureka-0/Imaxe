@@ -87,7 +87,7 @@ func extractImageFromPasteboard() throws -> PasteboardImage? {
 
 // MARK: - IntSize
 
-nonisolated struct IntSize: Hashable {
+nonisolated struct IntSize: Hashable, Sendable {
   let width: Int
   let height: Int
 

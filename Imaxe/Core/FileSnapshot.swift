@@ -7,7 +7,7 @@
 
 import Foundation
 
-nonisolated struct FileSnapshot: Equatable, Sendable {
+nonisolated struct FileSnapshot: Equatable, Hashable, Sendable {
   let contentModificationDate: Date?
   let fileSize: Int?
   let fileSystemNumber: UInt64?

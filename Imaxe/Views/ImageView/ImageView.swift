@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+// MARK: - ImageView
+
 struct ImageView: View {
   @Bindable var imageSession: ImageSession
   var onAlertAcknowledged: () -> Void = {}
@@ -23,13 +25,13 @@ struct ImageView: View {
     isImageInfoPresented || isZoomPickerPresented
   }
 
-  private var displayedImageInfo: ImageInfo? {
-    imageSession.currentImageInfo
+  private var displayedMetadata: ImageMetadata? {
+    imageSession.currentMetadata
   }
 
   var body: some View {
     Group {
-      if imageSession.currentImage != nil || imageSession.isLoading {
+      if imageSession.currentDocument != nil || imageSession.isLoading {
         ZStack(alignment: .top) {
           imageContent
 
@@ -62,7 +64,7 @@ struct ImageView: View {
       updateTopBarVisibility()
     }
     .onChange(of: imageSession.isLoading) { _, newValue in
-      if !newValue, imageSession.currentImage == nil {
+      if !newValue, imageSession.currentDocument == nil {
         imageSession.restoreStandardWindowButtons()
       } else {
         updateTopBarVisibility()
@@ -79,10 +81,9 @@ struct ImageView: View {
 
   @ViewBuilder
   private var imageContent: some View {
-    if let image = imageSession.currentImage, let info = imageSession.currentImageInfo {
+    if let document = imageSession.currentDocument {
       ImageScrollView(
-        imageContainer: image,
-        imageInfo: info,
+        document: document,
         shouldApplyLoadedImageWindowSize: imageSession.shouldApplyLoadedImageWindowSize,
         zoomScale: $imageSession.zoomScale,
         alwaysFitToWindow: $imageSession.alwaysFitToWindow,
@@ -143,14 +144,14 @@ struct ImageView: View {
   }
 
   private var fileNameLabel: some View {
-    Text(displayedImageInfo?.fileName ?? "")
+    Text(displayedMetadata?.fileName ?? "")
       .font(.system(size: 13, weight: .medium))
       .foregroundStyle(.primary)
       .lineLimit(1)
       .truncationMode(.tail)
       .frame(minWidth: 72, maxWidth: 320, alignment: .leading)
-      .help(Text(displayedImageInfo?.fileName ?? ""))
-      .accessibilityLabel(Text("File name \(displayedImageInfo?.fileName ?? "")"))
+      .help(Text(displayedMetadata?.fileName ?? ""))
+      .accessibilityLabel(Text("File name \(displayedMetadata?.fileName ?? "")"))
   }
 
   private var topBarControls: some View {
@@ -274,12 +275,12 @@ struct ImageView: View {
       topBarIconLabel("Image Info", systemImage: "info.circle")
     }
     .popover(isPresented: $isImageInfoPresented, arrowEdge: .top) {
-      if let currentImageInfo = imageSession.currentImageInfo {
-        ImageInfoPanel(info: currentImageInfo)
+      if let currentMetadata = imageSession.currentMetadata {
+        ImageInfoPanel(metadata: currentMetadata)
       }
     }
     .buttonStyle(.borderedOnHover(isActive: isImageInfoPresented))
-    .disabled(imageSession.currentImageInfo == nil)
+    .disabled(imageSession.currentMetadata == nil)
     .help(Text("Show image info"))
   }
 
@@ -312,6 +313,8 @@ struct ImageView: View {
     imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
   }
 }
+
+// MARK: - ZoomScalePicker
 
 private struct ZoomScalePickerPopover: View {
   let currentZoomScale: CGFloat
@@ -390,8 +393,10 @@ private struct ZoomScalePickerPopover: View {
   }
 }
 
+// MARK: - ImageInfoPanel
+
 private struct ImageInfoPanel: View {
-  let info: ImageInfo
+  let metadata: ImageMetadata
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -399,16 +404,16 @@ private struct ImageInfoPanel: View {
         .font(.headline)
 
       VStack(alignment: .leading, spacing: 8) {
-        infoRow(title: "File Name", value: info.fileName)
-        infoRow(title: "Location", value: info.location)
-        infoRow(title: "Format", value: info.typeDescription)
-        infoRow(title: "File Size", value: fileSizeDescription(for: info.fileSize))
+        infoRow(title: "File Name", value: metadata.fileName)
+        infoRow(title: "Location", value: metadata.location)
+        infoRow(title: "Format", value: metadata.typeDescription)
+        infoRow(title: "File Size", value: fileSizeDescription(for: metadata.fileSize))
 
         Divider()
 
-        infoRow(title: "Pixel Width", value: String(info.pixelSize.width))
-        infoRow(title: "Pixel Height", value: String(info.pixelSize.height))
-        infoRow(title: "Image DPI", value: info.DPIDescription)
+        infoRow(title: "Pixel Width", value: String(metadata.displayPixelSize.width))
+        infoRow(title: "Pixel Height", value: String(metadata.displayPixelSize.height))
+        infoRow(title: "Image DPI", value: metadata.DPIDescription)
       }
     }
     .padding(14)
@@ -433,6 +438,8 @@ private struct ImageInfoPanel: View {
     }
   }
 }
+
+// MARK: - Private Helpers
 
 private extension View {
   func topBarControlGroup() -> some View {
