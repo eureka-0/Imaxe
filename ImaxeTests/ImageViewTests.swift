@@ -24,6 +24,18 @@ struct ImageViewTests {
   }
 
   @Test func `canvas occupies image pixel size in backing pixels`() {
+    let defaults = UserDefaults.standard
+    let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
+    let previousValue = defaults.object(forKey: key)
+    defaults.set(ImageActualSizeStrategy.pixelSize.rawValue, forKey: key)
+    defer {
+      if let previousValue {
+        defaults.set(previousValue, forKey: key)
+      } else {
+        defaults.removeObject(forKey: key)
+      }
+    }
+
     let image = TestSupport.bitmapImage()
     let url = URL(fileURLWithPath: "/tmp/example.png")
     let imageContainer = ImageContainer(url: url, nsImage: image)
