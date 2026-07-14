@@ -414,6 +414,9 @@ private struct ImageInfoPanel: View {
         infoRow(title: "Pixel Width", value: String(metadata.displayPixelSize.width))
         infoRow(title: "Pixel Height", value: String(metadata.displayPixelSize.height))
         infoRow(title: "Image DPI", value: metadata.DPIDescription)
+        infoRow(title: "Bit Depth", value: metadata.bitDepthDescription)
+        infoRow(title: "Color Space", value: metadata.colorSpaceDescription)
+        infoRow(title: "Has Alpha", value: metadata.alphaDescription)
       }
     }
     .padding(14)

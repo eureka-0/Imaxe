@@ -46,6 +46,26 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     }
   }
 
+  var bitDepthDescription: String {
+    if let depth {
+      "\(depth) Bits/Pixel"
+    } else {
+      "Unknown"
+    }
+  }
+
+  var colorSpaceDescription: String {
+    if let colorModel {
+      colorModel
+    } else {
+      "Unknown"
+    }
+  }
+
+  var alphaDescription: String {
+    hasAlpha ? "Yes" : "No"
+  }
+
   init(url: URL) throws {
     let freshURL = url.freshFileURL
 
