@@ -238,18 +238,20 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     override func mouseDown(with event: NSEvent) {
+      guard event.type == .leftMouseDown, event.clickCount > 0 else { return }
+
       if event.clickCount == 2 {
         onDoubleClick?()
         return
       }
 
-      guard canPanDocument else {
-        super.mouseDown(with: event)
+      if canPanDocument {
+        isPanning = true
+        NSCursor.openHand.set()
         return
       }
 
-      isPanning = true
-      NSCursor.openHand.set()
+      super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -285,7 +287,8 @@ struct ImageScrollView: NSViewRepresentable {
         width: documentView.bounds.width * magnification,
         height: documentView.bounds.height * magnification,
       )
-      return displayedSize.width > contentSize.width || displayedSize.height > contentSize.height
+      return displayedSize.width > contentSize.width + 1
+        || displayedSize.height > contentSize.height + 1
     }
 
     func panDocument(by directManipulationDelta: NSSize) {
