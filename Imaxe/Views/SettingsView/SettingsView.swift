@@ -7,6 +7,8 @@
 
 import SwiftUI
 
+// MARK: - SettingsView
+
 struct SettingsView: View {
   var body: some View {
     TabView {
@@ -21,6 +23,8 @@ struct SettingsView: View {
     .frame(width: 620)
   }
 }
+
+// MARK: - GeneralSettingsView
 
 struct GeneralSettingsView: View {
   @AppStorage(AppSettings.Keys.appearance.rawValue)
@@ -204,6 +208,8 @@ struct GeneralSettingsView: View {
     totalCacheSize = ImageThumbnailCache.totalCacheSizeInBytes()
   }
 }
+
+// MARK: - ImageSettingsView
 
 struct ImageSettingsView: View {
   @AppStorage(AppSettings.Keys.imageActualSizeStrategy.rawValue)

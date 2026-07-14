@@ -13,6 +13,8 @@ import ImageIO
 import SwiftData
 import UniformTypeIdentifiers
 
+// MARK: - LibraryThumbnailReferences
+
 enum LibraryThumbnailReferences {
   static func removeThumbnailsIfUnused(
     _ keys: Set<String>,
@@ -48,6 +50,8 @@ enum LibraryThumbnailReferences {
     return try !modelContext.fetch(descriptor).isEmpty
   }
 }
+
+// MARK: - ImageThumbnailService
 
 actor ImageThumbnailService {
   static let shared = ImageThumbnailService()
@@ -141,6 +145,8 @@ actor ImageThumbnailService {
     }
   }
 }
+
+// MARK: - ImageThumbnailCache
 
 nonisolated enum ImageThumbnailCache {
   static let maxPixelSize = 512
