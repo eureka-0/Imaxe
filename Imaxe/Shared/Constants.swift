@@ -30,7 +30,7 @@ nonisolated enum Constants {
   static let commonZoomLevels: [CGFloat] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
   static let imageZoomStepFactor: CGFloat = 1.25
   static let keyboardPanDistance: CGFloat = 80
-  static let maximumImageDimension: CGFloat = 51200
+  static let maximumImageDimension: CGFloat = 32768
   static let maximumImagePixelCount: CGFloat = maximumImageDimension * maximumImageDimension
 
   static let fallbackScreenPPI: (CGFloat, CGFloat) = (254, 254)
