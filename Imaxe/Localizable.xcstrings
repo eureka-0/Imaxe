@@ -51,6 +51,9 @@
         }
       }
     },
+    "%lld hidden items" : {
+
+    },
     "^[%lld image](inflect: true)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -276,6 +279,9 @@
     "More" : {
 
     },
+    "More actions" : {
+
+    },
     "Move to Trash" : {
 
     },
@@ -283,6 +289,9 @@
 
     },
     "Name" : {
+
+    },
+    "Navigation" : {
 
     },
     "Next image" : {

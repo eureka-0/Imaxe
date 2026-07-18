@@ -20,6 +20,7 @@ struct ImageView: View {
   @State private var isImageInfoPresented = false
   @State private var isZoomPickerPresented = false
   @State private var customZoomScaleText = ""
+  @State private var fileNameLabelMinWidth: CGFloat = 72
 
   private var isPopoverPresented: Bool {
     isImageInfoPresented || isZoomPickerPresented
@@ -125,6 +126,13 @@ struct ImageView: View {
         .accessibilityHidden(true)
 
       fileNameLabel
+        .onHover { isHovering in
+          if isHovering {
+            fileNameLabelMinWidth = 320
+          } else {
+            fileNameLabelMinWidth = 72
+          }
+        }
 
       Spacer(minLength: Constants.topBarItemSpacing)
 
@@ -149,22 +157,83 @@ struct ImageView: View {
       .foregroundStyle(.primary)
       .lineLimit(1)
       .truncationMode(.tail)
-      .frame(minWidth: 72, maxWidth: 320, alignment: .leading)
+      .frame(minWidth: fileNameLabelMinWidth, maxWidth: 320, alignment: .leading)
+      .layoutPriority(-1)
       .help(Text(displayedMetadata?.fileName ?? ""))
       .accessibilityLabel(Text("File name \(displayedMetadata?.fileName ?? "")"))
   }
 
   private var topBarControls: some View {
-    HStack(spacing: Constants.topBarItemSpacing) {
-      navigationButtons
-      fitToWindowButton
+    AdaptiveToolbar(spacing: Constants.topBarItemSpacing) {
+      AdaptiveToolbarItem {
+        navigationButtons
+      } overflow: {
+        Menu("Navigation", systemImage: "photo.on.rectangle") {
+          Button(
+            "Previous Image",
+            systemImage: "chevron.left",
+            action: imageSession.navigateToPreviousImage,
+          )
+          .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
+          .help(Text("Previous image"))
+
+          Text(imageSession.folderNavigator?.positionDescription ?? "1/1")
+
+          Button(
+            "Next Image",
+            systemImage: "chevron.right",
+            action: imageSession.navigateToNextImage,
+          )
+          .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
+          .help(Text("Next image"))
+        }
+      }
+
+      AdaptiveToolbarItem {
+        fitToWindowButton
+      } overflow: {
+        Button(
+          "Fit to Window",
+          systemImage: "arrow.up.left.and.arrow.down.right.rectangle",
+          action: imageSession.fitToWindow,
+        )
+        .disabled(imageSession.isLoading)
+        .help(Text("Fit the image to the window"))
+      }
+
       zoomControls
-      fitWindowToImageButton
+        .adaptiveToolbarBehavior(.alwaysVisible)
+
+      AdaptiveToolbarItem {
+        fitWindowToImageButton
+      } overflow: {
+        Button(
+          "Fit Window to Image",
+          systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
+          action: imageSession.fitWindowToImage,
+        )
+        .disabled(imageSession.isLoading)
+        .help(Text("Resize the window to fit the image"))
+      }
+
       imageInfoButton
-      pinWindowButton
+        .adaptiveToolbarBehavior(.alwaysVisible)
+
+      AdaptiveToolbarItem {
+        pinWindowButton
+      } overflow: {
+        Button(
+          imageSession.isWindowPinned ? "Unpin Window" : "Pin Window",
+          systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin",
+          action: imageSession.toggleWindowPinning,
+        )
+        .help(Text("Toggle window pinning"))
+      }
+    } moreLabel: {
+      Label("More", systemImage: "chevron.right.2")
+        .frame(width: Constants.topBarIconButtonWidth, height: Constants.topBarButtonHeight)
     }
-    .fixedSize()
-    .layoutPriority(1)
+    .overflowFrom(.right)
   }
 
   private var navigationButtons: some View {
