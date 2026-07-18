@@ -19,15 +19,11 @@ struct ImageView: View {
   @State private var isTopBarHovering = false
   @State private var isImageInfoPresented = false
   @State private var isZoomPickerPresented = false
-  @State private var customZoomScaleText = ""
-  @State private var fileNameLabelMinWidth: CGFloat = 72
+
+  private let topBarHoverStripHeight: CGFloat = 50
 
   private var isPopoverPresented: Bool {
     isImageInfoPresented || isZoomPickerPresented
-  }
-
-  private var displayedMetadata: ImageMetadata? {
-    imageSession.currentMetadata
   }
 
   var body: some View {
@@ -36,20 +32,24 @@ struct ImageView: View {
         ZStack(alignment: .top) {
           imageContent
 
-          topBar
-            .opacity(imageSession.showTopBar ? 1 : 0)
-            .animation(
-              accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
-              value: imageSession.showTopBar,
-            )
-            .allowsHitTesting(imageSession.showTopBar)
+          TopBar(
+            imageSession: imageSession,
+            isImageInfoPresented: $isImageInfoPresented,
+            isZoomPickerPresented: $isZoomPickerPresented,
+          )
+          .opacity(imageSession.showTopBar ? 1 : 0)
+          .animation(
+            accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
+            value: imageSession.showTopBar,
+          )
+          .allowsHitTesting(imageSession.showTopBar)
 
           HoverTrackingStrip { isHovering, window in
             isTopBarHovering = isHovering
             updateTopBarVisibility(in: window)
           }
           .frame(maxWidth: .infinity)
-          .frame(height: Constants.topBarHoverStripHeight)
+          .frame(height: topBarHoverStripHeight)
         }
       } else {
         Color.clear
@@ -119,36 +119,60 @@ struct ImageView: View {
     .accessibilityLabel(Text("Loading..."))
   }
 
-  private var topBar: some View {
-    HStack(spacing: Constants.topBarItemSpacing) {
+  private func updateTopBarVisibility(in window: NSWindow? = nil) {
+    imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
+  }
+}
+
+// MARK: - TopBar
+
+private struct TopBar: View {
+  @Bindable var imageSession: ImageSession
+  @Binding var isImageInfoPresented: Bool
+  @Binding var isZoomPickerPresented: Bool
+
+  @State private var customZoomScaleText = ""
+
+  // UI layout constants
+  private let standardWindowButtonReservedWidth: CGFloat = 72
+  private let topBarHeight: CGFloat = 32
+  private let itemSpacing: CGFloat = 6
+  private let buttonWidth: CGFloat = 24
+  private let buttonHeight: CGFloat = 24
+  private let zoomButtonWidth: CGFloat = 48
+  private let positionLabelMinWidth: CGFloat = 48
+  private let positionLabelMaxWidth: CGFloat = 80
+  private let controlGroupSpacing: CGFloat = 1
+  private let controlGroupPadding: CGFloat = 1
+  private let fileNameLabelMinWidth: CGFloat = 72
+
+  private var displayedMetadata: ImageMetadata? {
+    imageSession.currentMetadata
+  }
+
+  var body: some View {
+    HStack(spacing: itemSpacing) {
       Color.clear
-        .frame(width: Constants.topBarWindowButtonReservedWidth)
+        .frame(width: standardWindowButtonReservedWidth)
         .accessibilityHidden(true)
 
       fileNameLabel
-        .onHover { isHovering in
-          if isHovering {
-            fileNameLabelMinWidth = 320
-          } else {
-            fileNameLabelMinWidth = 72
-          }
-        }
-
-      Spacer(minLength: Constants.topBarItemSpacing)
 
       topBarControls
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.leading, 6)
     .padding(.trailing, 12)
-    .background(.regularMaterial.opacity(0.9))
+    .background {
+      Rectangle()
+        .fill(.ultraThinMaterial)
+    }
     .overlay(alignment: .bottom) {
       Rectangle()
         .fill(.separator.opacity(0.28))
         .frame(height: 1)
     }
-    .frame(height: Constants.topBarHeight)
-    .controlSize(.small)
+    .frame(height: topBarHeight)
   }
 
   private var fileNameLabel: some View {
@@ -156,130 +180,113 @@ struct ImageView: View {
       .font(.system(size: 13, weight: .medium))
       .foregroundStyle(.primary)
       .lineLimit(1)
-      .truncationMode(.tail)
-      .frame(minWidth: fileNameLabelMinWidth, maxWidth: 320, alignment: .leading)
+      .truncationMode(.middle)
+      .frame(minWidth: fileNameLabelMinWidth, maxWidth: .infinity, alignment: .leading)
       .layoutPriority(-1)
       .help(Text(displayedMetadata?.fileName ?? ""))
       .accessibilityLabel(Text("File name \(displayedMetadata?.fileName ?? "")"))
   }
 
   private var topBarControls: some View {
-    AdaptiveToolbar(spacing: Constants.topBarItemSpacing) {
-      AdaptiveToolbarItem {
-        navigationButtons
-      } overflow: {
-        Menu("Navigation", systemImage: "photo.on.rectangle") {
-          Button(
-            "Previous Image",
-            systemImage: "chevron.left",
-            action: imageSession.navigateToPreviousImage,
-          )
-          .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
-          .help(Text("Previous image"))
+    AdaptiveToolbar(spacing: itemSpacing) {
+      navigationButtons
 
-          Text(imageSession.folderNavigator?.positionDescription ?? "1/1")
-
-          Button(
-            "Next Image",
-            systemImage: "chevron.right",
-            action: imageSession.navigateToNextImage,
-          )
-          .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
-          .help(Text("Next image"))
-        }
-      }
-
-      AdaptiveToolbarItem {
-        fitToWindowButton
-      } overflow: {
-        Button(
-          "Fit to Window",
-          systemImage: "arrow.up.left.and.arrow.down.right.rectangle",
-          action: imageSession.fitToWindow,
-        )
-        .disabled(imageSession.isLoading)
-        .help(Text("Fit the image to the window"))
-      }
+      fitToWindowButton
 
       zoomControls
         .adaptiveToolbarBehavior(.alwaysVisible)
 
-      AdaptiveToolbarItem {
-        fitWindowToImageButton
-      } overflow: {
-        Button(
-          "Fit Window to Image",
-          systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
-          action: imageSession.fitWindowToImage,
-        )
-        .disabled(imageSession.isLoading)
-        .help(Text("Resize the window to fit the image"))
-      }
+      fitWindowToImageButton
 
       imageInfoButton
         .adaptiveToolbarBehavior(.alwaysVisible)
 
-      AdaptiveToolbarItem {
-        pinWindowButton
-      } overflow: {
-        Button(
-          imageSession.isWindowPinned ? "Unpin Window" : "Pin Window",
-          systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin",
-          action: imageSession.toggleWindowPinning,
-        )
-        .help(Text("Toggle window pinning"))
-      }
+      pinWindowButton
     } moreLabel: {
       Label("More", systemImage: "chevron.right.2")
-        .frame(width: Constants.topBarIconButtonWidth, height: Constants.topBarButtonHeight)
+        .frame(width: buttonWidth, height: buttonHeight)
     }
     .overflowFrom(.right)
+    .labelMode(.iconOnly)
+    .layoutPriority(1)
   }
 
   private var navigationButtons: some View {
-    HStack(spacing: Constants.topBarControlGroupSpacing) {
-      Button(action: imageSession.navigateToPreviousImage) {
-        topBarIconLabel("Previous Image", systemImage: "chevron.left")
-      }
-      .buttonStyle(.borderedOnHover)
-      .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
-      .help(Text("Previous image"))
+    AdaptiveToolbarItem {
+      HStack(spacing: controlGroupSpacing) {
+        Button(action: imageSession.navigateToPreviousImage) {
+          topBarIconLabel("Previous Image", systemImage: "chevron.left")
+        }
+        .buttonStyle(.borderedOnHover)
+        .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
+        .help(Text("Previous image"))
 
-      Text(imageSession.folderNavigator?.positionDescription ?? "1/1")
-        .font(.system(size: 12, weight: .medium, design: .rounded))
-        .monospacedDigit()
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-        .frame(
-          minWidth: Constants.topBarPositionMinWidth,
-          maxWidth: Constants.topBarPositionMaxWidth,
-        )
-        .frame(height: Constants.topBarButtonHeight)
-        .accessibilityLabel(
-          Text("Image position \(imageSession.folderNavigator?.positionDescription ?? "1/1")"),
-        )
+        Text(imageSession.folderNavigator?.positionDescription ?? "1/1")
+          .font(.system(size: 12, weight: .medium, design: .rounded))
+          .monospacedDigit()
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .frame(minWidth: positionLabelMinWidth, maxWidth: positionLabelMaxWidth)
+          .frame(height: buttonHeight)
+          .accessibilityLabel(
+            Text("Image position \(imageSession.folderNavigator?.positionDescription ?? "1/1")"),
+          )
 
-      Button(action: imageSession.navigateToNextImage) {
-        topBarIconLabel("Next Image", systemImage: "chevron.right")
+        Button(action: imageSession.navigateToNextImage) {
+          topBarIconLabel("Next Image", systemImage: "chevron.right")
+        }
+        .buttonStyle(.borderedOnHover)
+        .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
+        .help(Text("Next image"))
       }
-      .buttonStyle(.borderedOnHover)
-      .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
-      .help(Text("Next image"))
+      .topBarControlGroup(buttonHeight: buttonHeight, padding: controlGroupPadding)
+    } overflow: {
+      Menu("Navigation", systemImage: "photo.on.rectangle") {
+        Button(
+          "Previous Image",
+          systemImage: "chevron.left",
+          action: imageSession.navigateToPreviousImage,
+        )
+        .disabled(!(imageSession.folderNavigator?.canNavigateToPrevious ?? false))
+        .help(Text("Previous image"))
+
+        Text(imageSession.folderNavigator?.positionDescription ?? "1/1")
+
+        Button(
+          "Next Image",
+          systemImage: "chevron.right",
+          action: imageSession.navigateToNextImage,
+        )
+        .disabled(!(imageSession.folderNavigator?.canNavigateToNext ?? false))
+        .help(Text("Next image"))
+      }
     }
-    .topBarControlGroup()
   }
 
   private var fitToWindowButton: some View {
-    Button(action: imageSession.fitToWindow) {
-      topBarIconLabel("Fit to Window", systemImage: "arrow.up.left.and.arrow.down.right.rectangle")
+    AdaptiveToolbarItem {
+      Button(action: imageSession.fitToWindow) {
+        topBarIconLabel(
+          "Fit to Window",
+          systemImage: "arrow.up.left.and.arrow.down.right.rectangle",
+        )
+      }
+      .buttonStyle(.borderedOnHover)
+      .disabled(imageSession.isLoading)
+      .help(Text("Fit the image to the window"))
+    } overflow: {
+      Button(
+        "Fit to Window",
+        systemImage: "arrow.up.left.and.arrow.down.right.rectangle",
+        action: imageSession.fitToWindow,
+      )
+      .disabled(imageSession.isLoading)
+      .help(Text("Fit the image to the window"))
     }
-    .buttonStyle(.borderedOnHover)
-    .disabled(imageSession.isLoading)
-    .help(Text("Fit the image to the window"))
   }
 
   private var zoomControls: some View {
-    HStack(spacing: Constants.topBarControlGroupSpacing) {
+    HStack(spacing: controlGroupSpacing) {
       Button(action: imageSession.zoomOut) {
         topBarIconLabel("Zoom Out", systemImage: "minus.magnifyingglass")
       }
@@ -296,7 +303,7 @@ struct ImageView: View {
           .font(.system(size: 12, weight: .medium, design: .rounded))
           .monospacedDigit()
           .lineLimit(1)
-          .frame(width: Constants.topBarZoomButtonWidth, height: Constants.topBarButtonHeight)
+          .frame(width: zoomButtonWidth, height: buttonHeight)
       }
       .popover(isPresented: $isZoomPickerPresented, arrowEdge: .top) {
         ZoomScalePickerPopover(
@@ -322,19 +329,29 @@ struct ImageView: View {
         .upperBound)
       .help(Text("Zoom in"))
     }
-    .topBarControlGroup()
+    .topBarControlGroup(buttonHeight: buttonHeight, padding: controlGroupPadding)
   }
 
   private var fitWindowToImageButton: some View {
-    Button(action: imageSession.fitWindowToImage) {
-      topBarIconLabel(
+    AdaptiveToolbarItem {
+      Button(action: imageSession.fitWindowToImage) {
+        topBarIconLabel(
+          "Fit Window to Image",
+          systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
+        )
+      }
+      .buttonStyle(.borderedOnHover)
+      .disabled(imageSession.isLoading)
+      .help(Text("Resize the window to fit the image"))
+    } overflow: {
+      Button(
         "Fit Window to Image",
         systemImage: "rectangle.and.arrow.up.right.and.arrow.down.left",
+        action: imageSession.fitWindowToImage,
       )
+      .disabled(imageSession.isLoading)
+      .help(Text("Resize the window to fit the image"))
     }
-    .buttonStyle(.borderedOnHover)
-    .disabled(imageSession.isLoading)
-    .help(Text("Resize the window to fit the image"))
   }
 
   private var imageInfoButton: some View {
@@ -354,20 +371,30 @@ struct ImageView: View {
   }
 
   private var pinWindowButton: some View {
-    Button(action: imageSession.toggleWindowPinning) {
-      topBarIconLabel(
+    AdaptiveToolbarItem {
+      Button(action: imageSession.toggleWindowPinning) {
+        topBarIconLabel(
+          imageSession.isWindowPinned ? "Unpin Window" : "Pin Window",
+          systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin",
+        )
+      }
+      .buttonStyle(.borderedOnHover)
+      .help(Text("Toggle window pinning"))
+    } overflow: {
+      Button(
         imageSession.isWindowPinned ? "Unpin Window" : "Pin Window",
         systemImage: imageSession.isWindowPinned ? "pin.slash" : "pin",
+        action: imageSession.toggleWindowPinning,
       )
+      .help(Text("Toggle window pinning"))
     }
-    .buttonStyle(.borderedOnHover)
-    .help(Text("Toggle window pinning"))
   }
 
   private func topBarIconLabel(_ title: LocalizedStringResource, systemImage: String) -> some View {
     Label(title, systemImage: systemImage)
-      .labelStyle(.iconOnly)
-      .frame(width: Constants.topBarIconButtonWidth, height: Constants.topBarButtonHeight)
+      .padding(.horizontal, 5)
+      .frame(minWidth: buttonWidth, idealHeight: buttonHeight)
+      .fixedSize()
   }
 
   private func applyCustomZoom() {
@@ -376,10 +403,6 @@ struct ImageView: View {
     imageSession.setZoomScale(zoomScale)
     customZoomScaleText = zoomInputText(for: zoomScale)
     isZoomPickerPresented = false
-  }
-
-  private func updateTopBarVisibility(in window: NSWindow? = nil) {
-    imageSession.setTopBarVisibility(to: isTopBarHovering || isPopoverPresented, in: window)
   }
 }
 
@@ -390,6 +413,8 @@ private struct ZoomScalePickerPopover: View {
   @Binding var customZoomScaleText: String
   let onSelectZoomScale: (CGFloat) -> Void
   let onApplyCustomZoomScale: () -> Void
+
+  private let commonZoomLevels: [CGFloat] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
 
   var isCustomZoomScaleValid: Bool {
     zoomScaleValue(from: customZoomScaleText) != nil
@@ -405,7 +430,7 @@ private struct ZoomScalePickerPopover: View {
         .font(.headline)
 
       LazyVGrid(columns: columns, alignment: .leading, spacing: 6) {
-        ForEach(Constants.commonZoomLevels, id: \.self) { zoomScale in
+        ForEach(commonZoomLevels, id: \.self) { zoomScale in
           zoomPresetButton(for: zoomScale)
         }
       }
@@ -514,10 +539,10 @@ private struct ImageInfoPanel: View {
 // MARK: - Private Helpers
 
 private extension View {
-  func topBarControlGroup() -> some View {
+  func topBarControlGroup(buttonHeight: CGFloat, padding: CGFloat) -> some View {
     fixedSize()
-      .padding(Constants.topBarControlGroupPadding)
-      .frame(height: Constants.topBarButtonHeight + Constants.topBarControlGroupPadding * 2)
+      .padding(padding)
+      .frame(height: buttonHeight + padding * 2)
       .background {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
           .fill(.controlBackground.opacity(0.8))

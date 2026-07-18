@@ -263,13 +263,6 @@ struct ImageScrollView: NSViewRepresentable {
       super.mouseUp(with: event)
     }
 
-    override func resetCursorRects() {
-      super.resetCursorRects()
-      if canPanDocument {
-        addCursorRect(bounds, cursor: .openHand)
-      }
-    }
-
     var canPanDocument: Bool {
       guard let documentView else { return false }
 

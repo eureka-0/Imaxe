@@ -779,7 +779,8 @@ private struct AdaptiveToolbarIconAndLabelStyle: LabelStyle {
       configuration.title
         .font(.caption2)
         .lineLimit(1)
-        .truncationMode(.tail)
+        .padding(.horizontal, 3)
+        .fixedSize()
     }
   }
 }

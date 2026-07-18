@@ -226,9 +226,9 @@ struct ImageLoadingTests {
   }
 
   @Test func `image loader enforces pixel dimension and count limits`() {
-    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 32769, height: 1)))
-    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 32769, height: 32768)))
-    #expect(!ImageLoader.exceedsImageSizeLimit(NSSize(width: 32768, height: 32768)))
+    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 16385, height: 1)))
+    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 16385, height: 16384)))
+    #expect(!ImageLoader.exceedsImageSizeLimit(NSSize(width: 16384, height: 16384)))
   }
 
   @Test func `svg loader rejects invalid and oversized dimensions`() async throws {

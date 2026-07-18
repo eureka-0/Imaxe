@@ -8,37 +8,48 @@
 import Foundation
 
 nonisolated enum Constants {
-  static let topBarHeight: CGFloat = 32
-  static let topBarHoverStripHeight: CGFloat = 50
-  static let topBarItemSpacing: CGFloat = 6
-  static let topBarControlGroupSpacing: CGFloat = 1
-  static let topBarControlGroupPadding: CGFloat = 1
-  static let topBarIconButtonWidth: CGFloat = 24
-  static let topBarZoomButtonWidth: CGFloat = 48
-  static let topBarButtonHeight: CGFloat = 22
-  static let topBarPositionMinWidth: CGFloat = 48
-  static let topBarPositionMaxWidth: CGFloat = 80
-  static let topBarWindowButtonReservedWidth: CGFloat = 72
-
+  /// The minimum window content width to use when creating a new window.
   static let minimumWindowContentWidth: CGFloat = 520
+
+  /// The minimum window content height to use when creating a new window. Note that this is the
+  /// minimum height for the content area of the window, not the entire window. The actual minimum
+  /// window height will be larger due to the title bar and other window chrome.
   static let minimumWindowContentHeight: CGFloat = 360
+
+  /// The default window width to use when creating a new window.
   static let defaultWindowWidth: CGFloat = 680
+
+  /// The default window height to use when creating a new window.
   static let defaultWindowHeight: CGFloat = 640
 
+  /// The range of valid zoom scales for the image view.
   static let imageZoomScaleRange: ClosedRange<CGFloat> = 0.05 ... 20.0
+
+  /// The tolerance for updating the zoom scale. If the new zoom scale is within this tolerance of
+  /// the current zoom scale, the zoom scale will not be updated.
   static let zoomScaleUpdateTolerance: CGFloat = 0.0001
-  static let commonZoomLevels: [CGFloat] = [0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
+
+  /// The factor by which to zoom in or out when the user performs a zoom command (e.g., zoom in/out
+  /// button, keyboard shortcut, etc.).
   static let imageZoomStepFactor: CGFloat = 1.25
+
+  /// The distance to pan the image when the user presses a keyboard panning key.
   static let keyboardPanDistance: CGFloat = 80
-  static let maximumImageDimension: CGFloat = 32768
+
+  // TODO: Consider downsampling large images instead of rejecting them outright.
+  /// The maximum dimension (width or height) of an image that can be opened in the app. This value
+  /// is based on the maximum texture size supported by Metal on macOS. Images larger than this
+  /// dimension will be rejected to prevent rendering issues.
+  static let maximumImageDimension: CGFloat = 16384
+
+  /// The maximum pixel count of an image that can be opened in the app. This is calculated as the
+  /// square of the maximum image dimension.
   static let maximumImagePixelCount: CGFloat = maximumImageDimension * maximumImageDimension
 
+  /// Fallback screen PPI (pixels per inch) to use when the actual screen PPI cannot be determined.
   static let fallbackScreenPPI: (CGFloat, CGFloat) = (254, 254)
 
-  static let stableFileCheckDeadline: DispatchTimeInterval = .seconds(10)
-  static let pollingIntervalOnFileChange: DispatchTimeInterval = .milliseconds(150)
-
+  /// The maximum number of recent images to display in the menu. If there are more recent images
+  /// than this limit, the oldest ones will be removed from the list.
   static let maximumRecentImagesToDisplayInMenu = 20
-
-  static let recentImagesGridItemSizeRange: ClosedRange<CGFloat> = 72 ... 260
 }
