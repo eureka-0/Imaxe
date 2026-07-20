@@ -296,6 +296,7 @@ final class ImageCanvasView: NSView {
     guard let bitmapRep = document.makeAnimatedBitmapRepresentation() else { return nil }
 
     let image = NSImage(size: document.nsImage.size)
+    image.cacheMode = document.nsImage.cacheMode
     image.addRepresentation(bitmapRep)
     gifBitmapRep = bitmapRep
     gifImage = image

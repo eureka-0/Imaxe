@@ -36,15 +36,10 @@ nonisolated enum Constants {
   /// The distance to pan the image when the user presses a keyboard panning key.
   static let keyboardPanDistance: CGFloat = 80
 
-  // TODO: Consider downsampling large images instead of rejecting them outright.
-  /// The maximum dimension (width or height) of an image that can be opened in the app. This value
-  /// is based on the maximum texture size supported by Metal on macOS. Images larger than this
-  /// dimension will be rejected to prevent rendering issues.
+  /// The maximum width or height of an image passed to the rendering pipeline. This value is based
+  /// on the maximum texture size supported by Metal on macOS. Larger images are downsampled so
+  /// their longest edge fits this limit.
   static let maximumImageDimension: CGFloat = 16384
-
-  /// The maximum pixel count of an image that can be opened in the app. This is calculated as the
-  /// square of the maximum image dimension.
-  static let maximumImagePixelCount: CGFloat = maximumImageDimension * maximumImageDimension
 
   /// Fallback screen PPI (pixels per inch) to use when the actual screen PPI cannot be determined.
   static let fallbackScreenPPI: (CGFloat, CGFloat) = (254, 254)

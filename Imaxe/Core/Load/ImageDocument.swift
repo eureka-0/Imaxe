@@ -100,10 +100,6 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     guard rawPixelSize.isValid else {
       throw ImageLoadingError.invalidDimensions(url)
     }
-    if ImageLoader.exceedsImageSizeLimit(rawPixelSize.nsSize) {
-      throw ImageLoadingError.sizeLimitExceeded(url)
-    }
-
     let orientation = Self.imageOrientation(from: properties)
     let displayPixelSize = orientation.swapsDimensions
       ? IntSize(width: rawPixelSize.height, height: rawPixelSize.width)
@@ -154,10 +150,6 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     guard pixelSize.isValid else {
       throw ImageLoadingError.invalidDimensions(url)
     }
-    if ImageLoader.exceedsImageSizeLimit(pixelSize.nsSize) {
-      throw ImageLoadingError.sizeLimitExceeded(url)
-    }
-
     self.url = url
     fileName = url.lastPathComponent
     fileSize = url.fileSize
@@ -214,7 +206,7 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     return IntSize(width: 72, height: 72)
   }
 
-  private static func estimatedFrameBytes(pixelSize: IntSize, depth: Int?) -> Int {
+  static func estimatedFrameBytes(pixelSize: IntSize, depth: Int?) -> Int {
     let bytesPerPixel = (depth ?? 8) > 8 ? 8 : 4
     let (pixelCount, pixelOverflow) = pixelSize.width.multipliedReportingOverflow(
       by: pixelSize.height,
@@ -287,16 +279,25 @@ nonisolated struct ImageDocument: Sendable {
   let metadata: ImageMetadata
   let content: ImageContent
 
+  /// Pixel dimensions of the representation retained for rendering, which may be downsampled.
+  let renderedPixelSize: IntSize
+
+  /// Indicates whether the image has been downsampled for rendering.
+  var isDownsampled: Bool {
+    renderedPixelSize != metadata.displayPixelSize
+  }
+
   var nsImage: NSImage {
     content.nsImage
   }
 
   var pixelSize: NSSize {
+    // Canvas geometry stays in the oriented source image's coordinate space.
     metadata.displayPixelSize.nsSize
   }
 
   var cacheCost: Int {
-    metadata.estimatedFullFrameBytes
+    ImageMetadata.estimatedFrameBytes(pixelSize: renderedPixelSize, depth: metadata.depth)
   }
 
   init(
@@ -305,13 +306,15 @@ nonisolated struct ImageDocument: Sendable {
     fileSnapshot: FileSnapshot,
     metadata: ImageMetadata,
     content: ImageContent,
+    renderedPixelSize: IntSize? = nil,
   ) {
     self.id = id
     self.url = url
     self.fileSnapshot = fileSnapshot
     self.metadata = metadata
     self.content = content
-    nsImage.cacheMode = .default
+    self.renderedPixelSize = renderedPixelSize ?? metadata.displayPixelSize
+    content.nsImage.cacheMode = isDownsampled ? .never : .default
   }
 
   func makeAnimatedBitmapRepresentation() -> NSBitmapImageRep? {
@@ -324,6 +327,7 @@ nonisolated struct ImageDocument: Sendable {
       fileSnapshot: fileSnapshot,
       metadata: metadata,
       content: content,
+      renderedPixelSize: renderedPixelSize,
     )
   }
 }

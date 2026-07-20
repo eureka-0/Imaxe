@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ImageIO
 @testable import Imaxe
 import SwiftUI
 import Testing
@@ -26,6 +27,17 @@ struct ImageLoadingTests {
     "sample_1280×853.tiff",
     "sample.webp",
     "sample_1280×853.svg",
+  ]
+
+  private nonisolated static let downsamplingFormatSamples = [
+    "sample_1280×853.bmp",
+    "sample.heic",
+    "sample.heif",
+    "sample_1280×853.ico",
+    "sample_1280×853.jpeg",
+    "sample_1280×853.png",
+    "sample_1280×853.tiff",
+    "sample.webp",
   ]
 
   @Test func `image metadata loads sample properties without image decode`() async throws {
@@ -225,31 +237,134 @@ struct ImageLoadingTests {
     }
   }
 
-  @Test func `image loader enforces pixel dimension and count limits`() {
-    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 16385, height: 1)))
-    #expect(ImageLoader.exceedsImageSizeLimit(NSSize(width: 16385, height: 16384)))
-    #expect(!ImageLoader.exceedsImageSizeLimit(NSSize(width: 16384, height: 16384)))
+  @Test func `bitmap loader downsamples oversized images without changing source metadata`() throws {
+    let maximumDimension = 16
+    let sourceSizes = [
+      IntSize(width: 20, height: 10),
+      IntSize(width: 10, height: 20),
+    ]
+
+    for sourceSize in sourceSizes {
+      let url = URL.temporaryDirectory
+        .appending(
+          path: "imaxe-downsample-\(sourceSize.width)x\(sourceSize.height)-\(UUID().uuidString).png",
+        )
+      defer { try? FileManager.default.removeItem(at: url) }
+      try TestSupport.pngData(width: sourceSize.width, height: sourceSize.height).write(to: url)
+
+      let imageSource = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+      let metadata = try ImageMetadata(bitmapURL: url, imageSource: imageSource)
+      let thumbnail = try #require(ImageLoader.downsampledBitmap(
+        from: imageSource,
+        metadata: metadata,
+        maximumDimension: maximumDimension,
+      ))
+      let fileSnapshot = try #require(FileSnapshot(url: url))
+      let document = ImageDocument(
+        url: url,
+        fileSnapshot: fileSnapshot,
+        metadata: metadata,
+        content: .staticBitmap(thumbnail.image),
+        renderedPixelSize: thumbnail.pixelSize,
+      )
+
+      #expect(document.metadata.displayPixelSize == sourceSize)
+      #expect(max(thumbnail.pixelSize.width, thumbnail.pixelSize.height) == maximumDimension)
+      #expect(document.pixelSize == sourceSize.nsSize)
+      #expect(document.renderedPixelSize == thumbnail.pixelSize)
+      #expect(document.nsImage.size == thumbnail.pixelSize.nsSize)
+      #expect(document.nsImage.cacheMode == .never)
+      #expect(!thumbnail.data.isEmpty)
+
+      let sourceAspectRatio = CGFloat(sourceSize.width) / CGFloat(sourceSize.height)
+      let renderedAspectRatio = CGFloat(thumbnail.pixelSize.width) /
+        CGFloat(thumbnail.pixelSize.height)
+      #expect(abs(renderedAspectRatio / sourceAspectRatio - 1) < 0.02)
+    }
   }
 
-  @Test func `svg loader rejects invalid and oversized dimensions`() async throws {
+  @Test(arguments: downsamplingFormatSamples)
+  func `bitmap downsampler produces compressed lazy representations`(_ sampleName: String) throws {
+    let maximumDimension = 16
+    let url = TestSupport.sampleImageURL(sampleName)
+    let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+    let imageSource = try #require(CGImageSourceCreateWithURL(url as CFURL, sourceOptions))
+    let metadata = try ImageMetadata(bitmapURL: url, imageSource: imageSource)
+
+    let thumbnail = try #require(ImageLoader.downsampledBitmap(
+      from: imageSource,
+      metadata: metadata,
+      maximumDimension: maximumDimension,
+    ))
+    let proxySource = try #require(CGImageSourceCreateWithData(
+      thumbnail.data as CFData,
+      sourceOptions,
+    ))
+    let proxyProperties = try #require(CGImageSourceCopyPropertiesAtIndex(
+      proxySource,
+      0,
+      sourceOptions,
+    ) as? [CFString: Any])
+    let proxyWidth = try #require(
+      (proxyProperties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+    )
+    let proxyHeight = try #require(
+      (proxyProperties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+    )
+
+    #expect(max(proxyWidth, proxyHeight) == maximumDimension)
+    #expect(thumbnail.image.cacheMode == .never)
+    #expect(thumbnail.image.size == thumbnail.pixelSize.nsSize)
+    #expect(thumbnail.image.representations.first is NSBitmapImageRep)
+  }
+
+  @Test func `image loader only requires downsampling beyond the texture dimension`() {
+    let maximumDimension = Constants.maximumImageDimension
+
+    #expect(ImageLoader.requiresDownsampling(NSSize(width: maximumDimension + 1, height: 1)))
+    #expect(ImageLoader.requiresDownsampling(NSSize(width: 1, height: maximumDimension + 1)))
+    #expect(!ImageLoader.requiresDownsampling(
+      NSSize(width: maximumDimension, height: maximumDimension),
+    ))
+
+    #expect(ImageLoader.downsampledImageSize(
+      for: NSSize(width: 20, height: 10),
+      maximumDimension: 16,
+    ) == NSSize(width: 16, height: 8))
+    #expect(ImageLoader.downsampledImageSize(
+      for: NSSize(width: 10, height: 20),
+      maximumDimension: 16,
+    ) == NSSize(width: 8, height: 16))
+  }
+
+  @Test func `animated GIF downsampler preserves all frames`() throws {
+    let url = TestSupport.sampleImageURL("sample_384×512.gif")
+    let imageSource = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let sourceFrameCount = CGImageSourceGetCount(imageSource)
+
+    let downsampledAnimation = try ImageLoader.downsampledAnimatedGIF(
+      from: imageSource,
+      maximumDimension: 16,
+    )
+    let animation = try #require(downsampledAnimation)
+    let bitmapRep = try #require(animation.image.animatedGIFRepresentation)
+
+    #expect(sourceFrameCount > 1)
+    #expect(bitmapRep.gifFrameCount == sourceFrameCount)
+    #expect(max(animation.pixelSize.width, animation.pixelSize.height) == 16)
+    #expect(animation.image.size == animation.pixelSize.nsSize)
+    #expect(animation.image.cacheMode == .never)
+  }
+
+  @Test func `svg loader rejects invalid dimensions`() async throws {
     let invalidURL = URL.temporaryDirectory
       .appending(path: "imaxe-invalid-dimensions-\(UUID().uuidString).svg")
-    let oversizedURL = URL.temporaryDirectory
-      .appending(path: "imaxe-oversized-dimensions-\(UUID().uuidString).svg")
-    defer {
-      try? FileManager.default.removeItem(at: invalidURL)
-      try? FileManager.default.removeItem(at: oversizedURL)
-    }
+    defer { try? FileManager.default.removeItem(at: invalidURL) }
     try "<svg viewBox=\"0 0 -1 20\" xmlns=\"http://www.w3.org/2000/svg\"/>"
       .write(to: invalidURL, atomically: true, encoding: .utf8)
-    try "<svg viewBox=\"0 0 50000 50000\" xmlns=\"http://www.w3.org/2000/svg\"/>"
-      .write(to: oversizedURL, atomically: true, encoding: .utf8)
 
     await #expect(throws: ImageLoadingError.self) {
       _ = try await loader.loadDocument(from: invalidURL)
-    }
-    await #expect(throws: ImageLoadingError.self) {
-      _ = try await loader.loadDocument(from: oversizedURL)
     }
   }
 

@@ -15,7 +15,6 @@ enum ImageLoadingError: Error, LocalizedError {
   case permissionDenied(URL)
   case ioFailure(URL, String)
   case corruptImage(URL)
-  case sizeLimitExceeded(URL)
   case invalidDimensions(URL)
   case cancelled
 
@@ -34,8 +33,6 @@ enum ImageLoadingError: Error, LocalizedError {
       "Could not read \(url.filePath): \(message)"
     case let .corruptImage(url):
       "The image file is damaged or uses unsupported content: \(url.filePath)"
-    case let .sizeLimitExceeded(url):
-      "The image is too large to open safely: \(url.filePath)"
     case let .invalidDimensions(url):
       "The image has invalid or missing dimensions: \(url.filePath)"
     case .cancelled:
@@ -122,6 +119,10 @@ actor ImageLoader {
     .svg,
   ].compactMap(\.self)
 
+  private nonisolated static let supportedImageDestinationTypeIdentifiers = Set(
+    (CGImageDestinationCopyTypeIdentifiers() as NSArray).compactMap { $0 as? String },
+  )
+
   nonisolated static var supportedImageExtensions: [String] {
     supportedImageTypes.compactMap(\.preferredFilenameExtension)
   }
@@ -145,15 +146,13 @@ actor ImageLoader {
       && imageTypes(for: url).contains { $0.conforms(to: .svg) }
   }
 
-  /// Returns true if the image size exceeds the maximum allowed dimensions or pixel count.
-  nonisolated static func exceedsImageSizeLimit(_ size: NSSize) -> Bool {
+  nonisolated static func requiresDownsampling(_ size: NSSize) -> Bool {
     guard size.width.isFinite, size.height.isFinite,
           size.width > 0, size.height > 0
     else { return false }
 
     return size.width > Constants.maximumImageDimension
       || size.height > Constants.maximumImageDimension
-      || size.width * size.height > Constants.maximumImagePixelCount
   }
 
   nonisolated static func imageTypes(for url: URL) -> [UTType] {
@@ -465,10 +464,39 @@ actor ImageLoader {
     fileSnapshot: FileSnapshot,
   ) throws -> ImageDocument {
     let freshURL = url.freshFileURL
-    guard let imageSource = CGImageSourceCreateWithURL(freshURL as CFURL, nil) else {
+    let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+    guard let imageSource = CGImageSourceCreateWithURL(freshURL as CFURL, sourceOptions) else {
       throw ImageLoadingError.corruptImage(freshURL)
     }
     let metadata = try ImageMetadata(bitmapURL: freshURL, imageSource: imageSource)
+
+    if Self.requiresDownsampling(metadata.displayPixelSize.nsSize) {
+      if metadata.isAnimated {
+        guard let animation = try downsampledAnimatedGIF(from: imageSource) else {
+          throw ImageLoadingError.corruptImage(freshURL)
+        }
+
+        return ImageDocument(
+          url: freshURL,
+          fileSnapshot: fileSnapshot,
+          metadata: metadata,
+          content: .animatedGIF(animation.image, data: animation.data),
+          renderedPixelSize: animation.pixelSize,
+        )
+      }
+
+      guard let thumbnail = downsampledBitmap(from: imageSource, metadata: metadata) else {
+        throw ImageLoadingError.corruptImage(freshURL)
+      }
+
+      return ImageDocument(
+        url: freshURL,
+        fileSnapshot: fileSnapshot,
+        metadata: metadata,
+        content: .staticBitmap(thumbnail.image),
+        renderedPixelSize: thumbnail.pixelSize,
+      )
+    }
 
     let imageData: Data
     do {
@@ -514,7 +542,7 @@ actor ImageLoader {
       throw ImageLoadingError.corruptImage(freshURL)
     }
 
-    let pixelSize = metadata.displayPixelSize.nsSize
+    let pixelSize = downsampledImageSize(for: metadata.displayPixelSize.nsSize)
 
     guard let nsImage = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
       throw ImageLoadingError.corruptImage(freshURL)
@@ -525,6 +553,184 @@ actor ImageLoader {
       fileSnapshot: fileSnapshot,
       metadata: metadata,
       content: .svg(nsImage),
+      renderedPixelSize: pixelSize.intSize,
+    )
+  }
+
+  nonisolated static func downsampledBitmap(
+    from imageSource: CGImageSource,
+    metadata: ImageMetadata,
+    maximumDimension: Int = Int(Constants.maximumImageDimension),
+  ) -> (image: NSImage, data: Data, pixelSize: IntSize)? {
+    for destinationType in downsampledDestinationTypes(for: metadata) {
+      guard let data = downsampledData(
+        from: imageSource,
+        imageCount: 1,
+        destinationType: destinationType,
+        maximumDimension: maximumDimension,
+      ),
+        let result = lazyNSImage(from: data, maximumDimension: maximumDimension)
+      else { continue }
+
+      return (result.image, data, result.pixelSize)
+    }
+
+    return nil
+  }
+
+  nonisolated static func downsampledAnimatedGIF(
+    from imageSource: CGImageSource,
+    maximumDimension: Int = Int(Constants.maximumImageDimension),
+  ) throws -> (image: NSImage, data: Data, pixelSize: IntSize)? {
+    let imageCount = CGImageSourceGetCount(imageSource)
+    guard imageCount > 1 else { return nil }
+
+    let destinationData = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(
+      destinationData,
+      UTType.gif.identifier as CFString,
+      imageCount,
+      nil,
+    ) else { return nil }
+
+    if let properties = CGImageSourceCopyProperties(imageSource, nil) {
+      CGImageDestinationSetProperties(destination, properties)
+    }
+
+    for index in 0 ..< imageCount {
+      try Task.checkCancellation()
+      let frameProperties = [
+        kCGImageDestinationImageMaxPixelSize: maximumDimension,
+      ] as CFDictionary
+      CGImageDestinationAddImageFromSource(destination, imageSource, index, frameProperties)
+    }
+
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    let data = destinationData as Data
+    guard let result = lazyNSImage(from: data, maximumDimension: maximumDimension) else {
+      return nil
+    }
+
+    return (result.image, data, result.pixelSize)
+  }
+
+  private nonisolated static func downsampledData(
+    from imageSource: CGImageSource,
+    imageCount: Int,
+    destinationType: UTType,
+    maximumDimension: Int,
+  ) -> Data? {
+    // Keep the proxy compressed and avoid materializing a target-sized CGImage in app code.
+    let destinationData = NSMutableData()
+    guard let destination = CGImageDestinationCreateWithData(
+      destinationData,
+      destinationType.identifier as CFString,
+      imageCount,
+      nil,
+    ) else { return nil }
+
+    if let properties = CGImageSourceCopyProperties(imageSource, nil) {
+      CGImageDestinationSetProperties(destination, properties)
+    }
+
+    var imageProperties: [CFString: Any] = [
+      kCGImageDestinationImageMaxPixelSize: maximumDimension,
+    ]
+    if destinationType.conforms(to: .jpeg) || destinationType.conforms(to: .heic) {
+      imageProperties[kCGImageDestinationLossyCompressionQuality] = 0.95
+    }
+    let properties = imageProperties as CFDictionary
+
+    for index in 0 ..< imageCount {
+      CGImageDestinationAddImageFromSource(destination, imageSource, index, properties)
+    }
+
+    guard CGImageDestinationFinalize(destination) else { return nil }
+    return destinationData as Data
+  }
+
+  private nonisolated static func lazyNSImage(
+    from data: Data,
+    maximumDimension: Int,
+  ) -> (image: NSImage, pixelSize: IntSize)? {
+    let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
+    guard let imageSource = CGImageSourceCreateWithData(data as CFData, sourceOptions),
+          let pixelSize = displayPixelSize(from: imageSource),
+          max(pixelSize.width, pixelSize.height) <= maximumDimension,
+          let image = NSImage(data: data)
+    else { return nil }
+
+    image.size = pixelSize.nsSize
+    image.cacheMode = .never
+    return (image, pixelSize)
+  }
+
+  private nonisolated static func displayPixelSize(
+    from imageSource: CGImageSource,
+  ) -> IntSize? {
+    let options = [kCGImageSourceShouldCache: false] as CFDictionary
+    guard let properties = CGImageSourceCopyPropertiesAtIndex(
+      imageSource,
+      0,
+      options,
+    ) as? [CFString: Any],
+      let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.intValue,
+      let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.intValue,
+      width > 0,
+      height > 0
+    else { return nil }
+
+    let orientationValue = (properties[kCGImagePropertyOrientation] as? NSNumber)?.uint32Value
+      ?? CGImagePropertyOrientation.up.rawValue
+    let orientation = CGImagePropertyOrientation(rawValue: orientationValue) ?? .up
+    return switch orientation {
+    case .leftMirrored, .right, .rightMirrored, .left:
+      IntSize(width: height, height: width)
+    default:
+      IntSize(width: width, height: height)
+    }
+  }
+
+  private nonisolated static func downsampledDestinationTypes(
+    for metadata: ImageMetadata,
+  ) -> [UTType] {
+    var destinationTypes: [UTType] = []
+
+    if let containerType = metadata.containerType,
+       containerType != .bmp,
+       containerType != .ico,
+       supportedImageDestinationTypeIdentifiers.contains(containerType.identifier)
+    {
+      destinationTypes.append(containerType)
+    }
+
+    if metadata.containerType?.conforms(to: .heif) == true,
+       supportedImageDestinationTypeIdentifiers.contains(UTType.heic.identifier)
+    {
+      destinationTypes.append(.heic)
+    }
+
+    destinationTypes.append(metadata.hasAlpha ? .png : .jpeg)
+    if destinationTypes.last != .png {
+      destinationTypes.append(.png)
+    }
+
+    var seenIdentifiers: Set<String> = []
+    return destinationTypes.filter { seenIdentifiers.insert($0.identifier).inserted }
+  }
+
+  nonisolated static func downsampledImageSize(
+    for imageSize: NSSize,
+    maximumDimension: CGFloat = Constants.maximumImageDimension,
+  ) -> NSSize {
+    guard imageSize.width > maximumDimension || imageSize.height > maximumDimension else {
+      return imageSize
+    }
+
+    let scale = maximumDimension / max(imageSize.width, imageSize.height)
+    return NSSize(
+      width: max(1, (imageSize.width * scale).rounded()),
+      height: max(1, (imageSize.height * scale).rounded()),
     )
   }
 

@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ImageIO
 @testable import Imaxe
 import SwiftUI
 import Testing
@@ -55,6 +56,48 @@ struct ImageViewTests {
 
     let backingSize = canvas.convertToBacking(canvas.bounds.size)
     #expect(backingSize.isApproximatelyEqual(to: document.pixelSize))
+  }
+
+  @Test func `downsampled proxy keeps source sized canvas`() throws {
+    let defaults = UserDefaults.standard
+    let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
+    let previousValue = defaults.object(forKey: key)
+    defaults.set(ImageActualSizeStrategy.pointSize.rawValue, forKey: key)
+    defer {
+      if let previousValue {
+        defaults.set(previousValue, forKey: key)
+      } else {
+        defaults.removeObject(forKey: key)
+      }
+    }
+
+    let sourceSize = IntSize(width: 20, height: 10)
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-proxy-canvas-\(UUID().uuidString).png")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try TestSupport.pngData(width: sourceSize.width, height: sourceSize.height).write(to: url)
+
+    let imageSource = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let metadata = try ImageMetadata(bitmapURL: url, imageSource: imageSource)
+    let proxy = try #require(ImageLoader.downsampledBitmap(
+      from: imageSource,
+      metadata: metadata,
+      maximumDimension: 16,
+    ))
+    let fileSnapshot = try #require(FileSnapshot(url: url))
+    let document = ImageDocument(
+      url: url,
+      fileSnapshot: fileSnapshot,
+      metadata: metadata,
+      content: .staticBitmap(proxy.image),
+      renderedPixelSize: proxy.pixelSize,
+    )
+
+    let canvas = ImageCanvasView(document: document)
+
+    #expect(proxy.image.size == NSSize(width: 16, height: 8))
+    #expect(document.pixelSize == sourceSize.nsSize)
+    #expect(canvas.frame.size == sourceSize.nsSize)
   }
 
   @Test func `always fit to window still applies after viewport preserving image change`(
