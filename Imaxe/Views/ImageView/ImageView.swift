@@ -15,14 +15,9 @@ struct ImageView: View {
   @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
   @State private var isTopBarHovering = false
-  @State private var isImageInfoPresented = false
-  @State private var isZoomPickerPresented = false
+  @State private var isPopoverPresented = false
 
   private let topBarHoverStripHeight: CGFloat = 50
-
-  private var isPopoverPresented: Bool {
-    isImageInfoPresented || isZoomPickerPresented
-  }
 
   var body: some View {
     Group {
@@ -30,17 +25,13 @@ struct ImageView: View {
         ZStack(alignment: .top) {
           imageContent
 
-          TopBar(
-            imageSession: imageSession,
-            isImageInfoPresented: $isImageInfoPresented,
-            isZoomPickerPresented: $isZoomPickerPresented,
-          )
-          .opacity(imageSession.showTopBar ? 1 : 0)
-          .animation(
-            accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
-            value: imageSession.showTopBar,
-          )
-          .allowsHitTesting(imageSession.showTopBar)
+          TopBar(imageSession: imageSession, isPopoverPresented: $isPopoverPresented)
+            .opacity(imageSession.showTopBar ? 1 : 0)
+            .animation(
+              accessibilityReduceMotion ? nil : .easeInOut(duration: 0.2),
+              value: imageSession.showTopBar,
+            )
+            .allowsHitTesting(imageSession.showTopBar)
 
           HoverTrackingStrip { isHovering, window in
             isTopBarHovering = isHovering

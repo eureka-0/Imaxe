@@ -119,6 +119,9 @@
     "Clear" : {
 
     },
+    "Clear Color Tags" : {
+
+    },
     "Clear Menu" : {
 
     },
@@ -165,6 +168,9 @@
     "Failed to Load Image from Pasteboard" : {
 
     },
+    "Failed to Move Item" : {
+
+    },
     "Failed to Move Item to Trash" : {
 
     },
@@ -175,6 +181,9 @@
 
     },
     "Failed to Open Recent Image" : {
+
+    },
+    "Failed to Read File Tags" : {
 
     },
     "Failed to Refresh Recent Images" : {
@@ -189,10 +198,19 @@
     "Failed to Rename Item" : {
 
     },
+    "Failed to Update File Tags" : {
+
+    },
     "Failed to Update Recent Images" : {
 
     },
+    "File Name" : {
+
+    },
     "File name %@" : {
+
+    },
+    "File Tags" : {
 
     },
     "Fill screen" : {
@@ -289,6 +307,9 @@
 
     },
     "Name" : {
+
+    },
+    "Name:" : {
 
     },
     "Navigation" : {
@@ -437,6 +458,9 @@
     "System" : {
 
     },
+    "Tags:" : {
+
+    },
     "The image file was deleted:\n%@" : {
 
     },
@@ -447,6 +471,9 @@
 
     },
     "Unpin Window" : {
+
+    },
+    "Where:" : {
 
     },
     "Width" : {

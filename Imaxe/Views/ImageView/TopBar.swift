@@ -5,15 +5,29 @@
 //  Created by lxlong on 2026/7/20.
 //
 
+import AppKit
 import SwiftUI
 
 // MARK: - TopBar
 
 struct TopBar: View {
-  @Bindable var imageSession: ImageSession
-  @Binding var isImageInfoPresented: Bool
-  @Binding var isZoomPickerPresented: Bool
+  struct PopoverState: Equatable {
+    var isFileEditorPresented: Bool = false
+    var isImageInfoPresented: Bool = false
+    var isZoomPickerPresented: Bool = false
 
+    var isAnyPopoverPresented: Bool {
+      isFileEditorPresented
+        || isImageInfoPresented
+        || isZoomPickerPresented
+    }
+  }
+
+  @Bindable var imageSession: ImageSession
+  @Binding var isPopoverPresented: Bool
+
+  @State private var popoverState = PopoverState()
+  @State private var newFileName: String = ""
   @State private var customZoomScaleText = ""
 
   // UI layout constants
@@ -41,11 +55,14 @@ struct TopBar: View {
 
       fileNameLabel
 
+      Spacer(minLength: 0)
+
       topBarControls
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
     .padding(.leading, 6)
     .padding(.trailing, 12)
+    .frame(maxWidth: .infinity, alignment: .center)
+    .frame(height: topBarHeight)
     .background {
       Rectangle()
         .fill(.ultraThinMaterial)
@@ -55,19 +72,40 @@ struct TopBar: View {
         .fill(.separator.opacity(0.28))
         .frame(height: 1)
     }
-    .frame(height: topBarHeight)
+    .onChange(of: popoverState) { _, newValue in
+      isPopoverPresented = newValue.isAnyPopoverPresented
+    }
   }
 
   private var fileNameLabel: some View {
-    Text(displayedMetadata?.fileName ?? "")
-      .font(.system(size: 13, weight: .medium))
-      .foregroundStyle(.primary)
-      .lineLimit(1)
-      .truncationMode(.middle)
-      .frame(minWidth: fileNameLabelMinWidth, maxWidth: .infinity, alignment: .leading)
-      .layoutPriority(-1)
-      .help(Text(displayedMetadata?.fileName ?? ""))
-      .accessibilityLabel(Text("File name \(displayedMetadata?.fileName ?? "")"))
+    Button {
+      newFileName = displayedMetadata?.fileName ?? ""
+      popoverState.isFileEditorPresented.toggle()
+    } label: {
+      Text(displayedMetadata?.fileName ?? "")
+        .font(.system(size: 13, weight: .medium))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .frame(minWidth: fileNameLabelMinWidth)
+        .frame(height: buttonHeight)
+        .padding(.horizontal, 8)
+        .layoutPriority(-1)
+    }
+    .buttonStyle(.borderedOnHover(isActive: popoverState.isFileEditorPresented))
+    .popover(isPresented: $popoverState.isFileEditorPresented, arrowEdge: .bottom) {
+      FileEditorPopover(
+        imageSession: imageSession,
+        fileName: $newFileName,
+        onApplyFileName: {
+          guard imageSession.renameCurrentImage(to: newFileName) else { return }
+          popoverState.isFileEditorPresented = false
+        },
+      )
+    }
+    .disabled(imageSession.currentDocument == nil || imageSession.isLoading)
+    .help(Text(displayedMetadata?.fileName ?? ""))
+    .accessibilityLabel(Text("File name \(displayedMetadata?.fileName ?? "")"))
   }
 
   private var topBarControls: some View {
@@ -180,7 +218,7 @@ struct TopBar: View {
 
       Button {
         customZoomScaleText = zoomInputText(for: imageSession.zoomScale)
-        isZoomPickerPresented.toggle()
+        popoverState.isZoomPickerPresented.toggle()
       } label: {
         Text(zoomDescription(for: imageSession.zoomScale))
           .font(.system(size: 12, weight: .medium, design: .rounded))
@@ -188,19 +226,19 @@ struct TopBar: View {
           .lineLimit(1)
           .frame(width: zoomButtonWidth, height: buttonHeight)
       }
-      .popover(isPresented: $isZoomPickerPresented, arrowEdge: .top) {
+      .popover(isPresented: $popoverState.isZoomPickerPresented, arrowEdge: .bottom) {
         ZoomScalePickerPopover(
           currentZoomScale: imageSession.zoomScale,
           customZoomScaleText: $customZoomScaleText,
           onSelectZoomScale: { zoomScale in
             imageSession.setZoomScale(zoomScale)
             customZoomScaleText = zoomInputText(for: zoomScale)
-            isZoomPickerPresented = false
+            popoverState.isZoomPickerPresented = false
           },
           onApplyCustomZoomScale: applyCustomZoom,
         )
       }
-      .buttonStyle(.borderedOnHover(isActive: isZoomPickerPresented))
+      .buttonStyle(.borderedOnHover(isActive: popoverState.isZoomPickerPresented))
       .disabled(imageSession.isLoading)
       .help(Text("Choose zoom level"))
 
@@ -239,16 +277,16 @@ struct TopBar: View {
 
   private var imageInfoButton: some View {
     Button {
-      isImageInfoPresented.toggle()
+      popoverState.isImageInfoPresented.toggle()
     } label: {
       topBarIconLabel("Image Info", systemImage: "info.circle")
     }
-    .popover(isPresented: $isImageInfoPresented, arrowEdge: .top) {
+    .popover(isPresented: $popoverState.isImageInfoPresented, arrowEdge: .bottom) {
       if let currentMetadata = imageSession.currentMetadata {
         ImageInfoPanel(metadata: currentMetadata)
       }
     }
-    .buttonStyle(.borderedOnHover(isActive: isImageInfoPresented))
+    .buttonStyle(.borderedOnHover(isActive: popoverState.isImageInfoPresented))
     .disabled(imageSession.currentMetadata == nil)
     .help(Text("Show image info"))
   }
@@ -285,7 +323,211 @@ struct TopBar: View {
 
     imageSession.setZoomScale(zoomScale)
     customZoomScaleText = zoomInputText(for: zoomScale)
-    isZoomPickerPresented = false
+    popoverState.isZoomPickerPresented = false
+  }
+}
+
+// MARK: - FileEditorPopover
+
+private struct FileEditorPopover: View {
+  @Bindable var imageSession: ImageSession
+  @Binding var fileName: String
+  let onApplyFileName: () -> Void
+
+  @FocusState private var isFileNameFocused: Bool
+  @State private var selectedTagNames: Set<String> = []
+  @State private var locationURL: URL?
+
+  private let tagOptions = FileTagOption.systemOptions
+  private let controlWidth: CGFloat = 300
+  private let actionButtonSize: CGFloat = 22
+
+  private var trimmedFileName: String {
+    fileName.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  private var hasFileNameChanged: Bool {
+    guard let currentFileName = imageSession.currentMetadata?.fileName else { return false }
+    return trimmedFileName != currentFileName
+  }
+
+  private var selectedTagOptions: [FileTagOption] {
+    tagOptions.filter { selectedTagNames.contains($0.name) }
+  }
+
+  private var selectedColorTagNames: Set<String> {
+    Set(selectedTagOptions.map(\.name))
+  }
+
+  var body: some View {
+    Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
+      GridRow {
+        rowLabel("Name:")
+        TextField("File Name", text: $fileName)
+          .textFieldStyle(.roundedBorder)
+          .frame(width: controlWidth)
+          .focused($isFileNameFocused)
+          .onSubmit(onApplyFileName)
+
+        actionSlot {
+          if hasFileNameChanged {
+            Button(action: onApplyFileName) {
+              Image(systemName: "return")
+                .frame(width: actionButtonSize, height: actionButtonSize)
+            }
+            .buttonStyle(.borderless)
+            .disabled(trimmedFileName.isEmpty)
+            .help("Rename")
+            .accessibilityLabel("Rename")
+          }
+        }
+      }
+
+      GridRow {
+        rowLabel("Tags:")
+        fileTagPicker
+
+        actionSlot {
+          if !selectedColorTagNames.isEmpty {
+            Button(action: clearColorTags) {
+              Image(systemName: "xmark.circle.fill")
+                .frame(width: actionButtonSize, height: actionButtonSize)
+            }
+            .buttonStyle(.borderless)
+            .help("Clear Color Tags")
+            .accessibilityLabel("Clear Color Tags")
+          }
+        }
+      }
+
+      GridRow {
+        rowLabel("Where:")
+        FileLocationPicker(directoryURL: locationURL, onSelectDirectory: selectDirectory)
+          .frame(width: controlWidth, height: 24)
+
+        actionSlot {}
+      }
+    }
+    .padding(14)
+    .onAppear {
+      synchronizeWithCurrentImage()
+      DispatchQueue.main.async {
+        isFileNameFocused = true
+      }
+    }
+    .onChange(of: imageSession.displayedURL) {
+      synchronizeWithCurrentImage()
+    }
+  }
+
+  private var fileTagPicker: some View {
+    Menu {
+      ForEach(tagOptions) { option in
+        Toggle(isOn: tagSelection(for: option)) {
+          Label {
+            Text(option.name)
+          } icon: {
+            Image(systemName: "circle.fill")
+              .foregroundStyle(Color(nsColor: option.color))
+          }
+        }
+      }
+    } label: {
+      HStack(spacing: 5) {
+        ForEach(selectedTagOptions) { option in
+          Circle()
+            .fill(Color(nsColor: option.color))
+            .frame(width: 9, height: 9)
+        }
+
+        if !selectedTagOptions.isEmpty {
+          Text(selectedTagOptions.map(\.name).joined(separator: ", "))
+            .lineLimit(1)
+            .truncationMode(.tail)
+        }
+
+        Spacer(minLength: 0)
+
+        Image(systemName: "chevron.up.chevron.down")
+          .font(.system(size: 10, weight: .semibold))
+          .foregroundStyle(.secondary)
+      }
+      .padding(.horizontal, 8)
+      .frame(width: controlWidth, height: 24)
+      .background(.controlBackground)
+      .clipShape(RoundedRectangle(cornerRadius: 5))
+      .overlay {
+        RoundedRectangle(cornerRadius: 5)
+          .stroke(.separator.opacity(0.45), lineWidth: 0.5)
+      }
+    }
+    .menuStyle(.borderlessButton)
+    .accessibilityLabel("File Tags")
+    .accessibilityValue(selectedTagOptions.map(\.name).joined(separator: ", "))
+  }
+
+  private func rowLabel(_ title: LocalizedStringKey) -> some View {
+    Text(title)
+      .font(.system(size: 12, weight: .medium, design: .rounded))
+      .foregroundStyle(.secondary)
+      .frame(width: 48, alignment: .trailing)
+  }
+
+  private func actionSlot(@ViewBuilder content: () -> some View) -> some View {
+    ZStack(content: content)
+      .frame(width: actionButtonSize, height: actionButtonSize)
+  }
+
+  private func tagSelection(for option: FileTagOption) -> Binding<Bool> {
+    Binding {
+      selectedTagNames.contains(option.name)
+    } set: { isSelected in
+      var updatedTagNames = selectedTagNames
+      if isSelected {
+        updatedTagNames.insert(option.name)
+      } else {
+        updatedTagNames.remove(option.name)
+      }
+
+      if imageSession.setCurrentImageTagNames(updatedTagNames) {
+        selectedTagNames = updatedTagNames
+      }
+    }
+  }
+
+  private func clearColorTags() {
+    let updatedTagNames = selectedTagNames.subtracting(selectedColorTagNames)
+    if imageSession.setCurrentImageTagNames(updatedTagNames) {
+      selectedTagNames = updatedTagNames
+    }
+  }
+
+  private func selectDirectory(_ directoryURL: URL) {
+    guard imageSession.moveCurrentImage(to: directoryURL) else { return }
+    locationURL = imageSession.displayedURL?.deletingLastPathComponent()
+  }
+
+  private func synchronizeWithCurrentImage() {
+    fileName = imageSession.currentMetadata?.fileName ?? ""
+    selectedTagNames = imageSession.currentImageTagNames()
+    locationURL = imageSession.displayedURL?.deletingLastPathComponent()
+  }
+}
+
+private struct FileTagOption: Identifiable {
+  let id: Int
+  let name: String
+  let color: NSColor
+
+  static var systemOptions: [FileTagOption] {
+    let workspace = NSWorkspace.shared
+    let names = workspace.fileLabels
+    let colors = workspace.fileLabelColors
+
+    return [6, 7, 3, 2, 5, 4, 1].compactMap { index in
+      guard names.indices.contains(index), colors.indices.contains(index) else { return nil }
+      return FileTagOption(id: index, name: names[index], color: colors[index])
+    }
   }
 }
 

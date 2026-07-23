@@ -94,6 +94,13 @@ struct ContentView: View {
     imageSession.removeRecentImage = { path in
       try RecentImagesStore.remove(path: path, in: modelContext)
     }
+    imageSession.updateRecentImageLocation = { oldPath, newURL in
+      try await RecentImagesStore.updateLocation(
+        from: oldPath,
+        to: newURL,
+        in: modelContext,
+      )
+    }
   }
 
   private func handleImageAlertAcknowledged() {

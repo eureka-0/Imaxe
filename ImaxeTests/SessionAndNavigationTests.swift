@@ -13,6 +13,76 @@ import Testing
 @MainActor
 @Suite("Session And Navigation")
 struct SessionAndNavigationTests {
+  @Test func `renaming current image updates session without replacing decoded content`(
+  ) async throws {
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-rename-current-image")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let sourceURL = directory.appending(path: "before.png")
+    let destinationURL = directory.appending(path: "after.png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: sourceURL)
+    let document = try await ImageLoader.shared.loadDocument(from: sourceURL)
+    let session = ImageSession(imageDocument: document)
+    session.loadFolderImageURLs = { [$0] }
+    var updatedLocation: (String, URL)?
+    session.updateRecentImageLocation = { oldPath, newURL in
+      updatedLocation = (oldPath, newURL)
+    }
+
+    let didRename = session.renameCurrentImage(to: "after.png")
+
+    #expect(didRename)
+    #expect(!sourceURL.fileExists)
+    #expect(destinationURL.fileExists)
+    #expect(session.displayedURL == destinationURL)
+    #expect(session.currentMetadata?.fileName == "after.png")
+    #expect(session.currentDocument?.url == destinationURL)
+    #expect(session.currentDocument?.id == document.id)
+    #expect(session.currentDocument?.nsImage === document.nsImage)
+    #expect(session.folderNavigator?.currentImageURL == destinationURL)
+    try await TestSupport.waitUntil { updatedLocation?.1 == destinationURL }
+    #expect(updatedLocation?.0 == sourceURL.filePath)
+  }
+
+  @Test func `moving current image updates its location and navigator`() async throws {
+    let sourceDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-move-source")
+    let destinationDirectory = try TestSupport.temporaryDirectory(prefix: "imaxe-move-destination")
+    defer {
+      try? FileManager.default.removeItem(at: sourceDirectory)
+      try? FileManager.default.removeItem(at: destinationDirectory)
+    }
+    let sourceURL = sourceDirectory.appending(path: "image.png")
+    let destinationURL = destinationDirectory.appending(path: "image.png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: sourceURL)
+    let document = try await ImageLoader.shared.loadDocument(from: sourceURL)
+    let session = ImageSession(imageDocument: document)
+    session.loadFolderImageURLs = { [$0] }
+
+    let didMove = session.moveCurrentImage(to: destinationDirectory)
+
+    #expect(didMove)
+    #expect(!sourceURL.fileExists)
+    #expect(destinationURL.fileExists)
+    #expect(session.displayedURL == destinationURL)
+    #expect(session.currentMetadata?.location == destinationDirectory.filePath)
+    #expect(session.currentDocument?.id == document.id)
+    #expect(session.folderNavigator?.rootURL == destinationDirectory)
+  }
+
+  @Test func `current image tags can be selected and cleared`() async throws {
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-file-tags")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let url = directory.appending(path: "tagged.png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+    let document = try await ImageLoader.shared.loadDocument(from: url)
+    let session = ImageSession(imageDocument: document)
+    let tagNames: Set = ["Imaxe Test Tag"]
+
+    #expect(session.setCurrentImageTagNames(tagNames))
+    #expect(session.currentImageTagNames() == tagNames)
+    #expect(session.setCurrentImageTagNames([]))
+    #expect(session.currentImageTagNames().isEmpty)
+  }
+
   @Test func `file change reload keeps current document while loading`() async throws {
     let url = URL.temporaryDirectory
       .appending(path: "imaxe-session-reload-\(UUID().uuidString).png")
@@ -325,8 +395,13 @@ struct SessionAndNavigationTests {
   @Test func `preloaded metadata is visible while document loads`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
     let session = ImageSession()
+    let (documentGate, documentGateContinuation) = AsyncStream<Void>.makeStream()
+    defer { documentGateContinuation.finish() }
     session.loadImageDocument = { url, requestID in
-      try await Task.sleep(for: .milliseconds(150))
+      for await _ in documentGate {
+        break
+      }
+      try Task.checkCancellation()
       return try await ImageLoader.shared.loadDocument(from: url, requestID: requestID)
     }
 
@@ -336,6 +411,8 @@ struct SessionAndNavigationTests {
     #expect(session.currentDocument == nil)
     #expect(session.pendingURL == url)
 
+    documentGateContinuation.yield()
+    documentGateContinuation.finish()
     try await TestSupport.waitUntil { !session.isLoading }
     #expect(session.currentDocument != nil)
     #expect(session.currentMetadata == session.currentDocument?.metadata)

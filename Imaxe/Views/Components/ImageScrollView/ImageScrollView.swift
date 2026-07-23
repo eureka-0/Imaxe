@@ -154,7 +154,7 @@ struct ImageScrollView: NSViewRepresentable {
     let clampedZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
 
     if let imageView = scrollView.documentView as? ImageCanvasView {
-      if imageView.document.id != document.id {
+      if imageView.document.id != document.id || imageView.document.url != document.url {
         imageView.document = document
         scrollView.reflectScrolledClipView(scrollView.contentView)
       }

@@ -23,6 +23,11 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ## P2 — Performance, Compatibility, and Experience
 
+### Test Reliability
+
+- [x] Replace timing-based metadata preload coverage with an explicit document-load gate so the session test remains deterministic under parallel test load.
+- [ ] Stop asserting that `NSCache` must retain a document between sequential loads; the cache may legally evict under memory pressure from parallel image-loading tests.
+
 ### Rendering and Performance
 
 - [ ] Use Instruments to establish baselines for first visible preview time, peak RSS, and main-thread decoding across JPEG, PNG, TIFF, HEIF, WebP, GIF, and SVG.

@@ -12,8 +12,8 @@ import UniformTypeIdentifiers
 // MARK: - ImageMetadata
 
 nonisolated struct ImageMetadata: Hashable, Sendable {
-  let url: URL
-  let fileName: String
+  private(set) var url: URL
+  private(set) var fileName: String
   let fileSize: Int
   let containerType: UTType?
   let imageCount: Int
@@ -64,6 +64,13 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
 
   var alphaDescription: String {
     hasAlpha ? "Yes" : "No"
+  }
+
+  func relocated(to url: URL) -> ImageMetadata {
+    var metadata = self
+    metadata.url = url
+    metadata.fileName = url.lastPathComponent
+    return metadata
   }
 
   init(url: URL) throws {
@@ -326,6 +333,17 @@ nonisolated struct ImageDocument: Sendable {
       url: url,
       fileSnapshot: fileSnapshot,
       metadata: metadata,
+      content: content,
+      renderedPixelSize: renderedPixelSize,
+    )
+  }
+
+  func relocated(to url: URL) -> ImageDocument {
+    ImageDocument(
+      id: id,
+      url: url,
+      fileSnapshot: FileSnapshot(url: url) ?? fileSnapshot,
+      metadata: metadata.relocated(to: url),
       content: content,
       renderedPixelSize: renderedPixelSize,
     )

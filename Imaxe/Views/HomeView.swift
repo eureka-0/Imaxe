@@ -466,9 +466,9 @@ final class HomeViewModel {
 
     guard !trimmedRenameText.isEmpty, trimmedRenameText != url.lastPathComponent else { return }
 
-    let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedRenameText)
+    let newURL: URL
     do {
-      try FileManager.default.moveItem(at: url, to: newURL)
+      newURL = try ImageSession.renameFile(at: url, to: trimmedRenameText)
     } catch {
       alertTitle = "Failed to Rename Item"
       alertMessage = error.localizedDescription

@@ -69,6 +69,7 @@ final class ImageSession {
   @ObservationIgnored private var pendingTemporaryURL: URL?
   @ObservationIgnored var recordRecentImage: ((URL) async throws -> Void)?
   @ObservationIgnored var removeRecentImage: ((String) throws -> Void)?
+  @ObservationIgnored var updateRecentImageLocation: ((String, URL) async throws -> Void)?
   @ObservationIgnored var loadImageMetadata: @Sendable (
     URL,
     ImageLoader.LoadRequestID,
@@ -180,6 +181,104 @@ final class ImageSession {
     }
   }
 
+  @discardableResult
+  static func renameFile(at url: URL, to proposedFileName: String) throws -> URL {
+    let fileName = proposedFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !fileName.isEmpty,
+          fileName != ".",
+          fileName != "..",
+          !fileName.contains("/"),
+          !fileName.contains("\0")
+    else {
+      throw FileEditingError.invalidFileName
+    }
+
+    let destinationURL = url.deletingLastPathComponent()
+      .appending(path: fileName, directoryHint: .notDirectory)
+    guard destinationURL != url else { return url }
+
+    try FileManager.default.moveItem(at: url, to: destinationURL)
+    return destinationURL
+  }
+
+  @discardableResult
+  func renameCurrentImage(to proposedFileName: String) -> Bool {
+    guard let sourceURL = displayedURL, currentDocument != nil, !isLoading else { return false }
+
+    imageFileWatcher = nil
+    do {
+      let destinationURL = try Self.renameFile(at: sourceURL, to: proposedFileName)
+      applyRelocatedCurrentImage(from: sourceURL, to: destinationURL)
+      return true
+    } catch {
+      updateImageFileWatcher()
+      alertTitle = "Failed to Rename Item"
+      alertMessage = error.localizedDescription
+      return false
+    }
+  }
+
+  @discardableResult
+  func moveCurrentImage(to directoryURL: URL) -> Bool {
+    guard let sourceURL = displayedURL, currentDocument != nil, !isLoading else {
+      appLog("Cannot move image: no current image or image is loading.", level: .debug)
+      return false
+    }
+
+    imageFileWatcher = nil
+    do {
+      let resourceValues = try directoryURL.resourceValues(forKeys: [.isDirectoryKey])
+      guard resourceValues.isDirectory == true else {
+        throw FileEditingError.invalidDirectory
+      }
+
+      let destinationURL = directoryURL.appending(
+        path: sourceURL.lastPathComponent,
+        directoryHint: .notDirectory,
+      )
+      guard destinationURL != sourceURL else {
+        updateImageFileWatcher()
+        return true
+      }
+
+      try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
+      applyRelocatedCurrentImage(from: sourceURL, to: destinationURL)
+      return true
+    } catch {
+      updateImageFileWatcher()
+      alertTitle = "Failed to Move Item"
+      alertMessage = error.localizedDescription
+      return false
+    }
+  }
+
+  func currentImageTagNames() -> Set<String> {
+    guard let url = displayedURL else { return [] }
+
+    do {
+      let values = try url.freshResourceValues(forKeys: [.tagNamesKey])
+      return Set(values.tagNames ?? [])
+    } catch {
+      alertTitle = "Failed to Read File Tags"
+      alertMessage = error.localizedDescription
+      return []
+    }
+  }
+
+  @discardableResult
+  func setCurrentImageTagNames(_ tagNames: Set<String>) -> Bool {
+    guard let url = displayedURL else { return false }
+
+    do {
+      try (url as NSURL).setResourceValue(tagNames.sorted(), forKey: .tagNamesKey)
+      return true
+    } catch {
+      alertTitle = "Failed to Update File Tags"
+      alertMessage = error.localizedDescription
+      return false
+    }
+  }
+
   func fitToWindow() {
     alwaysFitToWindow = true
     viewportController.fitToWindow()
@@ -209,6 +308,58 @@ final class ImageSession {
   func pan(horizontal: CGFloat, vertical: CGFloat) {
     alwaysFitToWindow = false
     viewportController.pan(horizontal: horizontal, vertical: vertical)
+  }
+
+  private func applyRelocatedCurrentImage(from sourceURL: URL, to destinationURL: URL) {
+    guard sourceURL != destinationURL else {
+      updateImageFileWatcher()
+      return
+    }
+
+    let sourceDirectory = sourceURL.deletingLastPathComponent()
+    let destinationDirectory = destinationURL.deletingLastPathComponent()
+    let existingImageURLs = folderNavigator?.imageURLs ?? [sourceURL]
+    let initialImageURLs = sourceDirectory == destinationDirectory
+      ? existingImageURLs.map { $0 == sourceURL ? destinationURL : $0 }
+      : [destinationURL]
+
+    displayedURL = destinationURL
+    if displayedTemporaryURL == sourceURL {
+      displayedTemporaryURL = destinationURL
+    }
+    if let currentDocument {
+      self.currentDocument = currentDocument.relocated(to: destinationURL)
+      currentMetadata = self.currentDocument?.metadata
+    } else {
+      currentMetadata = currentMetadata?.relocated(to: destinationURL)
+    }
+    folderNavigator = FolderNavigator(
+      for: destinationURL,
+      enableLoopBrowsing: enableLoopBrowsing,
+      imageURLs: initialImageURLs,
+    )
+    updateImageFileWatcher()
+
+    Task { [weak self] in
+      guard let self else { return }
+      let imageURLs = await loadFolderImageURLs(destinationURL)
+      guard displayedURL == destinationURL, let imageURLs else { return }
+      folderNavigator = FolderNavigator(
+        for: destinationURL,
+        enableLoopBrowsing: enableLoopBrowsing,
+        imageURLs: imageURLs,
+      )
+    }
+
+    guard let updateRecentImageLocation else { return }
+    Task { [weak self] in
+      do {
+        try await updateRecentImageLocation(sourceURL.filePath, destinationURL)
+      } catch {
+        self?.alertTitle = "Failed to Update Recent Images"
+        self?.alertMessage = error.localizedDescription
+      }
+    }
   }
 
   func openImageFromPasteboard() {
@@ -494,6 +645,20 @@ final class ImageSession {
       return try await .success(operation())
     } catch {
       return .failure(error)
+    }
+  }
+
+  private enum FileEditingError: LocalizedError {
+    case invalidDirectory
+    case invalidFileName
+
+    var errorDescription: String? {
+      switch self {
+      case .invalidDirectory:
+        "The selected location is not a folder."
+      case .invalidFileName:
+        "Enter a valid file name."
+      }
     }
   }
 }
