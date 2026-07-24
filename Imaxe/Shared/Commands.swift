@@ -5,6 +5,7 @@
 //  Created by lxlong on 2026/6/17.
 //
 
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -12,19 +13,10 @@ private struct RecentImagesKey: FocusedValueKey {
   typealias Value = [RecentImage]
 }
 
-private struct SuppressesImageNavigationKey: FocusedValueKey {
-  typealias Value = Bool
-}
-
 extension FocusedValues {
   var recentImages: [RecentImage]? {
     get { self[RecentImagesKey.self] }
     set { self[RecentImagesKey.self] = newValue }
-  }
-
-  var suppressesImageNavigation: Bool? {
-    get { self[SuppressesImageNavigationKey.self] }
-    set { self[SuppressesImageNavigationKey.self] = newValue }
   }
 }
 
@@ -121,27 +113,26 @@ struct FileOperationCommands: Commands {
 
 struct ViewCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
-  @FocusedValue(\.suppressesImageNavigation) private var suppressesImageNavigation
 
   var body: some Commands {
     CommandGroup(replacing: .sidebar) {
       Button("Previous Image") {
+        if TextInputFocusState.handleHorizontalTextMovement(.left, for: NSApp.currentEvent) {
+          return
+        }
         imageSession?.navigateToPreviousImage()
       }
       .keyboardShortcut(.leftArrow, modifiers: [])
-      .disabled(
-        imageSession?.folderNavigator?.canNavigateToPrevious != true
-          || suppressesImageNavigation == true,
-      )
+      .disabled(imageSession?.folderNavigator?.canNavigateToPrevious != true)
 
       Button("Next Image") {
+        if TextInputFocusState.handleHorizontalTextMovement(.right, for: NSApp.currentEvent) {
+          return
+        }
         imageSession?.navigateToNextImage()
       }
       .keyboardShortcut(.rightArrow, modifiers: [])
-      .disabled(
-        imageSession?.folderNavigator?.canNavigateToNext != true
-          || suppressesImageNavigation == true,
-      )
+      .disabled(imageSession?.folderNavigator?.canNavigateToNext != true)
 
       Divider()
 

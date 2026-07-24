@@ -10,6 +10,80 @@ import SwiftUI
 
 // MARK: Helpers
 
+enum HorizontalTextMovement {
+  case left
+  case right
+}
+
+enum TextInputFocusState {
+  static func isTextInputActive(in window: NSWindow) -> Bool {
+    editableTextView(in: window) != nil
+  }
+
+  static func isWindow(_ window: NSWindow, attachedTo rootWindow: NSWindow) -> Bool {
+    var currentWindow: NSWindow? = window
+    while let candidate = currentWindow {
+      if candidate === rootWindow {
+        return true
+      }
+      currentWindow = candidate.parent
+    }
+    return false
+  }
+
+  static func handleHorizontalTextMovement(
+    _ movement: HorizontalTextMovement,
+    for event: NSEvent?,
+  ) -> Bool {
+    guard event?.type == .keyDown else { return false }
+    return handleHorizontalTextMovement(
+      movement,
+      in: event?.window ?? NSApp.keyWindow,
+    )
+  }
+
+  static func handleHorizontalTextMovement(
+    _ movement: HorizontalTextMovement,
+    in window: NSWindow?,
+  ) -> Bool {
+    guard
+      let window,
+      let textView = editableTextView(inWindowTreeContaining: window)
+    else {
+      return false
+    }
+
+    switch movement {
+    case .left:
+      textView.moveLeft(nil)
+    case .right:
+      textView.moveRight(nil)
+    }
+    return true
+  }
+
+  private static func editableTextView(inWindowTreeContaining window: NSWindow) -> NSTextView? {
+    var rootWindow = window
+    while let parent = rootWindow.parent {
+      rootWindow = parent
+    }
+    return editableTextView(in: rootWindow)
+  }
+
+  private static func editableTextView(in window: NSWindow) -> NSTextView? {
+    if let textView = window.firstResponder as? NSTextView, textView.isEditable {
+      return textView
+    }
+
+    for childWindow in window.childWindows ?? [] {
+      if let textView = editableTextView(in: childWindow) {
+        return textView
+      }
+    }
+    return nil
+  }
+}
+
 private struct DismissTextFocusOnClickOutside: NSViewRepresentable {
   func makeCoordinator() -> Coordinator {
     Coordinator()
@@ -49,8 +123,9 @@ private struct DismissTextFocusOnClickOutside: NSViewRepresentable {
       ]) { [weak self] event in
         guard
           let self,
+          let trackedWindow,
           let window = event.window,
-          window === trackedWindow,
+          TextInputFocusState.isWindow(window, attachedTo: trackedWindow),
           let contentView = window.contentView
         else {
           return event

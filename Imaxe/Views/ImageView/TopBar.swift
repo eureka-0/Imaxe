@@ -471,7 +471,6 @@ private struct FileEditorPopover: View {
     .onChange(of: imageSession.displayedURL) {
       synchronizeWithCurrentImage()
     }
-    .focusedSceneValue(\.suppressesImageNavigation, isFileNameFocused)
   }
 
   private var fileTagPicker: some View {
@@ -496,6 +495,7 @@ private struct FileEditorPopover: View {
 
         Image(systemName: "chevron.up.chevron.down")
           .font(.system(size: 10, weight: .bold, design: .rounded))
+          .foregroundStyle(.controlText.opacity(0.83))
       }
       .padding(.leading, 8)
       .padding(.trailing, 6)
