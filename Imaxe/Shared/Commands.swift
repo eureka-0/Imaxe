@@ -12,10 +12,19 @@ private struct RecentImagesKey: FocusedValueKey {
   typealias Value = [RecentImage]
 }
 
+private struct SuppressesImageNavigationKey: FocusedValueKey {
+  typealias Value = Bool
+}
+
 extension FocusedValues {
   var recentImages: [RecentImage]? {
     get { self[RecentImagesKey.self] }
     set { self[RecentImagesKey.self] = newValue }
+  }
+
+  var suppressesImageNavigation: Bool? {
+    get { self[SuppressesImageNavigationKey.self] }
+    set { self[SuppressesImageNavigationKey.self] = newValue }
   }
 }
 
@@ -112,6 +121,7 @@ struct FileOperationCommands: Commands {
 
 struct ViewCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
+  @FocusedValue(\.suppressesImageNavigation) private var suppressesImageNavigation
 
   var body: some Commands {
     CommandGroup(replacing: .sidebar) {
@@ -119,13 +129,19 @@ struct ViewCommands: Commands {
         imageSession?.navigateToPreviousImage()
       }
       .keyboardShortcut(.leftArrow, modifiers: [])
-      .disabled(imageSession?.folderNavigator?.canNavigateToPrevious != true)
+      .disabled(
+        imageSession?.folderNavigator?.canNavigateToPrevious != true
+          || suppressesImageNavigation == true,
+      )
 
       Button("Next Image") {
         imageSession?.navigateToNextImage()
       }
       .keyboardShortcut(.rightArrow, modifiers: [])
-      .disabled(imageSession?.folderNavigator?.canNavigateToNext != true)
+      .disabled(
+        imageSession?.folderNavigator?.canNavigateToNext != true
+          || suppressesImageNavigation == true,
+      )
 
       Divider()
 

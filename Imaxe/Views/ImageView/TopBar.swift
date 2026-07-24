@@ -330,6 +330,42 @@ struct TopBar: View {
 // MARK: - FileEditorPopover
 
 private struct FileEditorPopover: View {
+  private struct FileTagOption: Identifiable {
+    let id: Int
+    let name: String
+    let color: Color
+
+    var menuIcon: Image {
+      let size = NSSize(width: 12, height: 12)
+      let image = NSImage(size: size, flipped: false) { _ in
+        NSColor(color).setFill()
+        NSBezierPath(ovalIn: NSRect(origin: .zero, size: size)).fill()
+        return true
+      }
+      image.isTemplate = false
+      return Image(nsImage: image)
+    }
+
+    static var systemOptions: [FileTagOption] {
+      let names = NSWorkspace.shared.fileLabels
+      let colors: [Color] = [
+        .clear,
+        .gray,
+        .green,
+        .purple,
+        .blue,
+        .yellow,
+        .red,
+        .orange,
+      ]
+
+      return [6, 7, 3, 2, 5, 4, 1].compactMap { index in
+        guard names.indices.contains(index), colors.indices.contains(index) else { return nil }
+        return FileTagOption(id: index, name: names[index], color: colors[index])
+      }
+    }
+  }
+
   @Bindable var imageSession: ImageSession
   @Binding var fileName: String
   let onApplyFileName: () -> Void
@@ -339,7 +375,11 @@ private struct FileEditorPopover: View {
   @State private var locationURL: URL?
 
   private let tagOptions = FileTagOption.systemOptions
+
+  // UI layout constants
   private let controlWidth: CGFloat = 300
+  private let controlHeight: CGFloat = 24
+  private let controlBorderRadius: CGFloat = 6
   private let actionButtonSize: CGFloat = 22
 
   private var trimmedFileName: String {
@@ -363,52 +403,65 @@ private struct FileEditorPopover: View {
     Grid(alignment: .leading, horizontalSpacing: 8, verticalSpacing: 10) {
       GridRow {
         rowLabel("Name:")
-        TextField("File Name", text: $fileName)
-          .textFieldStyle(.roundedBorder)
-          .frame(width: controlWidth)
-          .focused($isFileNameFocused)
-          .onSubmit(onApplyFileName)
 
-        actionSlot {
+        HStack(spacing: 4) {
+          TextField("File Name", text: $fileName)
+            .textFieldStyle(.roundedBorder)
+            .focused($isFileNameFocused)
+            .onSubmit(onApplyFileName)
+
           if hasFileNameChanged {
             Button(action: onApplyFileName) {
               Image(systemName: "return")
                 .frame(width: actionButtonSize, height: actionButtonSize)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.borderedOnHover)
             .disabled(trimmedFileName.isEmpty)
             .help("Rename")
             .accessibilityLabel("Rename")
           }
         }
+        .frame(width: controlWidth)
       }
 
       GridRow {
         rowLabel("Tags:")
-        fileTagPicker
 
-        actionSlot {
+        HStack(spacing: 4) {
+          fileTagPicker
+
           if !selectedColorTagNames.isEmpty {
             Button(action: clearColorTags) {
               Image(systemName: "xmark.circle.fill")
                 .frame(width: actionButtonSize, height: actionButtonSize)
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.borderedOnHover)
             .help("Clear Color Tags")
             .accessibilityLabel("Clear Color Tags")
           }
         }
+        .frame(width: controlWidth)
       }
 
       GridRow {
-        rowLabel("Where:")
-        FileLocationPicker(directoryURL: locationURL, onSelectDirectory: selectDirectory)
-          .frame(width: controlWidth, height: 24)
+        rowLabel("Location:")
 
-        actionSlot {}
+        FileLocationPicker(
+          directoryURL: locationURL,
+          recentDirectoryURLs: imageSession.recentImageDirectoryURLs,
+          onSelectDirectory: selectDirectory,
+        )
+        .padding(.horizontal, 4)
+        .frame(width: controlWidth, height: controlHeight)
+        .background(.controlBackground)
+        .clipShape(RoundedRectangle(cornerRadius: controlBorderRadius))
+        .overlay {
+          RoundedRectangle(cornerRadius: controlBorderRadius)
+            .stroke(.separator.opacity(0.45), lineWidth: 0.5)
+        }
       }
     }
-    .padding(14)
+    .padding()
     .onAppear {
       synchronizeWithCurrentImage()
       DispatchQueue.main.async {
@@ -418,64 +471,54 @@ private struct FileEditorPopover: View {
     .onChange(of: imageSession.displayedURL) {
       synchronizeWithCurrentImage()
     }
+    .focusedSceneValue(\.suppressesImageNavigation, isFileNameFocused)
   }
 
   private var fileTagPicker: some View {
     Menu {
       ForEach(tagOptions) { option in
         Toggle(isOn: tagSelection(for: option)) {
-          Label {
-            Text(option.name)
-          } icon: {
-            Image(systemName: "circle.fill")
-              .foregroundStyle(Color(nsColor: option.color))
-          }
+          Label { Text(option.name) } icon: { option.menuIcon }
         }
       }
     } label: {
-      HStack(spacing: 5) {
+      HStack(spacing: 4) {
         ForEach(selectedTagOptions) { option in
-          Circle()
-            .fill(Color(nsColor: option.color))
-            .frame(width: 9, height: 9)
+          option.menuIcon
         }
 
-        if !selectedTagOptions.isEmpty {
-          Text(selectedTagOptions.map(\.name).joined(separator: ", "))
-            .lineLimit(1)
-            .truncationMode(.tail)
+        if selectedTagOptions.isEmpty {
+          Text("Empty")
+            .font(.system(size: 12, weight: .regular, design: .rounded))
         }
 
         Spacer(minLength: 0)
 
         Image(systemName: "chevron.up.chevron.down")
-          .font(.system(size: 10, weight: .semibold))
-          .foregroundStyle(.secondary)
+          .font(.system(size: 10, weight: .bold, design: .rounded))
       }
-      .padding(.horizontal, 8)
-      .frame(width: controlWidth, height: 24)
+      .padding(.leading, 8)
+      .padding(.trailing, 6)
+      .frame(maxWidth: .infinity)
+      .frame(height: controlHeight)
       .background(.controlBackground)
-      .clipShape(RoundedRectangle(cornerRadius: 5))
+      .clipShape(RoundedRectangle(cornerRadius: controlBorderRadius))
       .overlay {
-        RoundedRectangle(cornerRadius: 5)
+        RoundedRectangle(cornerRadius: controlBorderRadius)
           .stroke(.separator.opacity(0.45), lineWidth: 0.5)
       }
     }
-    .menuStyle(.borderlessButton)
+    .menuStyle(.button)
+    .buttonStyle(.plain)
     .accessibilityLabel("File Tags")
     .accessibilityValue(selectedTagOptions.map(\.name).joined(separator: ", "))
   }
 
-  private func rowLabel(_ title: LocalizedStringKey) -> some View {
+  private func rowLabel(_ title: LocalizedStringResource) -> some View {
     Text(title)
       .font(.system(size: 12, weight: .medium, design: .rounded))
       .foregroundStyle(.secondary)
-      .frame(width: 48, alignment: .trailing)
-  }
-
-  private func actionSlot(@ViewBuilder content: () -> some View) -> some View {
-    ZStack(content: content)
-      .frame(width: actionButtonSize, height: actionButtonSize)
+      .gridCellAnchor(.trailing)
   }
 
   private func tagSelection(for option: FileTagOption) -> Binding<Bool> {
@@ -511,23 +554,6 @@ private struct FileEditorPopover: View {
     fileName = imageSession.currentMetadata?.fileName ?? ""
     selectedTagNames = imageSession.currentImageTagNames()
     locationURL = imageSession.displayedURL?.deletingLastPathComponent()
-  }
-}
-
-private struct FileTagOption: Identifiable {
-  let id: Int
-  let name: String
-  let color: NSColor
-
-  static var systemOptions: [FileTagOption] {
-    let workspace = NSWorkspace.shared
-    let names = workspace.fileLabels
-    let colors = workspace.fileLabelColors
-
-    return [6, 7, 3, 2, 5, 4, 1].compactMap { index in
-      guard names.indices.contains(index), colors.indices.contains(index) else { return nil }
-      return FileTagOption(id: index, name: names[index], color: colors[index])
-    }
   }
 }
 

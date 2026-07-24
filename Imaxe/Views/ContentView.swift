@@ -53,6 +53,7 @@ struct ContentView: View {
     .dismissTextFocusOnClickOutside()
     .onAppear {
       configureImageSession()
+      updateRecentImageDirectories()
       refreshRecentImages()
       loadInitialRequestIfNeeded()
       dismissWindow(id: "home")
@@ -78,6 +79,9 @@ struct ContentView: View {
     }
     .onChange(of: recentImagesCountLimit) {
       refreshRecentImages()
+    }
+    .onChange(of: recentImages.map(\.path)) {
+      updateRecentImageDirectories()
     }
     .onOpenURL { url in
       imageSession.loadImage(from: url)
@@ -135,6 +139,12 @@ struct ContentView: View {
       imageSession.alertTitle = "Failed to Refresh Recent Images"
       imageSession.alertMessage = error.localizedDescription
     }
+  }
+
+  private func updateRecentImageDirectories() {
+    imageSession.updateRecentImageDirectoryURLs(
+      recentImages.map { $0.url.deletingLastPathComponent() },
+    )
   }
 
   private func openImages(at urls: [URL]) {

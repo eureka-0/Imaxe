@@ -187,13 +187,17 @@ struct ImageLoadingTests {
     #expect(document.pixelSize.height > 0)
   }
 
-  @Test func `image loader returns cached document for same url`() async throws {
+  @Test func `repeated image loads return equivalent documents`() async throws {
     let url = TestSupport.sampleImageURL("sample_1280×853.png")
 
     let firstDocument = try await loader.loadDocument(from: url)
     let secondDocument = try await loader.loadDocument(from: url)
 
-    #expect(firstDocument.id == secondDocument.id)
+    #expect(firstDocument.url == secondDocument.url)
+    #expect(firstDocument.fileSnapshot == secondDocument.fileSnapshot)
+    #expect(firstDocument.metadata == secondDocument.metadata)
+    #expect(firstDocument.pixelSize == secondDocument.pixelSize)
+    #expect(firstDocument.renderedPixelSize == secondDocument.renderedPixelSize)
   }
 
   @Test func `image loader reports missing files as file not found`() async throws {

@@ -159,6 +159,16 @@
         }
       }
     },
+    "Empty" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空"
+          }
+        }
+      }
+    },
     "Failed to Clear Recent Images" : {
 
     },
@@ -203,6 +213,16 @@
     },
     "Failed to Update Recent Images" : {
 
+    },
+    "Favorites" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "个人收藏"
+          }
+        }
+      }
     },
     "File Name" : {
 
@@ -249,6 +269,16 @@
     "Home" : {
 
     },
+    "iCloud" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 资料库"
+          }
+        }
+      }
+    },
     "Ignore" : {
 
     },
@@ -280,6 +310,9 @@
 
     },
     "Loading..." : {
+
+    },
+    "Location:" : {
 
     },
     "Loop browsing" : {
@@ -409,6 +442,16 @@
     "Recent images count limit:" : {
 
     },
+    "Recent Locations" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近访问的位置"
+          }
+        }
+      }
+    },
     "Reload" : {
 
     },
@@ -471,9 +514,6 @@
 
     },
     "Unpin Window" : {
-
-    },
-    "Where:" : {
 
     },
     "Width" : {

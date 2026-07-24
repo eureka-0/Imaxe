@@ -26,7 +26,7 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 ### Test Reliability
 
 - [x] Replace timing-based metadata preload coverage with an explicit document-load gate so the session test remains deterministic under parallel test load.
-- [ ] Stop asserting that `NSCache` must retain a document between sequential loads; the cache may legally evict under memory pressure from parallel image-loading tests.
+- [x] Verify equivalent results across repeated image loads without requiring `NSCache` to retain document identity under memory pressure.
 
 ### Rendering and Performance
 
