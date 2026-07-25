@@ -484,6 +484,64 @@ extension NSWindow {
     frame.height - contentLayoutRect.height
   }
 
+  /// Determines if the window is attached to another window (e.g., as a child, sheet, or popover).
+  func isAttachedTo(_ otherWindow: NSWindow) -> Bool {
+    if self === otherWindow {
+      return true
+    }
+    guard let parent else { return false }
+    if parent === otherWindow {
+      return true
+    }
+    return parent.isAttachedTo(otherWindow)
+  }
+
+  enum FocusedTextViewSearchScope {
+    case currentWindow
+    case currentWindowAndChildWindows
+    case windowTree
+  }
+
+  /// Finds the first focused NSTextView in the window's responder chain or its child windows.
+  /// - Parameters:
+  ///   - scope: The scope of the search.
+  ///   - isEditable: An optional filter for whether the NSTextView should be editable. If nil, any
+  /// NSTextView will be returned.
+  /// - Returns: The focused NSTextView if found; otherwise, nil.
+  func focusedTextView(
+    scope: FocusedTextViewSearchScope = .currentWindow,
+    isEditable: Bool? = true,
+  ) -> NSTextView? {
+    if let textView = firstResponder as? NSTextView,
+       isEditable == nil || textView.isEditable == isEditable
+    {
+      return textView
+    }
+
+    var rootWindow = self
+
+    switch scope {
+    case .currentWindow:
+      return nil
+    case .currentWindowAndChildWindows:
+      break
+    case .windowTree:
+      while let parent = rootWindow.parent {
+        rootWindow = parent
+      }
+    }
+
+    for childWindow in rootWindow.childWindows ?? [] {
+      if let textView = childWindow.focusedTextView(
+        scope: .currentWindowAndChildWindows,
+        isEditable: isEditable,
+      ) {
+        return textView
+      }
+    }
+    return nil
+  }
+
   func resizeToDefaultSize() {
     setContentSize(NSSize(
       width: Constants.defaultWindowWidth,

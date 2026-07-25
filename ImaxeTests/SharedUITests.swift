@@ -91,9 +91,10 @@ struct SharedUITests {
     popoverWindow.contentView = textView
     parentWindow.addChildWindow(popoverWindow, ordered: .above)
 
-    #expect(TextInputFocusState.isWindow(popoverWindow, attachedTo: parentWindow))
+    #expect(parentWindow.isAttachedTo(parentWindow))
+    #expect(popoverWindow.isAttachedTo(parentWindow))
     #expect(popoverWindow.makeFirstResponder(textView))
-    #expect(TextInputFocusState.isTextInputActive(in: parentWindow))
+    #expect(parentWindow.focusedTextView(scope: .windowTree) === textView)
   }
 
   @Test func `noneditable text views do not suppress image navigation`() {
@@ -103,11 +104,11 @@ struct SharedUITests {
     window.contentView = textView
 
     #expect(window.makeFirstResponder(textView))
-    #expect(!TextInputFocusState.isTextInputActive(in: window))
-    #expect(!TextInputFocusState.handleHorizontalTextMovement(.left, in: window))
+    #expect(window.focusedTextView() == nil)
+    #expect(window.focusedTextView(isEditable: nil) === textView)
   }
 
-  @Test func `navigation shortcuts move the cursor in an attached text input`() {
+  @Test func `navigation shortcuts move the cursor in an attached text input`() throws {
     let parentWindow = NSWindow()
     let popoverWindow = NSWindow()
     let textView = NSTextView()
@@ -117,14 +118,31 @@ struct SharedUITests {
 
     #expect(popoverWindow.makeFirstResponder(textView))
     textView.setSelectedRange(NSRange(location: 0, length: textView.string.count))
-    #expect(TextInputFocusState.handleHorizontalTextMovement(.left, in: popoverWindow))
+    let leftArrowEvent = try #require(horizontalArrowEvent(keyCode: 123, characters: "\u{F702}"))
+    #expect(AppDelegate.routeHorizontalArrowKey(leftArrowEvent, in: popoverWindow) == nil)
     #expect(textView.selectedRange() == NSRange(location: 0, length: 0))
 
     popoverWindow.makeFirstResponder(nil)
     #expect(popoverWindow.makeFirstResponder(textView))
     textView.setSelectedRange(NSRange(location: 0, length: 0))
-    #expect(TextInputFocusState.handleHorizontalTextMovement(.right, in: parentWindow))
+    let rightArrowEvent = try #require(horizontalArrowEvent(keyCode: 124, characters: "\u{F703}"))
+    #expect(AppDelegate.routeHorizontalArrowKey(rightArrowEvent, in: parentWindow) == nil)
     #expect(textView.selectedRange() == NSRange(location: 1, length: 0))
+  }
+
+  private func horizontalArrowEvent(keyCode: UInt16, characters: String) -> NSEvent? {
+    NSEvent.keyEvent(
+      with: .keyDown,
+      location: .zero,
+      modifierFlags: [],
+      timestamp: 0,
+      windowNumber: 0,
+      context: nil,
+      characters: characters,
+      charactersIgnoringModifiers: characters,
+      isARepeat: false,
+      keyCode: keyCode,
+    )
   }
 
   private struct CollectionInitializerTestItem: Identifiable {

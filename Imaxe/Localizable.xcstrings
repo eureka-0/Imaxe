@@ -131,6 +131,16 @@
     "Clear Search" : {
 
     },
+    "Common Locations" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "常用位置"
+          }
+        }
+      }
+    },
     "Could Not Clear Thumbnail Cache" : {
 
     },
@@ -214,16 +224,6 @@
     "Failed to Update Recent Images" : {
 
     },
-    "Favorites" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "个人收藏"
-          }
-        }
-      }
-    },
     "File Name" : {
 
     },
@@ -269,7 +269,7 @@
     "Home" : {
 
     },
-    "iCloud" : {
+    "iCloud Library" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {

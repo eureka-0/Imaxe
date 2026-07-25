@@ -1,26 +1,84 @@
 //
 //  FileLocationPicker.swift
 //  Imaxe
+//
+//  Created by lxlong on 2026/7/23.
+//
+
 import AppKit
+import SwiftData
 import SwiftUI
 
 // MARK: - FileLocationPicker
 
-struct FileLocationPicker: NSViewRepresentable {
+struct FileLocationPicker: View {
+  let directoryURL: URL?
+  let onSelectDirectory: (URL) -> Void
+
+  @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
+
+  @State private var isMenuOpen: Bool = false
+
+  private var cornerRadius: CGFloat = 6
+
+  private var recentDirectoryURLs: [URL] {
+    recentImages.map { $0.url.deletingLastPathComponent() }
+  }
+
+  init(
+    directoryURL: URL? = nil,
+    onSelectDirectory: @escaping (URL) -> Void,
+  ) {
+    self.directoryURL = directoryURL
+    self.onSelectDirectory = onSelectDirectory
+  }
+
+  var body: some View {
+    NSPathControlRepresentable(
+      directoryURL: directoryURL,
+      recentDirectoryURLs: recentDirectoryURLs,
+      onSelectDirectory: onSelectDirectory,
+      isMenuOpen: $isMenuOpen,
+    )
+    .padding(.horizontal, 4)
+    .padding(.vertical, 2)
+    .background(isMenuOpen ? .controlBackground.opacity(0.7) : .controlBackground)
+    .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+    .overlay {
+      RoundedRectangle(cornerRadius: cornerRadius)
+        .stroke(.separator.opacity(0.45), lineWidth: 0.5)
+    }
+  }
+}
+
+extension FileLocationPicker {
+  func cornerRadius(_ radius: CGFloat) -> Self {
+    var view = self
+    view.cornerRadius = radius
+    return view
+  }
+}
+
+// MARK: - NSPathControlRepresentable
+
+private struct NSPathControlRepresentable: NSViewRepresentable {
   let directoryURL: URL?
   let recentDirectoryURLs: [URL]
   let onSelectDirectory: (URL) -> Void
+  @Binding var isMenuOpen: Bool
 
   func makeCoordinator() -> Coordinator {
     Coordinator(
       recentDirectoryURLs: recentDirectoryURLs,
       onSelectDirectory: onSelectDirectory,
+      isMenuOpen: $isMenuOpen,
     )
   }
 
   func makeNSView(context: Context) -> NSPathControl {
     let pathControl = NSPathControl()
     pathControl.pathStyle = .popUp
+    pathControl.focusRingType = .none
     pathControl.isEditable = true
     pathControl.url = directoryURL
     pathControl.delegate = context.coordinator
@@ -35,34 +93,38 @@ struct FileLocationPicker: NSViewRepresentable {
     if pathControl.url != directoryURL {
       pathControl.url = directoryURL
     }
+
+    if isMenuOpen {
+      pathControl.alphaValue = 0.7
+    } else {
+      pathControl.alphaValue = 1.0
+    }
   }
 }
 
 // MARK: - Coordinator
 
-extension FileLocationPicker {
-  private struct LocationSection {
-    let title: String
-    let locations: [Location]
+private extension NSPathControlRepresentable {
+  struct LocationSection {
+    let title: LocalizedStringResource
+    let urls: [URL]
   }
 
-  private struct Location {
-    let title: String
-    let url: URL
-  }
-
-  final class Coordinator: NSObject, NSPathControlDelegate {
+  final class Coordinator: NSObject, NSPathControlDelegate, NSMenuDelegate {
     var recentDirectoryURLs: [URL]
     var onSelectDirectory: (URL) -> Void
+    var isMenuOpen: Binding<Bool>
 
     private let customMenuIdentifierPrefix = "FileLocationPicker.Custom"
 
     init(
       recentDirectoryURLs: [URL],
       onSelectDirectory: @escaping (URL) -> Void,
+      isMenuOpen: Binding<Bool>,
     ) {
       self.recentDirectoryURLs = recentDirectoryURLs
       self.onSelectDirectory = onSelectDirectory
+      self.isMenuOpen = isMenuOpen
     }
 
     @objc func selectDirectory(_ pathControl: NSPathControl) {
@@ -75,7 +137,20 @@ extension FileLocationPicker {
       onSelectDirectory(url)
     }
 
+    func menuWillOpen(_: NSMenu) {
+      DispatchQueue.main.async {
+        self.isMenuOpen.wrappedValue = true
+      }
+    }
+
+    func menuDidClose(_: NSMenu) {
+      DispatchQueue.main.async {
+        self.isMenuOpen.wrappedValue = false
+      }
+    }
+
     func pathControl(_ pathControl: NSPathControl, willPopUp menu: NSMenu) {
+      menu.delegate = self
       removeCustomItems(from: menu)
 
       var insertionIndex = max(menu.items.count, 0)
@@ -88,8 +163,8 @@ extension FileLocationPicker {
           insertSeparator(into: menu, at: &insertionIndex)
         }
         insertHeading(section.title, into: menu, at: &insertionIndex)
-        for location in section.locations {
-          insertLocation(location, currentURL: pathControl.url, into: menu, at: &insertionIndex)
+        for url in section.urls {
+          insertLocation(url, currentURL: pathControl.url, into: menu, at: &insertionIndex)
         }
       }
       insertSeparator(into: menu, at: &insertionIndex)
@@ -107,27 +182,17 @@ extension FileLocationPicker {
 
       let iCloudLocations = availableDirectoryLocations(from: iCloudDirectoryURLs())
       if !iCloudLocations.isEmpty {
-        sections.append(LocationSection(
-          title: String(localized: "iCloud"),
-          locations: iCloudLocations,
-        ))
+        sections.append(LocationSection(title: "iCloud Library", urls: iCloudLocations))
       }
 
-      let favoriteLocations = availableDirectoryLocations(from: favoriteDirectoryURLs())
-      if !favoriteLocations.isEmpty {
-        sections.append(
-          LocationSection(title: String(localized: "Favorites"), locations: favoriteLocations),
-        )
+      let commonLocations = availableDirectoryLocations(from: commonDirectoryURLs())
+      if !commonLocations.isEmpty {
+        sections.append(LocationSection(title: "Common Locations", urls: commonLocations))
       }
 
       let recentLocations = availableDirectoryLocations(from: recentDirectoryURLs, limit: 12)
       if !recentLocations.isEmpty {
-        sections.append(
-          LocationSection(
-            title: String(localized: "Recent Locations"),
-            locations: recentLocations,
-          ),
-        )
+        sections.append(LocationSection(title: "Recent Locations", urls: recentLocations))
       }
 
       return sections
@@ -150,7 +215,7 @@ extension FileLocationPicker {
       return urls
     }
 
-    private func favoriteDirectoryURLs() -> [URL] {
+    private func commonDirectoryURLs() -> [URL] {
       let fileManager = FileManager.default
       let directories: [FileManager.SearchPathDirectory] = [
         .picturesDirectory,
@@ -167,11 +232,11 @@ extension FileLocationPicker {
     private func availableDirectoryLocations(
       from urls: [URL],
       limit: Int = .max,
-    ) -> [Location] {
+    ) -> [URL] {
       var seenPaths = Set<String>()
-      var locations: [Location] = []
+      var availableURLs: [URL] = []
 
-      for url in urls where locations.count < limit {
+      for url in urls where availableURLs.count < limit {
         let standardizedURL = url.standardizedFileURL
         let path = standardizedURL.filePath
         guard seenPaths.insert(path).inserted,
@@ -179,37 +244,50 @@ extension FileLocationPicker {
         else {
           continue
         }
-
-        let values = try? standardizedURL.resourceValues(forKeys: [.localizedNameKey])
-        let title = values?.localizedName ?? standardizedURL.lastPathComponent
-        locations.append(Location(title: title, url: standardizedURL))
+        availableURLs.append(standardizedURL)
       }
 
-      return locations
+      return availableURLs
     }
 
     private func insertLocation(
-      _ location: Location,
+      _ url: URL,
       currentURL: URL?,
       into menu: NSMenu,
       at index: inout Int,
     ) {
+      let values = try? url.resourceValues(forKeys: [.localizedNameKey])
+      let title = values?.localizedName ?? url.lastPathComponent
       let item = NSMenuItem(
-        title: location.title,
+        title: title,
         action: #selector(selectMenuDirectory(_:)),
         keyEquivalent: "",
       )
       item.target = self
-      item.representedObject = location.url
-      item.image = icon(for: location.url)
-      item.state = currentURL?.standardizedFileURL == location.url ? .on : .off
+      item.representedObject = url
+
+      if url.lastPathComponent == "com~apple~CloudDocs" {
+        let multicolorConfig = NSImage.SymbolConfiguration.preferringMulticolor()
+        let icloudIcon = NSImage(systemSymbolName: "icloud.fill", accessibilityDescription: nil)?
+          .withSymbolConfiguration(multicolorConfig)
+        icloudIcon?.isTemplate = false
+        item.image = icloudIcon ?? icon(for: url)
+      } else {
+        item.image = icon(for: url)
+      }
+
+      item.state = currentURL?.standardizedFileURL == url ? .on : .off
       identifyCustomItem(item)
       menu.insertItem(item, at: index)
       index += 1
     }
 
-    private func insertHeading(_ title: String, into menu: NSMenu, at index: inout Int) {
-      let headingItem = NSMenuItem.sectionHeader(title: title)
+    private func insertHeading(
+      _ title: LocalizedStringResource,
+      into menu: NSMenu,
+      at index: inout Int,
+    ) {
+      let headingItem = NSMenuItem.sectionHeader(title: String(localized: title))
       menu.insertItem(headingItem, at: index)
       index += 1
     }
@@ -222,8 +300,8 @@ extension FileLocationPicker {
     }
 
     private func icon(for url: URL) -> NSImage {
-      let image = (NSWorkspace.shared.icon(forFile: url.filePath).copy() as? NSImage)
-        ?? NSWorkspace.shared.icon(forFile: url.filePath)
+      let workspaceIcon = NSWorkspace.shared.icon(forFile: url.filePath)
+      let image = (workspaceIcon.copy() as? NSImage) ?? workspaceIcon
       image.size = NSSize(width: 16, height: 16)
       return image
     }

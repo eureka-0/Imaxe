@@ -74,11 +74,20 @@ struct FileOperationCommands: Commands {
             .disabled(true)
         } else {
           ForEach(recentImages) { recentImage in
-            Button(recentImage.fileName) {
+            Button {
               if let imageSession {
                 imageSession.openRecentImage(recentImage)
               } else if let homeViewModel {
                 homeViewModel.openRecentImage(recentImage)
+              }
+            } label: {
+              Label {
+                Text(recentImage.url.lastPathComponent)
+              } icon: {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: recentImage.url.filePath))
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 16, height: 16)
               }
             }
             .disabled(imageSession == nil && homeViewModel == nil)
@@ -117,18 +126,12 @@ struct ViewCommands: Commands {
   var body: some Commands {
     CommandGroup(replacing: .sidebar) {
       Button("Previous Image") {
-        if TextInputFocusState.handleHorizontalTextMovement(.left, for: NSApp.currentEvent) {
-          return
-        }
         imageSession?.navigateToPreviousImage()
       }
       .keyboardShortcut(.leftArrow, modifiers: [])
       .disabled(imageSession?.folderNavigator?.canNavigateToPrevious != true)
 
       Button("Next Image") {
-        if TextInputFocusState.handleHorizontalTextMovement(.right, for: NSApp.currentEvent) {
-          return
-        }
         imageSession?.navigateToNextImage()
       }
       .keyboardShortcut(.rightArrow, modifiers: [])

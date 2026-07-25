@@ -9,8 +9,30 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_: Notification) {
+    NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      Self.routeHorizontalArrowKey(event, in: event.window)
+    }
+  }
+
+  static func routeHorizontalArrowKey(_ event: NSEvent, in window: NSWindow?) -> NSEvent? {
+    let arrowKeyCodes: Set<UInt16> = [123, 124] // left: 123, right: 124
+    guard arrowKeyCodes.contains(event.keyCode),
+          let textView = window?.focusedTextView(scope: .windowTree)
+    else {
+      return event
+    }
+
+    textView.keyDown(with: event)
+    return nil
+  }
+}
+
 @main
 struct ImaxeApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance: Appearance = AppSettings.Defaults.appearance
 

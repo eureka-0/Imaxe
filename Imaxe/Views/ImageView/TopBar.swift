@@ -41,7 +41,7 @@ struct TopBar: View {
   private let positionLabelMaxWidth: CGFloat = 80
   private let controlGroupSpacing: CGFloat = 1
   private let controlGroupPadding: CGFloat = 1
-  private let fileNameLabelMinWidth: CGFloat = 72
+  private let fileNameLabelMinWidth: CGFloat = 120
 
   private var displayedMetadata: ImageMetadata? {
     imageSession.currentMetadata
@@ -82,15 +82,22 @@ struct TopBar: View {
       newFileName = displayedMetadata?.fileName ?? ""
       popoverState.isFileEditorPresented.toggle()
     } label: {
-      Text(displayedMetadata?.fileName ?? "")
+      let baseText = Text(displayedMetadata?.fileName ?? "")
         .font(.system(size: 13, weight: .medium))
         .foregroundStyle(.primary)
         .lineLimit(1)
         .truncationMode(.middle)
-        .frame(minWidth: fileNameLabelMinWidth)
         .frame(height: buttonHeight)
         .padding(.horizontal, 8)
         .layoutPriority(-1)
+
+      return ViewThatFits(in: .horizontal) {
+        baseText
+          .fixedSize(horizontal: true, vertical: false)
+
+        baseText
+          .frame(minWidth: fileNameLabelMinWidth, alignment: .leading)
+      }
     }
     .buttonStyle(.borderedOnHover(isActive: popoverState.isFileEditorPresented))
     .popover(isPresented: $popoverState.isFileEditorPresented, arrowEdge: .bottom) {
@@ -446,19 +453,9 @@ private struct FileEditorPopover: View {
       GridRow {
         rowLabel("Location:")
 
-        FileLocationPicker(
-          directoryURL: locationURL,
-          recentDirectoryURLs: imageSession.recentImageDirectoryURLs,
-          onSelectDirectory: selectDirectory,
-        )
-        .padding(.horizontal, 4)
-        .frame(width: controlWidth, height: controlHeight)
-        .background(.controlBackground)
-        .clipShape(RoundedRectangle(cornerRadius: controlBorderRadius))
-        .overlay {
-          RoundedRectangle(cornerRadius: controlBorderRadius)
-            .stroke(.separator.opacity(0.45), lineWidth: 0.5)
-        }
+        FileLocationPicker(directoryURL: locationURL, onSelectDirectory: selectDirectory)
+          .cornerRadius(controlBorderRadius)
+          .frame(width: controlWidth)
       }
     }
     .padding()
@@ -488,7 +485,8 @@ private struct FileEditorPopover: View {
 
         if selectedTagOptions.isEmpty {
           Text("Empty")
-            .font(.system(size: 12, weight: .regular, design: .rounded))
+            .font(.system(size: 13, weight: .regular, design: .rounded))
+            .foregroundStyle(.controlText)
         }
 
         Spacer(minLength: 0)

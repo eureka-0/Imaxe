@@ -29,7 +29,6 @@ final class ImageSession {
   private(set) var shouldApplyLoadedImageWindowSize = true
   private(set) var showTopBar = false
   private(set) var folderNavigator: FolderNavigator?
-  private(set) var recentImageDirectoryURLs: [URL] = []
 
   private(set) var topBarHideDelay: TimeInterval = AppSettings.Defaults.topBarHideDelay
 
@@ -109,13 +108,6 @@ final class ImageSession {
     topBarHideDelay = preferences.topBarHideDelay
     enableLoopBrowsing = preferences.enableLoopBrowsing
     actionOnImageFileChange = preferences.actionOnImageFileChange
-  }
-
-  func updateRecentImageDirectoryURLs(_ urls: [URL]) {
-    var seenPaths = Set<String>()
-    recentImageDirectoryURLs = urls.filter { url in
-      seenPaths.insert(url.standardizedFileURL.filePath).inserted
-    }
   }
 
   deinit {
