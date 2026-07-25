@@ -540,7 +540,8 @@ final class ImageSession {
       do {
         try removeRecentImage(recentImagePathToRemoveOnFileNotFound)
         alertTitle = "Recent Image Removed"
-        alertMessage = "The file no longer exists and was removed from Recent Images:\n\(url.filePath)"
+        alertMessage =
+          "The file no longer exists and was removed from Recent Images:\n\(url.filePath)"
       } catch {
         alertTitle = "Failed to Remove Recent Image"
         alertMessage = error.localizedDescription

@@ -8,9 +8,6 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Image Loading and Memory
 
-- [ ] Move primary image loading to URL-backed `CGImageSource` to avoid fully reading and decoding large images with `Data(contentsOf:) + NSImage(data:)`.
-- [ ] Generate a downsampled first-frame preview based on window size and backing scale; request a higher LOD when zooming in.
-- [ ] Limit concurrent decodes, set a cache memory budget, and clear caches under memory pressure.
 - [ ] Preserve correct handling of orientation, alpha, color space, DPI, 16-bit, and multi-page images.
 - [ ] Use explicit, separate loading strategies for GIF, TIFF, SVG, and static bitmaps.
 

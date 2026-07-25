@@ -154,14 +154,14 @@ struct AdaptiveToolbar<
   MoreContent: View,
   MoreLabel: View,
   MoreMenuStyle: MenuStyle,
-  MoreButtonStyleModifier: ViewModifier,
+  MoreButtonModifier: ViewModifier,
 >: View {
   private let configuration: AdaptiveToolbarConfiguration
   private let content: Content
   private let moreContent: MoreContent
   private let moreLabel: MoreLabel
   private let moreMenuStyle: MoreMenuStyle
-  private let moreButtonStyleModifier: MoreButtonStyleModifier
+  private let moreButtonStyleModifier: MoreButtonModifier
 
   @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
@@ -200,7 +200,7 @@ struct AdaptiveToolbar<
     moreContent: MoreContent,
     moreLabel: MoreLabel,
     moreMenuStyle: MoreMenuStyle,
-    moreButtonStyleModifier: MoreButtonStyleModifier,
+    moreButtonStyleModifier: MoreButtonModifier,
   ) {
     self.configuration = configuration
     self.content = content
@@ -604,7 +604,7 @@ struct AdaptiveToolbar<
 
 extension AdaptiveToolbar where
   MoreMenuStyle == ButtonMenuStyle,
-  MoreButtonStyleModifier == AdaptiveToolbarButtonStyleModifier<BorderedOnHoverButtonStyle>
+  MoreButtonModifier == ATButtonStyleModifier<BorderedOnHoverButtonStyle>
 {
   init(
     _ axis: Axis = .horizontal,
@@ -619,7 +619,7 @@ extension AdaptiveToolbar where
       moreContent: more(),
       moreLabel: moreLabel(),
       moreMenuStyle: ButtonMenuStyle(),
-      moreButtonStyleModifier: AdaptiveToolbarButtonStyleModifier(
+      moreButtonStyleModifier: ATButtonStyleModifier(
         style: BorderedOnHoverButtonStyle(),
       ),
     )
@@ -629,7 +629,7 @@ extension AdaptiveToolbar where
 extension AdaptiveToolbar where
   MoreLabel == AdaptiveToolbarDefaultMoreLabel,
   MoreMenuStyle == ButtonMenuStyle,
-  MoreButtonStyleModifier == AdaptiveToolbarButtonStyleModifier<BorderedOnHoverButtonStyle>
+  MoreButtonModifier == ATButtonStyleModifier<BorderedOnHoverButtonStyle>
 {
   init(
     _ axis: Axis = .horizontal,
@@ -650,7 +650,7 @@ extension AdaptiveToolbar where
 extension AdaptiveToolbar where
   MoreContent == EmptyView,
   MoreMenuStyle == ButtonMenuStyle,
-  MoreButtonStyleModifier == AdaptiveToolbarButtonStyleModifier<BorderedOnHoverButtonStyle>
+  MoreButtonModifier == ATButtonStyleModifier<BorderedOnHoverButtonStyle>
 {
   init(
     _ axis: Axis = .horizontal,
@@ -672,7 +672,7 @@ extension AdaptiveToolbar where
   MoreContent == EmptyView,
   MoreLabel == AdaptiveToolbarDefaultMoreLabel,
   MoreMenuStyle == ButtonMenuStyle,
-  MoreButtonStyleModifier == AdaptiveToolbarButtonStyleModifier<BorderedOnHoverButtonStyle>
+  MoreButtonModifier == ATButtonStyleModifier<BorderedOnHoverButtonStyle>
 {
   init(
     _ axis: Axis = .horizontal,
@@ -690,7 +690,7 @@ extension AdaptiveToolbar where
 
 // MARK: - Modifiers
 
-struct AdaptiveToolbarButtonStyleModifier<Style: ButtonStyle>: ViewModifier {
+struct ATButtonStyleModifier<Style: ButtonStyle>: ViewModifier {
   let style: Style
 
   func body(content: Content) -> some View {
@@ -698,7 +698,7 @@ struct AdaptiveToolbarButtonStyleModifier<Style: ButtonStyle>: ViewModifier {
   }
 }
 
-struct AdaptiveToolbarPrimitiveButtonStyleModifier<Style: PrimitiveButtonStyle>: ViewModifier {
+struct ATPrimitiveButtonStyleModifier<Style: PrimitiveButtonStyle>: ViewModifier {
   let style: Style
 
   func body(content: Content) -> some View {
@@ -733,8 +733,8 @@ extension AdaptiveToolbar {
 
   func moreMenuStyle<Style: MenuStyle>(
     _ style: Style,
-  ) -> AdaptiveToolbar<Content, MoreContent, MoreLabel, Style, MoreButtonStyleModifier> {
-    AdaptiveToolbar<Content, MoreContent, MoreLabel, Style, MoreButtonStyleModifier>(
+  ) -> AdaptiveToolbar<Content, MoreContent, MoreLabel, Style, MoreButtonModifier> {
+    AdaptiveToolbar<Content, MoreContent, MoreLabel, Style, MoreButtonModifier>(
       configuration: configuration,
       content: content,
       moreContent: moreContent,
@@ -751,9 +751,9 @@ extension AdaptiveToolbar {
     MoreContent,
     MoreLabel,
     MoreMenuStyle,
-    AdaptiveToolbarButtonStyleModifier<Style>,
+    ATButtonStyleModifier<Style>,
   > {
-    configured(moreButtonStyleModifier: AdaptiveToolbarButtonStyleModifier(style: style))
+    configured(moreButtonStyleModifier: ATButtonStyleModifier(style: style))
   }
 
   func moreButtonStyle<Style: PrimitiveButtonStyle>(
@@ -763,9 +763,9 @@ extension AdaptiveToolbar {
     MoreContent,
     MoreLabel,
     MoreMenuStyle,
-    AdaptiveToolbarPrimitiveButtonStyleModifier<Style>,
+    ATPrimitiveButtonStyleModifier<Style>,
   > {
-    configured(moreButtonStyleModifier: AdaptiveToolbarPrimitiveButtonStyleModifier(style: style))
+    configured(moreButtonStyleModifier: ATPrimitiveButtonStyleModifier(style: style))
   }
 }
 

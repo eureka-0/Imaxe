@@ -23,7 +23,7 @@ EOF
 require_value() {
   local option="$1"
 
-  if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+  if [[ $# -lt 2 || -z $2 || $2 == --* ]]; then
     echo "error: ${option} requires a value" >&2
     usage >&2
     exit 2
@@ -39,14 +39,14 @@ suite_count=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
   --skip-ui)
-    if [[ "$test_mode" == "ui" ]]; then
+    if [[ $test_mode == "ui" ]]; then
       echo "error: --skip-ui cannot be used with --ui-only" >&2
       exit 2
     fi
     test_mode="unit"
     ;;
   --ui-only)
-    if [[ "$test_mode" == "unit" ]]; then
+    if [[ $test_mode == "unit" ]]; then
       echo "error: --ui-only cannot be used with --skip-ui" >&2
       exit 2
     fi
@@ -77,12 +77,12 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ "$test_mode" == "ui" && "$suite_count" -gt 0 ]]; then
+if [[ $test_mode == "ui" && $suite_count -gt 0 ]]; then
   echo "error: --suite only selects suites in ImaxeTests and cannot be used with --ui-only" >&2
   exit 2
 fi
 
-if [[ "$coverage_enabled" == "NO" && "$coverage_report" == "YES" ]]; then
+if [[ $coverage_enabled == "NO" && $coverage_report == "YES" ]]; then
   echo "error: --coverage-report cannot be used with --no-coverage" >&2
   exit 2
 fi
@@ -105,14 +105,14 @@ cleanup_result_bundles() {
   while ((${#result_bundles[@]} > 7)); do
     oldest_bundle="${result_bundles[0]}"
     for bundle in "${result_bundles[@]:1}"; do
-      if [[ "${bundle}" -ot "${oldest_bundle}" ]]; then
+      if [[ ${bundle} -ot ${oldest_bundle} ]]; then
         oldest_bundle="${bundle}"
       fi
     done
 
     retained_bundles=()
     for bundle in "${result_bundles[@]}"; do
-      if [[ "${bundle}" != "${oldest_bundle}" ]]; then
+      if [[ ${bundle} != "${oldest_bundle}" ]]; then
         retained_bundles+=("${bundle}")
       fi
     done
@@ -151,6 +151,6 @@ fi
 
 xcodebuild "${xcodebuild_arguments[@]}" | xcbeautify
 
-if [[ "$coverage_report" == "YES" ]]; then
+if [[ $coverage_report == "YES" ]]; then
   xcrun xccov view --only-targets --report "${RESULT_BUNDLE}"
 fi

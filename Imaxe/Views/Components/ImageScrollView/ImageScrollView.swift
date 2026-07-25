@@ -120,13 +120,11 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.onLiveMagnificationStart = { [weak coordinator = context.coordinator] in
       coordinator?.beginUserMagnification()
     }
-    scrollView.onLiveMagnificationEnd = { [
-      weak coordinator = context.coordinator,
-      weak scrollView,
-    ] in
-      guard let scrollView else { return }
-      coordinator?.endUserMagnification(scrollView)
-    }
+    scrollView.onLiveMagnificationEnd =
+      { [weak coordinator = context.coordinator, weak scrollView] in
+        guard let scrollView else { return }
+        coordinator?.endUserMagnification(scrollView)
+      }
     scrollView.onSmartMagnification = { [weak coordinator = context.coordinator] in
       coordinator?.disableAlwaysFitToWindowForUserMagnification()
     }

@@ -9,8 +9,8 @@ build/
 *.xcuserdatad
 *.xcuserstate
 
-## Affinity lock files
-*.af~lock~
+## Affinity files
+*.af*
 
 ## Built applications
 Build/

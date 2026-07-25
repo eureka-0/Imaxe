@@ -48,12 +48,12 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
   var defaultSortOptionID: ImageCollectionSortOption<Item>.ID?
 
   var defaultSortOption: ImageCollectionSortOption<Item>? {
-    set {
-      defaultSortOptionID = newValue?.id
-    }
     get {
       guard let defaultSortOptionID else { return nil }
       return sortOptions.first { $0.id == defaultSortOptionID }
+    }
+    set {
+      defaultSortOptionID = newValue?.id
     }
   }
 

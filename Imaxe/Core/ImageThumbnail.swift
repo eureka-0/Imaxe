@@ -332,8 +332,8 @@ nonisolated enum ImageThumbnailCache {
     request.contentType = .svg
 
     try await withTaskCancellationHandler {
-      try await withCheckedThrowingContinuation {
-        (continuation: CheckedContinuation<Void, Error>) in
+      typealias Continuation = CheckedContinuation<Void, Error>
+      try await withCheckedThrowingContinuation { (continuation: Continuation) in
         QLThumbnailGenerator.shared.saveBestRepresentation(
           for: request,
           to: outputURL,
