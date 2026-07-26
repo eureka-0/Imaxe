@@ -16,8 +16,8 @@ final class ImageSession {
     let actionOnImageFileChange: ActionOnImageFileChange
   }
 
-  private(set) var currentImage: ImageContainer?
-  private(set) var currentImageInfo: ImageInfo?
+  private(set) var currentDocument: ImageDocument?
+  private(set) var currentMetadata: ImageMetadata?
   private(set) var displayedURL: URL?
   private(set) var pendingURL: URL?
   var isImporterPresented = false
@@ -69,16 +69,19 @@ final class ImageSession {
   @ObservationIgnored private var pendingTemporaryURL: URL?
   @ObservationIgnored var recordRecentImage: ((URL) async throws -> Void)?
   @ObservationIgnored var removeRecentImage: ((String) throws -> Void)?
-  @ObservationIgnored var loadImageInfo: @Sendable (URL, ImageLoader.LoadRequestID) async throws
-    -> ImageInfo = {
-      try await ImageLoader.shared.loadInfo(from: $0, requestID: $1)
-    }
-
-  @ObservationIgnored var loadImageContainer: @Sendable (
+  @ObservationIgnored var updateRecentImageLocation: ((String, URL) async throws -> Void)?
+  @ObservationIgnored var loadImageMetadata: @Sendable (
     URL,
     ImageLoader.LoadRequestID,
-  ) async throws -> ImageContainer = {
-    try await ImageLoader.shared.loadImage(from: $0, requestID: $1)
+  ) async throws -> ImageMetadata = {
+    try await ImageLoader.shared.loadMetadata(from: $0, requestID: $1)
+  }
+
+  @ObservationIgnored var loadImageDocument: @Sendable (
+    URL,
+    ImageLoader.LoadRequestID,
+  ) async throws -> ImageDocument = {
+    try await ImageLoader.shared.loadDocument(from: $0, requestID: $1)
   }
 
   @ObservationIgnored var loadFolderImageURLs: @Sendable (URL) async -> [URL]? = {
@@ -89,13 +92,13 @@ final class ImageSession {
     loadingTimerTask != nil
   }
 
-  init(imageContainer: ImageContainer? = nil) {
-    if let imageContainer {
-      currentImage = imageContainer
-      currentImageInfo = ImageInfo(url: imageContainer.url)
-      displayedURL = imageContainer.url
+  init(imageDocument: ImageDocument? = nil) {
+    if let imageDocument {
+      currentDocument = imageDocument
+      currentMetadata = imageDocument.metadata
+      displayedURL = imageDocument.url
       folderNavigator = FolderNavigator(
-        for: imageContainer.url,
+        for: imageDocument.url,
         enableLoopBrowsing: enableLoopBrowsing,
       )
     }
@@ -173,8 +176,106 @@ final class ImageSession {
   func revealInFinder(for urls: [URL]? = nil) {
     if let urls {
       NSWorkspace.shared.activateFileViewerSelecting(urls)
-    } else if let url = currentImageInfo?.url ?? currentImage?.url {
+    } else if let url = currentMetadata?.url ?? currentDocument?.url {
       NSWorkspace.shared.activateFileViewerSelecting([url])
+    }
+  }
+
+  @discardableResult
+  static func renameFile(at url: URL, to proposedFileName: String) throws -> URL {
+    let fileName = proposedFileName.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !fileName.isEmpty,
+          fileName != ".",
+          fileName != "..",
+          !fileName.contains("/"),
+          !fileName.contains("\0")
+    else {
+      throw FileEditingError.invalidFileName
+    }
+
+    let destinationURL = url.deletingLastPathComponent()
+      .appending(path: fileName, directoryHint: .notDirectory)
+    guard destinationURL != url else { return url }
+
+    try FileManager.default.moveItem(at: url, to: destinationURL)
+    return destinationURL
+  }
+
+  @discardableResult
+  func renameCurrentImage(to proposedFileName: String) -> Bool {
+    guard let sourceURL = displayedURL, currentDocument != nil, !isLoading else { return false }
+
+    imageFileWatcher = nil
+    do {
+      let destinationURL = try Self.renameFile(at: sourceURL, to: proposedFileName)
+      applyRelocatedCurrentImage(from: sourceURL, to: destinationURL)
+      return true
+    } catch {
+      updateImageFileWatcher()
+      alertTitle = "Failed to Rename Item"
+      alertMessage = error.localizedDescription
+      return false
+    }
+  }
+
+  @discardableResult
+  func moveCurrentImage(to directoryURL: URL) -> Bool {
+    guard let sourceURL = displayedURL, currentDocument != nil, !isLoading else {
+      appLog("Cannot move image: no current image or image is loading.", level: .debug)
+      return false
+    }
+
+    imageFileWatcher = nil
+    do {
+      let resourceValues = try directoryURL.resourceValues(forKeys: [.isDirectoryKey])
+      guard resourceValues.isDirectory == true else {
+        throw FileEditingError.invalidDirectory
+      }
+
+      let destinationURL = directoryURL.appending(
+        path: sourceURL.lastPathComponent,
+        directoryHint: .notDirectory,
+      )
+      guard destinationURL != sourceURL else {
+        updateImageFileWatcher()
+        return true
+      }
+
+      try FileManager.default.moveItem(at: sourceURL, to: destinationURL)
+      applyRelocatedCurrentImage(from: sourceURL, to: destinationURL)
+      return true
+    } catch {
+      updateImageFileWatcher()
+      alertTitle = "Failed to Move Item"
+      alertMessage = error.localizedDescription
+      return false
+    }
+  }
+
+  func currentImageTagNames() -> Set<String> {
+    guard let url = displayedURL else { return [] }
+
+    do {
+      let values = try url.freshResourceValues(forKeys: [.tagNamesKey])
+      return Set(values.tagNames ?? [])
+    } catch {
+      alertTitle = "Failed to Read File Tags"
+      alertMessage = error.localizedDescription
+      return []
+    }
+  }
+
+  @discardableResult
+  func setCurrentImageTagNames(_ tagNames: Set<String>) -> Bool {
+    guard let url = displayedURL else { return false }
+
+    do {
+      try (url as NSURL).setResourceValue(tagNames.sorted(), forKey: .tagNamesKey)
+      return true
+    } catch {
+      alertTitle = "Failed to Update File Tags"
+      alertMessage = error.localizedDescription
+      return false
     }
   }
 
@@ -207,6 +308,58 @@ final class ImageSession {
   func pan(horizontal: CGFloat, vertical: CGFloat) {
     alwaysFitToWindow = false
     viewportController.pan(horizontal: horizontal, vertical: vertical)
+  }
+
+  private func applyRelocatedCurrentImage(from sourceURL: URL, to destinationURL: URL) {
+    guard sourceURL != destinationURL else {
+      updateImageFileWatcher()
+      return
+    }
+
+    let sourceDirectory = sourceURL.deletingLastPathComponent()
+    let destinationDirectory = destinationURL.deletingLastPathComponent()
+    let existingImageURLs = folderNavigator?.imageURLs ?? [sourceURL]
+    let initialImageURLs = sourceDirectory == destinationDirectory
+      ? existingImageURLs.map { $0 == sourceURL ? destinationURL : $0 }
+      : [destinationURL]
+
+    displayedURL = destinationURL
+    if displayedTemporaryURL == sourceURL {
+      displayedTemporaryURL = destinationURL
+    }
+    if let currentDocument {
+      self.currentDocument = currentDocument.relocated(to: destinationURL)
+      currentMetadata = self.currentDocument?.metadata
+    } else {
+      currentMetadata = currentMetadata?.relocated(to: destinationURL)
+    }
+    folderNavigator = FolderNavigator(
+      for: destinationURL,
+      enableLoopBrowsing: enableLoopBrowsing,
+      imageURLs: initialImageURLs,
+    )
+    updateImageFileWatcher()
+
+    Task { [weak self] in
+      guard let self else { return }
+      let imageURLs = await loadFolderImageURLs(destinationURL)
+      guard displayedURL == destinationURL, let imageURLs else { return }
+      folderNavigator = FolderNavigator(
+        for: destinationURL,
+        enableLoopBrowsing: enableLoopBrowsing,
+        imageURLs: imageURLs,
+      )
+    }
+
+    guard let updateRecentImageLocation else { return }
+    Task { [weak self] in
+      do {
+        try await updateRecentImageLocation(sourceURL.filePath, destinationURL)
+      } catch {
+        self?.alertTitle = "Failed to Update Recent Images"
+        self?.alertMessage = error.localizedDescription
+      }
+    }
   }
 
   func openImageFromPasteboard() {
@@ -273,8 +426,7 @@ final class ImageSession {
     onFailure: (() -> Void)? = nil,
   ) {
     let shouldPreserveCurrentImage = preservingViewportOnReload
-      && currentImage != nil
-      && currentImageInfo != nil
+      && currentDocument != nil
     cancelCurrentImageLoad()
     let imageLoad = ImageLoadOperation()
     activeImageLoad = imageLoad
@@ -290,6 +442,7 @@ final class ImageSession {
       startLoadingTimer(for: imageLoad)
 
       defer {
+        imageLoad.metadataTask?.cancel()
         stopLoadingTimer(for: imageLoad)
         if imageLoad === activeImageLoad {
           isLoading = false
@@ -299,25 +452,37 @@ final class ImageSession {
         }
       }
 
-      async let infoResult = Self.result {
-        try await loadImageInfo(url, imageLoad.requestID)
+      imageLoad.metadataTask = Task { @MainActor [weak self, weak imageLoad] in
+        guard let self, let imageLoad else { return }
+        let metadataResult = await Self.result {
+          try await loadImageMetadata(url, imageLoad.requestID)
+        }
+        guard imageLoad === activeImageLoad,
+              !imageLoad.hasCommittedDocument,
+              !Task.isCancelled,
+              case let .success(metadata) = metadataResult
+        else { return }
+
+        currentMetadata = metadata
       }
-      async let imageResult = Self.result {
-        try await loadImageContainer(url, imageLoad.requestID)
+      async let documentResult = Self.result {
+        try await loadImageDocument(url, imageLoad.requestID)
       }
       async let imageURLs = loadFolderImageURLs(url)
-      let (info, image, folderURLs) = await (infoResult, imageResult, imageURLs)
+      let (document, folderURLs) = await (documentResult, imageURLs)
 
       guard imageLoad === activeImageLoad, !Task.isCancelled else {
         removeTemporaryFile(temporaryURL)
         return
       }
 
-      switch (info, image) {
-      case let (.success(info), .success(imageContainer)):
+      switch document {
+      case let .success(imageDocument):
+        imageLoad.hasCommittedDocument = true
+        imageLoad.metadataTask?.cancel()
         let oldTemporaryURL = displayedTemporaryURL
-        currentImage = imageContainer
-        currentImageInfo = info
+        currentDocument = imageDocument
+        currentMetadata = imageDocument.metadata
         displayedURL = url
         displayedTemporaryURL = temporaryURL
         folderNavigator = FolderNavigator(
@@ -339,7 +504,8 @@ final class ImageSession {
           }
         }
 
-      case let (.failure(error), _), let (_, .failure(error)):
+      case let .failure(error):
+        currentMetadata = currentDocument?.metadata
         removeTemporaryFile(temporaryURL)
         handleImageLoadFailure(
           error,
@@ -354,6 +520,8 @@ final class ImageSession {
 
   private final class ImageLoadOperation {
     let requestID = ImageLoader.LoadRequestID()
+    var metadataTask: Task<Void, Never>?
+    var hasCommittedDocument = false
   }
 
   private func handleImageLoadFailure(
@@ -372,7 +540,8 @@ final class ImageSession {
       do {
         try removeRecentImage(recentImagePathToRemoveOnFileNotFound)
         alertTitle = "Recent Image Removed"
-        alertMessage = "The file no longer exists and was removed from Recent Images:\n\(url.filePath)"
+        alertMessage =
+          "The file no longer exists and was removed from Recent Images:\n\(url.filePath)"
       } catch {
         alertTitle = "Failed to Remove Recent Image"
         alertMessage = error.localizedDescription
@@ -398,6 +567,7 @@ final class ImageSession {
 
   private func cancelCurrentImageLoad() {
     imageLoadTask?.cancel()
+    currentMetadata = currentDocument?.metadata
     stopLoadingTimer(for: activeImageLoad)
     removeTemporaryFile(pendingTemporaryURL)
     pendingTemporaryURL = nil
@@ -423,7 +593,7 @@ final class ImageSession {
 
     guard actionOnImageFileChange == .reload,
           let url = displayedURL,
-          currentImage != nil
+          currentDocument != nil
     else { return }
 
     imageFileWatcher = ImageFileWatcher(url: url) { [weak self] event in
@@ -476,6 +646,20 @@ final class ImageSession {
       return try await .success(operation())
     } catch {
       return .failure(error)
+    }
+  }
+
+  private enum FileEditingError: LocalizedError {
+    case invalidDirectory
+    case invalidFileName
+
+    var errorDescription: String? {
+      switch self {
+      case .invalidDirectory:
+        "The selected location is not a folder."
+      case .invalidFileName:
+        "Enter a valid file name."
+      }
     }
   }
 }

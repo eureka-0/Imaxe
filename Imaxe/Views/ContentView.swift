@@ -47,7 +47,7 @@ struct ContentView: View {
       imageSession: imageSession,
       onAlertAcknowledged: handleImageAlertAcknowledged,
     )
-    .navigationTitle(imageSession.currentImageInfo?.fileName ?? "Imaxe")
+    .navigationTitle(imageSession.currentMetadata?.fileName ?? "Imaxe")
     .focusedSceneValue(imageSession)
     .focusedSceneValue(\.recentImages, recentImages)
     .dismissTextFocusOnClickOutside()
@@ -93,6 +93,13 @@ struct ContentView: View {
     }
     imageSession.removeRecentImage = { path in
       try RecentImagesStore.remove(path: path, in: modelContext)
+    }
+    imageSession.updateRecentImageLocation = { oldPath, newURL in
+      try await RecentImagesStore.updateLocation(
+        from: oldPath,
+        to: newURL,
+        in: modelContext,
+      )
     }
   }
 

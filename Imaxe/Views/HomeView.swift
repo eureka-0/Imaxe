@@ -24,6 +24,11 @@ struct HomeView: View {
 
   @State private var viewModel = HomeViewModel()
 
+  // UI layout constants
+  private let heroHeightRatio: CGFloat = 0.45
+  private let recentImageGridItemSizeRange: ClosedRange<CGFloat> = 72 ... 260
+  private let recentImageCollectionPadding: CGFloat = 4
+
   private var recentImagesViewMode: Binding<ImageCollectionViewMode> {
     Binding {
       ImageCollectionViewMode(rawValue: recentImagesViewModeRawValue) ?? .grid
@@ -35,10 +40,10 @@ struct HomeView: View {
   private var recentImagesGridItemSizeBinding: Binding<CGFloat> {
     Binding {
       CGFloat(recentImagesGridItemSize)
-        .clamped(to: Constants.recentImagesGridItemSizeRange)
+        .clamped(to: recentImageGridItemSizeRange)
     } set: { newValue in
       recentImagesGridItemSize = Double(
-        newValue.clamped(to: Constants.recentImagesGridItemSizeRange),
+        newValue.clamped(to: recentImageGridItemSizeRange),
       )
     }
   }
@@ -145,7 +150,7 @@ struct HomeView: View {
     .padding(.bottom, 16)
     .frame(maxWidth: .infinity)
     .containerRelativeFrame(.vertical, alignment: .center) { length, _ in
-      length * 0.45
+      length * heroHeightRatio
     }
   }
 
@@ -191,14 +196,14 @@ struct HomeView: View {
       contextMenu: recentImageActionsMenu,
     )
     .viewMode(recentImagesViewMode)
-    .gridItemLayout(size: recentImagesGridItemSizeBinding)
+    .gridItemLayout(size: recentImagesGridItemSizeBinding, sizeRange: recentImageGridItemSizeRange)
     .background(.controlBackground.opacity(0.5))
     .clipShape(ContainerRelativeShape())
     .overlay(
       ContainerRelativeShape()
         .strokeBorder(Color.separator, lineWidth: 0.5),
     )
-    .padding([.horizontal, .bottom], 4)
+    .padding([.horizontal, .bottom], recentImageCollectionPadding)
   }
 
   private func recentImageListRow(
@@ -461,9 +466,9 @@ final class HomeViewModel {
 
     guard !trimmedRenameText.isEmpty, trimmedRenameText != url.lastPathComponent else { return }
 
-    let newURL = url.deletingLastPathComponent().appendingPathComponent(trimmedRenameText)
+    let newURL: URL
     do {
-      try FileManager.default.moveItem(at: url, to: newURL)
+      newURL = try ImageSession.renameFile(at: url, to: trimmedRenameText)
     } catch {
       alertTitle = "Failed to Rename Item"
       alertMessage = error.localizedDescription

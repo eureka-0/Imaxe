@@ -11,9 +11,9 @@ PRODUCTS_DIR="${BUILD_ROOT}/Releases"
 DERIVED_DATA_DIR="${BUILD_ROOT}/DerivedData/Release"
 PUBLISH=false
 
-if [[ "${1:-}" == "--publish" ]]; then
+if [[ ${1:-} == "--publish" ]]; then
   PUBLISH=true
-elif [[ -n "${1:-}" ]]; then
+elif [[ -n ${1:-} ]]; then
   echo "usage: $0 [--publish]" >&2
   exit 64
 fi
@@ -26,11 +26,41 @@ fi
 require_value() {
   local name="$1"
   local value="$2"
-  if [[ -z "${value}" ]]; then
+  if [[ -z ${value} ]]; then
     echo "error: unable to determine ${name}" >&2
     exit 1
   fi
 }
+
+release_tag_for_version() {
+  local version="$1"
+  local component
+  local -a components=()
+
+  if [[ ! ${version} =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
+    echo "error: marketing version must contain one to three numeric components" >&2
+    exit 1
+  fi
+
+  IFS='.' read -r -a components <<<"${version}"
+  for component in "${components[@]}"; do
+    if [[ ! ${component} =~ ^[0-9]+$ ]]; then
+      echo "error: marketing version must contain only numeric components" >&2
+      exit 1
+    fi
+  done
+
+  while ((${#components[@]} < 3)); do
+    components+=("0")
+  done
+
+  printf 'v%s.%s.%s' "${components[0]}" "${components[1]}" "${components[2]}"
+}
+
+if [[ ${PUBLISH} == true && "$(git branch --show-current)" != "main" ]]; then
+  echo "Switching to main..."
+  git switch main
+fi
 
 BUILD_SETTINGS="$(xcodebuild -project "${PROJECT}" -scheme "${SCHEME}" \
   -configuration "${CONFIGURATION}" -destination "platform=macOS,arch=arm64" -showBuildSettings)"
@@ -52,11 +82,11 @@ ZIP_NAME="${RELEASE_ID}-macOS.zip"
 ZIP_FILE="${OUTPUT_DIR}/${ZIP_NAME}"
 NOTES_FILE="${OUTPUT_DIR}/release-notes.md"
 CHECKSUM_FILE="${OUTPUT_DIR}/SHA256SUMS.txt"
-TAG="v${VERSION}-build.${BUILD_NUMBER}"
+TAG="$(release_tag_for_version "${VERSION}")"
 
-if [[ "${PUBLISH}" == true ]]; then
+if [[ ${PUBLISH} == true ]]; then
   for file in "${ZIP_FILE}" "${NOTES_FILE}" "${CHECKSUM_FILE}"; do
-    if [[ ! -f "${file}" ]]; then
+    if [[ ! -f ${file} ]]; then
       echo "error: release artifact not found at ${file}; run $0 before publishing" >&2
       exit 1
     fi
@@ -70,16 +100,28 @@ if [[ "${PUBLISH}" == true ]]; then
     echo "error: GitHub Release ${TAG} already exists; refusing to replace it" >&2
     exit 1
   fi
-  gh release create "${TAG}" \
+
+  if git rev-parse --verify --quiet "refs/tags/${TAG}" >/dev/null; then
+    echo "error: local tag ${TAG} already exists; refusing to replace it" >&2
+    exit 1
+  fi
+  if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+    echo "error: remote tag ${TAG} already exists; refusing to replace it" >&2
+    exit 1
+  fi
+
+  git tag -a "${TAG}" -m "Imaxe ${TAG}"
+  git push origin "${TAG}"
+  gh release create --verify-tag "${TAG}" \
     "${ZIP_FILE}" \
     "${CHECKSUM_FILE}" \
-    --title "Imaxe ${VERSION} (${BUILD_NUMBER})" \
+    --title "Imaxe ${VERSION}" \
     --notes-file "${NOTES_FILE}"
   echo "Published GitHub Release ${TAG}"
   exit 0
 fi
 
-if [[ -e "${OUTPUT_DIR}" || -e "${ARCHIVE_PATH}" ]]; then
+if [[ -e ${OUTPUT_DIR} || -e ${ARCHIVE_PATH} ]]; then
   echo "error: release ${RELEASE_ID} already exists; refusing to overwrite a build identity" >&2
   exit 1
 fi
@@ -110,7 +152,7 @@ xcodebuild archive \
   -quiet
 
 ARCHIVED_APP="${ARCHIVE_PATH}/Products/Applications/${APP_NAME}"
-if [[ ! -d "${ARCHIVED_APP}" ]]; then
+if [[ ! -d ${ARCHIVED_APP} ]]; then
   echo "error: archived app not found at ${ARCHIVED_APP}" >&2
   exit 1
 fi
@@ -119,7 +161,7 @@ APP_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
   "${ARCHIVED_APP}/Contents/Info.plist")"
 APP_BUILD="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' \
   "${ARCHIVED_APP}/Contents/Info.plist")"
-if [[ "${APP_VERSION}" != "${VERSION}" || "${APP_BUILD}" != "${BUILD_NUMBER}" ]]; then
+if [[ ${APP_VERSION} != "${VERSION}" || ${APP_BUILD} != "${BUILD_NUMBER}" ]]; then
   echo "error: archived app version does not match resolved build settings" >&2
   exit 1
 fi

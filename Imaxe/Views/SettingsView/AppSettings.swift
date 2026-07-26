@@ -8,6 +8,8 @@
 import Foundation
 import SwiftUI
 
+// MARK: - AppSettings
+
 enum AppSettings {
   enum Keys: String, CaseIterable, Identifiable {
     case appearance
@@ -62,6 +64,8 @@ enum AppSettings {
   }
 }
 
+// MARK: - Appearance
+
 enum Appearance: String, CaseIterable, Identifiable {
   case system, light, dark
 
@@ -85,6 +89,8 @@ enum Appearance: String, CaseIterable, Identifiable {
     }
   }
 }
+
+// MARK: - BackgroundColor
 
 struct BackgroundColor: Codable, Equatable, RawRepresentable {
   let hex: String
@@ -121,6 +127,8 @@ enum ActionOnImageFileChange: String, CaseIterable, Identifiable {
   }
 }
 
+// MARK: - ImageActualSizeStrategy
+
 enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
   case pixelSize, pointSize, printSize
 
@@ -136,6 +144,8 @@ enum ImageActualSizeStrategy: String, CaseIterable, Identifiable {
     }
   }
 }
+
+// MARK: - LoadedImageWindowSizeMode
 
 enum LoadedImageWindowSizeMode: String, CaseIterable, Identifiable {
   case actualSizeLimitedToScreen, zoomToFitScreen, fillScreen, actualSize, fixedSize
@@ -155,6 +165,8 @@ enum LoadedImageWindowSizeMode: String, CaseIterable, Identifiable {
   }
 }
 
+// MARK: - LoadedImageWindowSizeUnit
+
 enum LoadedImageWindowSizeUnit: String, CaseIterable, Identifiable {
   case points, pixels
 
@@ -169,6 +181,8 @@ enum LoadedImageWindowSizeUnit: String, CaseIterable, Identifiable {
     }
   }
 }
+
+// MARK: - ImageInterpolationStrategy
 
 enum ImageInterpolationStrategy: String, CaseIterable, Identifiable {
   case none, low, medium, high

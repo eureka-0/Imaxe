@@ -65,20 +65,20 @@ extension ImageScrollViewCoordinator {
       let reduceMotion = shouldReduceMotion()
       let animatesWindowResize = !reduceMotion
         && resizeDuration >= Self.minimumWindowResizeAnimationDuration
-      let zoomAnimation: PreparedZoomAnimation? = if let simultaneousZoomScale {
-        prepareZoomAnimation(simultaneousZoomScale, to: scrollView)
-      } else {
-        nil
-      }
-      let animationDuration: TimeInterval = if reduceMotion {
-        0
-      } else if animatesWindowResize {
-        resizeDuration
-      } else if zoomAnimation != nil {
-        Self.programmaticZoomAnimationDuration
-      } else {
-        0
-      }
+      let zoomAnimation: PreparedZoomAnimation? = simultaneousZoomScale != nil
+        ? prepareZoomAnimation(simultaneousZoomScale!, to: scrollView) : nil
+
+      let animationDuration: TimeInterval =
+        if reduceMotion {
+          0
+        } else if animatesWindowResize {
+          resizeDuration
+        } else if zoomAnimation != nil {
+          Self.programmaticZoomAnimationDuration
+        } else {
+          0
+        }
+
       let synchronizesWindowAndZoom = animatesWindowResize && zoomAnimation != nil
       windowAnimationState.isApplyingWindowFrame = true
 

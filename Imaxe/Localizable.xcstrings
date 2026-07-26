@@ -51,6 +51,9 @@
         }
       }
     },
+    "%lld hidden items" : {
+
+    },
     "^[%lld image](inflect: true)" : {
       "localizations" : {
         "zh-Hans" : {
@@ -116,6 +119,9 @@
     "Clear" : {
 
     },
+    "Clear Color Tags" : {
+
+    },
     "Clear Menu" : {
 
     },
@@ -124,6 +130,16 @@
     },
     "Clear Search" : {
 
+    },
+    "Common Locations" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "常用位置"
+          }
+        }
+      }
     },
     "Could Not Clear Thumbnail Cache" : {
 
@@ -153,6 +169,16 @@
         }
       }
     },
+    "Empty" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空"
+          }
+        }
+      }
+    },
     "Failed to Clear Recent Images" : {
 
     },
@@ -160,6 +186,9 @@
 
     },
     "Failed to Load Image from Pasteboard" : {
+
+    },
+    "Failed to Move Item" : {
 
     },
     "Failed to Move Item to Trash" : {
@@ -174,6 +203,9 @@
     "Failed to Open Recent Image" : {
 
     },
+    "Failed to Read File Tags" : {
+
+    },
     "Failed to Refresh Recent Images" : {
 
     },
@@ -186,10 +218,19 @@
     "Failed to Rename Item" : {
 
     },
+    "Failed to Update File Tags" : {
+
+    },
     "Failed to Update Recent Images" : {
 
     },
+    "File Name" : {
+
+    },
     "File name %@" : {
+
+    },
+    "File Tags" : {
 
     },
     "Fill screen" : {
@@ -228,6 +269,16 @@
     "Home" : {
 
     },
+    "iCloud Library" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud 资料库"
+          }
+        }
+      }
+    },
     "Ignore" : {
 
     },
@@ -261,6 +312,9 @@
     "Loading..." : {
 
     },
+    "Location:" : {
+
+    },
     "Loop browsing" : {
 
     },
@@ -276,6 +330,9 @@
     "More" : {
 
     },
+    "More actions" : {
+
+    },
     "Move to Trash" : {
 
     },
@@ -283,6 +340,12 @@
 
     },
     "Name" : {
+
+    },
+    "Name:" : {
+
+    },
+    "Navigation" : {
 
     },
     "Next image" : {
@@ -379,6 +442,16 @@
     "Recent images count limit:" : {
 
     },
+    "Recent Locations" : {
+      "localizations" : {
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近访问的位置"
+          }
+        }
+      }
+    },
     "Reload" : {
 
     },
@@ -426,6 +499,9 @@
 
     },
     "System" : {
+
+    },
+    "Tags:" : {
 
     },
     "The image file was deleted:\n%@" : {

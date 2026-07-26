@@ -33,6 +33,10 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
   private var fileRecoveryScheduled = false
   private var directoryRecoveryScheduled = false
 
+  // File checking and polling intervals
+  private let stableFileCheckDeadline: DispatchTimeInterval = .seconds(10)
+  private let pollingIntervalOnFileChange: DispatchTimeInterval = .milliseconds(150)
+
   init(url: URL, onEvent: @escaping @MainActor @Sendable (Event) -> Void) {
     self.url = url
     self.onEvent = onEvent
@@ -131,7 +135,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
 
   private func scheduleStableFileCheck() {
     settleGeneration += 1
-    let deadline = DispatchTime.now() + Constants.stableFileCheckDeadline
+    let deadline = DispatchTime.now() + stableFileCheckDeadline
     scheduleStableFileCheck(
       previousSnapshot: nil,
       deadline: deadline,
@@ -144,7 +148,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
     deadline: DispatchTime,
     generation: Int,
   ) {
-    queue.asyncAfter(deadline: .now() + Constants.pollingIntervalOnFileChange) { [weak self] in
+    queue.asyncAfter(deadline: .now() + pollingIntervalOnFileChange) { [weak self] in
       guard let self else { return }
       guard generation == settleGeneration else { return }
 
@@ -218,7 +222,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
     guard !fileRecoveryScheduled else { return }
     fileRecoveryScheduled = true
 
-    queue.asyncAfter(deadline: .now() + Constants.pollingIntervalOnFileChange) { [weak self] in
+    queue.asyncAfter(deadline: .now() + pollingIntervalOnFileChange) { [weak self] in
       guard let self else { return }
       fileRecoveryScheduled = false
       guard fileSource == nil else { return }
@@ -235,7 +239,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
     guard !directoryRecoveryScheduled else { return }
     directoryRecoveryScheduled = true
 
-    queue.asyncAfter(deadline: .now() + Constants.pollingIntervalOnFileChange) { [weak self] in
+    queue.asyncAfter(deadline: .now() + pollingIntervalOnFileChange) { [weak self] in
       guard let self else { return }
       directoryRecoveryScheduled = false
       guard directorySource == nil else { return }

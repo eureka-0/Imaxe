@@ -15,7 +15,7 @@ Do not expand into RAW editing, professional color grading, layers, batch proces
 - Use `XcodeRefreshCodeIssuesInFile` for quick Swift diagnostics in a file.
 - Use `BuildProject` for build-only validation when appropriate.
 - Always search Apple documentation first for Liquid Glass, FoundationModels, and new or changed SwiftUI representable APIs.
-- Run tests with `Scripts/test.sh`. Do not use Xcode tools / MCP to run tests.
+- Run tests with `just test`. Do not use Xcode tools / MCP to run tests.
 
 ## Directory Structure
 

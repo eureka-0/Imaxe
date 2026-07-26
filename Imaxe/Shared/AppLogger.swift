@@ -168,7 +168,8 @@ actor AppLogger {
       let line = "[\(timestamp)] [\(category.rawValue)] [\(level.rawValue)] \(message)\n"
       if let data = line.data(using: .utf8) {
         if UInt64(data.count) > Self.maximumLogFileSize {
-          let truncatedLine = "[\(timestamp)] [\(category.rawValue)] [\(level.rawValue)] Log entry truncated.\n"
+          let truncatedLine =
+            "[\(timestamp)] [\(category.rawValue)] [\(level.rawValue)] Log entry truncated.\n"
           guard let truncatedData = truncatedLine.data(using: .utf8) else { return }
           let fileHandle = try fileHandle(for: UInt64(truncatedData.count))
           try fileHandle.write(contentsOf: truncatedData)

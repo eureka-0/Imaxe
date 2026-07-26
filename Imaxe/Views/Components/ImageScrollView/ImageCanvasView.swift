@@ -8,18 +8,11 @@
 import AppKit
 
 final class ImageCanvasView: NSView {
-  var imageContainer: ImageContainer {
+  var document: ImageDocument {
     didSet {
-      if oldValue.nsImage !== imageContainer.nsImage {
+      if oldValue.id != document.id {
         resetGIFAnimation()
       }
-      updateCanvasSize()
-      needsDisplay = true
-    }
-  }
-
-  var imageInfo: ImageInfo {
-    didSet {
       updateCanvasSize()
       updateAccessibility()
       needsDisplay = true
@@ -48,9 +41,8 @@ final class ImageCanvasView: NSView {
     true
   }
 
-  init(imageContainer: ImageContainer, imageInfo: ImageInfo) {
-    self.imageContainer = imageContainer
-    self.imageInfo = imageInfo
+  init(document: ImageDocument) {
+    self.document = document
     super.init(frame: NSRect())
     updateCanvasSize()
     setupObservation()
@@ -190,7 +182,7 @@ final class ImageCanvasView: NSView {
   /// Updates the canvas size based on the current image actual size strategy and the loaded image's
   /// properties.
   private func updateCanvasSize() {
-    let pixelSize = imageContainer.pixelSize
+    let pixelSize = document.pixelSize
 
     switch imageActualSizeStrategy {
     case .pixelSize:
@@ -202,8 +194,8 @@ final class ImageCanvasView: NSView {
       frame.size = pixelSize
     case .printSize:
       let inchesSize = CGSize(
-        width: pixelSize.width / CGFloat(imageInfo.DPI.width),
-        height: pixelSize.height / CGFloat(imageInfo.DPI.height),
+        width: pixelSize.width / CGFloat(document.metadata.DPI.width),
+        height: pixelSize.height / CGFloat(document.metadata.DPI.height),
       )
       let ppi = window?.screen?.getPPI() ?? Constants.fallbackScreenPPI
       let screenPixelSize = CGSize(
@@ -261,7 +253,7 @@ final class ImageCanvasView: NSView {
   }
 
   private func drawNSImage(hints: [NSImageRep.HintKey: Any]?) {
-    let image = gifImage ?? imageContainer.nsImage
+    let image = gifImage ?? document.nsImage
     image.draw(
       in: bounds,
       from: NSRect(origin: .zero, size: image.size),
@@ -301,9 +293,10 @@ final class ImageCanvasView: NSView {
       return gifBitmapRep
     }
 
-    guard let bitmapRep = imageContainer.makeAnimatedBitmapRepresentation() else { return nil }
+    guard let bitmapRep = document.makeAnimatedBitmapRepresentation() else { return nil }
 
-    let image = NSImage(size: imageContainer.nsImage.size)
+    let image = NSImage(size: document.nsImage.size)
+    image.cacheMode = document.nsImage.cacheMode
     image.addRepresentation(bitmapRep)
     gifBitmapRep = bitmapRep
     gifImage = image
@@ -367,6 +360,6 @@ final class ImageCanvasView: NSView {
   private func updateAccessibility() {
     setAccessibilityElement(true)
     setAccessibilityRole(.image)
-    setAccessibilityLabel(imageInfo.fileName)
+    setAccessibilityLabel(document.metadata.fileName)
   }
 }

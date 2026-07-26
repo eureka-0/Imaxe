@@ -49,8 +49,9 @@ private struct DismissTextFocusOnClickOutside: NSViewRepresentable {
       ]) { [weak self] event in
         guard
           let self,
+          let trackedWindow,
           let window = event.window,
-          window === trackedWindow,
+          window.isAttachedTo(trackedWindow),
           let contentView = window.contentView
         else {
           return event

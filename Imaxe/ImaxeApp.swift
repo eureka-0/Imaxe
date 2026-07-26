@@ -9,8 +9,30 @@ import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
 
+class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationDidFinishLaunching(_: Notification) {
+    NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+      Self.routeHorizontalArrowKey(event, in: event.window)
+    }
+  }
+
+  static func routeHorizontalArrowKey(_ event: NSEvent, in window: NSWindow?) -> NSEvent? {
+    let arrowKeyCodes: Set<UInt16> = [123, 124] // left: 123, right: 124
+    guard arrowKeyCodes.contains(event.keyCode),
+          let textView = window?.focusedTextView(scope: .windowTree)
+    else {
+      return event
+    }
+
+    textView.keyDown(with: event)
+    return nil
+  }
+}
+
 @main
 struct ImaxeApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance: Appearance = AppSettings.Defaults.appearance
 
@@ -59,56 +81,43 @@ struct ImaxeApp: App {
   }
 
   var body: some Scene {
-    Window("Home", id: "home") {
-      HomeView()
-        .ignoresSafeArea()
-        .frame(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
-        .applyAppearance(appearance)
-        .configureWindow { window in
-          window.isMovableByWindowBackground = true
-          window.titleVisibility = .hidden
-          window.titlebarAppearsTransparent = true
-          window.tabbingMode = .disallowed
-        }
-    }
-    .modelContainer(modelContainer)
-    .windowStyle(.hiddenTitleBar)
-    .windowResizability(.contentSize)
-    .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
-    .defaultLaunchBehavior(.presented)
-    .restorationBehavior(.disabled)
+    Group {
+      Window("Home", id: "home") {
+        HomeView()
+          .configureAppWindow(appearance: appearance, shouldIgnoreSafeArea: true)
+          .frame(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+      }
+      .windowStyle(.hiddenTitleBar)
+      .windowResizability(.contentSize)
+      .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+      .defaultLaunchBehavior(.presented)
+      .restorationBehavior(.disabled)
 
-    WindowGroup("Image", id: "image", for: ImageWindowRequest.self) { $request in
-      ContentView(request: request)
-        .ignoresSafeArea()
-        .applyAppearance(appearance)
-        .frame(
-          minWidth: Constants.minimumWindowContentWidth,
-          minHeight: Constants.minimumWindowContentHeight,
-        )
-        .configureWindow { window in
-          window.isMovableByWindowBackground = true
-          window.titleVisibility = .hidden
-          window.titlebarAppearsTransparent = true
-          window.tabbingMode = .disallowed
-        }
+      WindowGroup("Image", id: "image", for: ImageWindowRequest.self) { $request in
+        ContentView(request: request)
+          .configureAppWindow(appearance: appearance, shouldIgnoreSafeArea: true)
+          .frame(
+            minWidth: Constants.minimumWindowContentWidth,
+            minHeight: Constants.minimumWindowContentHeight,
+          )
+      }
+      .windowStyle(.hiddenTitleBar)
+      .windowResizability(.contentSize)
+      .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
+      .defaultLaunchBehavior(.suppressed)
+      .restorationBehavior(.disabled)
+      .handlesExternalEvents(matching: ["*"])
+
+      Settings {
+        SettingsView()
+          .applyAppearance(appearance)
+      }
     }
     .modelContainer(modelContainer)
-    .windowStyle(.hiddenTitleBar)
-    .windowResizability(.contentSize)
-    .defaultSize(width: Constants.defaultWindowWidth, height: Constants.defaultWindowHeight)
-    .defaultLaunchBehavior(.suppressed)
-    .restorationBehavior(.disabled)
-    .handlesExternalEvents(matching: ["*"])
     .commands {
       CommandGroup(replacing: .toolbar) {}
       FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
-    }
-
-    Settings {
-      SettingsView()
-        .applyAppearance(appearance)
     }
   }
 }
@@ -135,6 +144,30 @@ private struct WindowConfigurator: NSViewRepresentable {
 }
 
 private extension View {
+  func configureAppWindow(
+    appearance: Appearance? = nil,
+    shouldIgnoreSafeArea: Bool = false,
+  ) -> some View {
+    Group {
+      if let appearance, shouldIgnoreSafeArea {
+        applyAppearance(appearance)
+          .ignoresSafeArea()
+      } else if let appearance {
+        applyAppearance(appearance)
+      } else if shouldIgnoreSafeArea {
+        ignoresSafeArea()
+      } else {
+        self
+      }
+    }
+    .configureWindow { window in
+      window.isMovableByWindowBackground = true
+      window.titleVisibility = .hidden
+      window.titlebarAppearsTransparent = true
+      window.tabbingMode = .disallowed
+    }
+  }
+
   func configureWindow(_ configure: @escaping (NSWindow) -> Void) -> some View {
     background(WindowConfigurator(configure: configure))
   }

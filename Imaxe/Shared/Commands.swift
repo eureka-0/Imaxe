@@ -5,6 +5,7 @@
 //  Created by lxlong on 2026/6/17.
 //
 
+import AppKit
 import SwiftData
 import SwiftUI
 
@@ -73,11 +74,20 @@ struct FileOperationCommands: Commands {
             .disabled(true)
         } else {
           ForEach(recentImages) { recentImage in
-            Button(recentImage.fileName) {
+            Button {
               if let imageSession {
                 imageSession.openRecentImage(recentImage)
               } else if let homeViewModel {
                 homeViewModel.openRecentImage(recentImage)
+              }
+            } label: {
+              Label {
+                Text(recentImage.url.lastPathComponent)
+              } icon: {
+                Image(nsImage: NSWorkspace.shared.icon(forFile: recentImage.url.filePath))
+                  .resizable()
+                  .scaledToFit()
+                  .frame(width: 16, height: 16)
               }
             }
             .disabled(imageSession == nil && homeViewModel == nil)
@@ -103,7 +113,7 @@ struct FileOperationCommands: Commands {
         imageSession?.revealInFinder()
       }
       .keyboardShortcut("r", modifiers: [.command, .shift])
-      .disabled(imageSession?.currentImageInfo == nil && imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentMetadata == nil && imageSession?.currentDocument == nil)
     }
   }
 }
@@ -133,25 +143,25 @@ struct ViewCommands: Commands {
         imageSession?.zoomIn()
       }
       .keyboardShortcut("+", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Zoom Out") {
         imageSession?.zoomOut()
       }
       .keyboardShortcut("-", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Fit to Window") {
         imageSession?.fitToWindow()
       }
       .keyboardShortcut("0", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Actual Size") {
         imageSession?.setZoomScale(1.0)
       }
       .keyboardShortcut("1", modifiers: .command)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Divider()
 
@@ -159,25 +169,25 @@ struct ViewCommands: Commands {
         imageSession?.pan(horizontal: -Constants.keyboardPanDistance, vertical: 0)
       }
       .keyboardShortcut(.leftArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Pan Right") {
         imageSession?.pan(horizontal: Constants.keyboardPanDistance, vertical: 0)
       }
       .keyboardShortcut(.rightArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Pan Up") {
         imageSession?.pan(horizontal: 0, vertical: -Constants.keyboardPanDistance)
       }
       .keyboardShortcut(.upArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Button("Pan Down") {
         imageSession?.pan(horizontal: 0, vertical: Constants.keyboardPanDistance)
       }
       .keyboardShortcut(.downArrow, modifiers: .option)
-      .disabled(imageSession?.currentImage == nil)
+      .disabled(imageSession?.currentDocument == nil)
 
       Divider()
     }

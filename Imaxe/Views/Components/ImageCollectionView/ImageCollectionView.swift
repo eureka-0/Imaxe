@@ -48,12 +48,12 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
   var defaultSortOptionID: ImageCollectionSortOption<Item>.ID?
 
   var defaultSortOption: ImageCollectionSortOption<Item>? {
-    set {
-      defaultSortOptionID = newValue?.id
-    }
     get {
       guard let defaultSortOptionID else { return nil }
       return sortOptions.first { $0.id == defaultSortOptionID }
+    }
+    set {
+      defaultSortOptionID = newValue?.id
     }
   }
 
@@ -63,6 +63,7 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
   var defaultViewMode: ImageCollectionViewMode = .grid
   var defaultSortAscending: Bool = false
   var defaultGridItemSize: CGFloat = 120
+  var gridItemSizeRange: ClosedRange<CGFloat> = 50 ... 300
   var gridSpacing: CGFloat = 0
   var gridMagnificationSensitivity: CGFloat = 0.3
 }
@@ -235,14 +236,14 @@ struct ImageCollectionView<
 
   private var effectiveGridItemSize: CGFloat {
     (gridItemSize?.wrappedValue ?? viewModel.gridItemSize)
-      .clamped(to: Constants.recentImagesGridItemSizeRange)
+      .clamped(to: configuration.gridItemSizeRange)
   }
 
   private var effectiveGridItemSizeBinding: Binding<CGFloat> {
     Binding {
       effectiveGridItemSize
     } set: { newValue in
-      let clampedValue = newValue.clamped(to: Constants.recentImagesGridItemSizeRange)
+      let clampedValue = newValue.clamped(to: configuration.gridItemSizeRange)
       if let gridItemSize {
         gridItemSize.wrappedValue = clampedValue
       } else {
@@ -735,15 +736,19 @@ extension ImageCollectionView {
   func gridItemLayout(
     size: Binding<CGFloat>? = nil,
     defaultSize: CGFloat? = nil,
+    sizeRange: ClosedRange<CGFloat>? = nil,
     spacing: CGFloat? = nil,
     magnificationSensitivity: CGFloat? = nil,
   ) -> Self {
     var view = self
     view.gridItemSize = size
+    if let sizeRange {
+      view.configuration.gridItemSizeRange = sizeRange
+    }
     if let defaultSize {
       view.configuration.defaultGridItemSize =
         defaultSize
-          .clamped(to: Constants.recentImagesGridItemSizeRange)
+          .clamped(to: view.configuration.gridItemSizeRange)
     }
     if let spacing {
       view.configuration.gridSpacing = spacing

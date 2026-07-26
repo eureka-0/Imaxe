@@ -9,6 +9,8 @@ import Foundation
 import Observation
 import SwiftData
 
+// MARK: - RecentImage
+
 @Model
 final class RecentImage {
   @Attribute(.unique) var path: String
@@ -77,6 +79,8 @@ final class RecentImage {
     url.deletingLastPathComponent().filePath
   }
 }
+
+// MARK: - RecentImagesStore
 
 enum RecentImagesStore {
   static var recentImagesCountLimit: Int {

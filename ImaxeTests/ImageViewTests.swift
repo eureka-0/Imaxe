@@ -6,6 +6,7 @@
 //
 
 import AppKit
+import ImageIO
 @testable import Imaxe
 import SwiftUI
 import Testing
@@ -13,26 +14,38 @@ import Testing
 @MainActor
 @Suite("Image View")
 struct ImageViewTests {
-  @Test func `bitmap image container uses pixel size`() {
-    let image = TestSupport.bitmapImage()
-    let url = URL(fileURLWithPath: "/tmp/example.png")
+  @Test func `bitmap image document uses pixel size`() async throws {
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-document-size-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
 
-    let imageContainer = ImageContainer(url: url, nsImage: image)
+    let document = try await ImageLoader.shared.loadDocument(from: url)
 
-    #expect(imageContainer.pixelSize == NSSize(width: 10, height: 20))
-    #expect(imageContainer.nsImage.size == NSSize(width: 10, height: 20))
+    #expect(document.pixelSize == NSSize(width: 10, height: 20))
+    #expect(document.nsImage.size == NSSize(width: 10, height: 20))
   }
 
-  @Test func `canvas occupies image pixel size in backing pixels`() {
-    let image = TestSupport.bitmapImage()
-    let url = URL(fileURLWithPath: "/tmp/example.png")
-    let imageContainer = ImageContainer(url: url, nsImage: image)
-    let imageInfo = ImageInfo(url: url)
+  @Test func `canvas occupies image pixel size in backing pixels`() async throws {
+    let defaults = UserDefaults.standard
+    let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
+    let previousValue = defaults.object(forKey: key)
+    defaults.set(ImageActualSizeStrategy.pixelSize.rawValue, forKey: key)
+    defer {
+      if let previousValue {
+        defaults.set(previousValue, forKey: key)
+      } else {
+        defaults.removeObject(forKey: key)
+      }
+    }
 
-    let canvas = ImageCanvasView(
-      imageContainer: imageContainer,
-      imageInfo: imageInfo,
-    )
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-canvas-size-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 10, height: 20).write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let document = try await ImageLoader.shared.loadDocument(from: url)
+
+    let canvas = ImageCanvasView(document: document)
     let window = NSWindow(
       contentRect: NSRect(origin: .zero, size: NSSize(width: 200, height: 200)),
       styleMask: [.titled],
@@ -42,10 +55,53 @@ struct ImageViewTests {
     window.contentView?.addSubview(canvas)
 
     let backingSize = canvas.convertToBacking(canvas.bounds.size)
-    #expect(backingSize.isApproximatelyEqual(to: imageContainer.pixelSize))
+    #expect(backingSize.isApproximatelyEqual(to: document.pixelSize))
   }
 
-  @Test func `always fit to window still applies after viewport preserving image change`() {
+  @Test func `downsampled proxy keeps source sized canvas`() throws {
+    let defaults = UserDefaults.standard
+    let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
+    let previousValue = defaults.object(forKey: key)
+    defaults.set(ImageActualSizeStrategy.pointSize.rawValue, forKey: key)
+    defer {
+      if let previousValue {
+        defaults.set(previousValue, forKey: key)
+      } else {
+        defaults.removeObject(forKey: key)
+      }
+    }
+
+    let sourceSize = IntSize(width: 20, height: 10)
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-proxy-canvas-\(UUID().uuidString).png")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try TestSupport.pngData(width: sourceSize.width, height: sourceSize.height).write(to: url)
+
+    let imageSource = try #require(CGImageSourceCreateWithURL(url as CFURL, nil))
+    let metadata = try ImageMetadata(bitmapURL: url, imageSource: imageSource)
+    let proxy = try #require(ImageLoader.downsampledBitmap(
+      from: imageSource,
+      metadata: metadata,
+      maximumDimension: 16,
+    ))
+    let fileSnapshot = try #require(FileSnapshot(url: url))
+    let document = ImageDocument(
+      url: url,
+      fileSnapshot: fileSnapshot,
+      metadata: metadata,
+      content: .staticBitmap(proxy.image),
+      renderedPixelSize: proxy.pixelSize,
+    )
+
+    let canvas = ImageCanvasView(document: document)
+
+    #expect(proxy.image.size == NSSize(width: 16, height: 8))
+    #expect(document.pixelSize == sourceSize.nsSize)
+    #expect(canvas.frame.size == sourceSize.nsSize)
+  }
+
+  @Test func `always fit to window still applies after viewport preserving image change`(
+  ) async throws {
     var reportedZoomScale: CGFloat?
     let coordinator = ImageScrollView.Coordinator(
       onZoomScaleChange: { reportedZoomScale = $0 },
@@ -55,17 +111,18 @@ struct ImageViewTests {
       frame: NSRect(origin: .zero, size: NSSize(width: 100, height: 100)),
     )
     let imageView = NSView(frame: NSRect(origin: .zero, size: NSSize(width: 200, height: 100)))
-    let imageContainer = ImageContainer(
-      url: URL(fileURLWithPath: "/tmp/example.png"),
-      nsImage: TestSupport.bitmapImage(width: 200, height: 100),
-    )
+    let url = URL.temporaryDirectory
+      .appending(path: "imaxe-fit-document-\(UUID().uuidString).png")
+    try TestSupport.pngData(width: 200, height: 100).write(to: url)
+    defer { try? FileManager.default.removeItem(at: url) }
+    let document = try await ImageLoader.shared.loadDocument(from: url)
     scrollView.allowsMagnification = true
     scrollView.minMagnification = Constants.imageZoomScaleRange.lowerBound
     scrollView.maxMagnification = Constants.imageZoomScaleRange.upperBound
     scrollView.documentView = imageView
     coordinator.updateAlwaysFitToWindowFromBinding(true)
     coordinator.prepareForImage(
-      imageContainer,
+      document,
       shouldApplyLoadedImageWindowSize: false,
     )
 
@@ -179,15 +236,17 @@ struct ImageViewTests {
     #expect(scrollView.contentView.bounds.origin == NSPoint(x: 140, y: 130))
   }
 
-  @Test func `animated image containers create independent frame state`() async throws {
+  @Test func `animated image documents create independent frame state`() async throws {
     let loader = ImageLoader.shared
-    let image = try await loader.loadImage(
+    let document = try await loader.loadDocument(
       from: TestSupport.sampleImageURL("sample_384×512.gif"),
     )
-    let firstRepresentation = try #require(image.makeAnimatedBitmapRepresentation())
-    let secondRepresentation = try #require(image.makeAnimatedBitmapRepresentation())
+    let firstRepresentation = try #require(document.makeAnimatedBitmapRepresentation())
+    let secondRepresentation = try #require(document.makeAnimatedBitmapRepresentation())
 
     #expect(firstRepresentation !== secondRepresentation)
+    #expect(document.metadata.isAnimated)
+    #expect(document.metadata.imageCount > 1)
     firstRepresentation.setProperty(.currentFrame, withValue: 1)
     #expect(secondRepresentation.currentGIFFrame == 0)
   }

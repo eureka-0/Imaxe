@@ -19,8 +19,7 @@ struct ImageScrollView: NSViewRepresentable {
   typealias Coordinator = ImageScrollViewCoordinator
   typealias NSViewType = NSScrollView
 
-  let imageContainer: ImageContainer
-  let imageInfo: ImageInfo
+  let document: ImageDocument
   let shouldApplyLoadedImageWindowSize: Bool
   var viewportController: ImageViewportController?
   @Binding var zoomScale: CGFloat
@@ -84,10 +83,7 @@ struct ImageScrollView: NSViewRepresentable {
     let scrollView = ImageNSScrollView()
     let centeringClipView = ImageClipView()
     let clampedZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
-    centeringClipView.documentView = ImageCanvasView(
-      imageContainer: imageContainer,
-      imageInfo: imageInfo,
-    )
+    centeringClipView.documentView = ImageCanvasView(document: document)
     scrollView.contentView = centeringClipView
 
     scrollView.automaticallyAdjustsContentInsets = false
@@ -110,7 +106,7 @@ struct ImageScrollView: NSViewRepresentable {
       fixedSizeUnit: fixedLoadedImageWindowSizeUnit,
     )
     context.coordinator.prepareForImage(
-      imageContainer,
+      document,
       shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
     )
     if let viewportController {
@@ -124,13 +120,11 @@ struct ImageScrollView: NSViewRepresentable {
     scrollView.onLiveMagnificationStart = { [weak coordinator = context.coordinator] in
       coordinator?.beginUserMagnification()
     }
-    scrollView.onLiveMagnificationEnd = { [
-      weak coordinator = context.coordinator,
-      weak scrollView,
-    ] in
-      guard let scrollView else { return }
-      coordinator?.endUserMagnification(scrollView)
-    }
+    scrollView.onLiveMagnificationEnd =
+      { [weak coordinator = context.coordinator, weak scrollView] in
+        guard let scrollView else { return }
+        coordinator?.endUserMagnification(scrollView)
+      }
     scrollView.onSmartMagnification = { [weak coordinator = context.coordinator] in
       coordinator?.disableAlwaysFitToWindowForUserMagnification()
     }
@@ -158,22 +152,16 @@ struct ImageScrollView: NSViewRepresentable {
     let clampedZoomScale = zoomScale.clamped(to: Constants.imageZoomScaleRange)
 
     if let imageView = scrollView.documentView as? ImageCanvasView {
-      if imageView.imageContainer.nsImage !== imageContainer.nsImage {
-        imageView.imageContainer = imageContainer
+      if imageView.document.id != document.id || imageView.document.url != document.url {
+        imageView.document = document
         scrollView.reflectScrolledClipView(scrollView.contentView)
       }
-      if imageView.imageInfo != imageInfo {
-        imageView.imageInfo = imageInfo
-      }
     } else {
-      scrollView.documentView = ImageCanvasView(
-        imageContainer: imageContainer,
-        imageInfo: imageInfo,
-      )
+      scrollView.documentView = ImageCanvasView(document: document)
     }
 
     context.coordinator.prepareForImage(
-      imageContainer,
+      document,
       shouldApplyLoadedImageWindowSize: shouldApplyLoadedImageWindowSize,
     )
     if !context.coordinator.isLiveMagnifying || context.coordinator.hasPendingCommands {
@@ -238,18 +226,20 @@ struct ImageScrollView: NSViewRepresentable {
     }
 
     override func mouseDown(with event: NSEvent) {
+      guard event.type == .leftMouseDown, event.clickCount > 0 else { return }
+
       if event.clickCount == 2 {
         onDoubleClick?()
         return
       }
 
-      guard canPanDocument else {
-        super.mouseDown(with: event)
+      if canPanDocument {
+        isPanning = true
+        NSCursor.openHand.set()
         return
       }
 
-      isPanning = true
-      NSCursor.openHand.set()
+      super.mouseDown(with: event)
     }
 
     override func mouseDragged(with event: NSEvent) {
@@ -271,13 +261,6 @@ struct ImageScrollView: NSViewRepresentable {
       super.mouseUp(with: event)
     }
 
-    override func resetCursorRects() {
-      super.resetCursorRects()
-      if canPanDocument {
-        addCursorRect(bounds, cursor: .openHand)
-      }
-    }
-
     var canPanDocument: Bool {
       guard let documentView else { return false }
 
@@ -285,7 +268,8 @@ struct ImageScrollView: NSViewRepresentable {
         width: documentView.bounds.width * magnification,
         height: documentView.bounds.height * magnification,
       )
-      return displayedSize.width > contentSize.width || displayedSize.height > contentSize.height
+      return displayedSize.width > contentSize.width + 1
+        || displayedSize.height > contentSize.height + 1
     }
 
     func panDocument(by directManipulationDelta: NSSize) {
