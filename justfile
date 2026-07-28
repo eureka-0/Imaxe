@@ -16,6 +16,10 @@ lint:
 test *args:
     ./Scripts/test.sh {{ args }}
 
+# Test file update functionality.
+test-file-update:
+    ./Scripts/test-file-update.sh
+
 # Build the zip file for distribution.
 build:
     ./Scripts/build-zip.sh

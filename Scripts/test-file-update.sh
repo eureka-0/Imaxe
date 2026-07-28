@@ -1,5 +1,9 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Xinlong Liu.
 
+# Used to test if the app can detect the changes of the graph image file and update
+# the displayed graph accordingly.
 set -o pipefail
 
 OUTPUT_FILE="./Images/sample_updating.png"

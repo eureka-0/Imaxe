@@ -1,10 +1,13 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Xinlong Liu.
 
 set -euo pipefail
 
 PROJECT="Imaxe.xcodeproj"
 SCHEME="Imaxe"
 CONFIGURATION="Release"
+REPOSITORY_URL="https://github.com/eureka-0/Imaxe"
 BUILD_ROOT="${PWD}/Build"
 ARCHIVES_DIR="${BUILD_ROOT}/Archives"
 PRODUCTS_DIR="${BUILD_ROOT}/Releases"
@@ -32,31 +35,6 @@ require_value() {
   fi
 }
 
-release_tag_for_version() {
-  local version="$1"
-  local component
-  local -a components=()
-
-  if [[ ! ${version} =~ ^[0-9]+(\.[0-9]+){0,2}$ ]]; then
-    echo "error: marketing version must contain one to three numeric components" >&2
-    exit 1
-  fi
-
-  IFS='.' read -r -a components <<<"${version}"
-  for component in "${components[@]}"; do
-    if [[ ! ${component} =~ ^[0-9]+$ ]]; then
-      echo "error: marketing version must contain only numeric components" >&2
-      exit 1
-    fi
-  done
-
-  while ((${#components[@]} < 3)); do
-    components+=("0")
-  done
-
-  printf 'v%s.%s.%s' "${components[0]}" "${components[1]}" "${components[2]}"
-}
-
 if [[ ${PUBLISH} == true && "$(git branch --show-current)" != "main" ]]; then
   echo "Switching to main..."
   git switch main
@@ -78,11 +56,39 @@ OUTPUT_DIR="${PRODUCTS_DIR}/${RELEASE_ID}"
 STAGING_DIR="${PRODUCTS_DIR}/.${RELEASE_ID}-$(uuidgen).tmp"
 ARCHIVE_PATH="${ARCHIVES_DIR}/${RELEASE_ID}.xcarchive"
 APP_NAME="${SCHEME}.app"
-ZIP_NAME="${RELEASE_ID}-macOS.zip"
-ZIP_FILE="${OUTPUT_DIR}/${ZIP_NAME}"
-NOTES_FILE="${OUTPUT_DIR}/release-notes.md"
 CHECKSUM_FILE="${OUTPUT_DIR}/SHA256SUMS.txt"
-TAG="$(release_tag_for_version "${VERSION}")"
+TAG="v${VERSION}"
+ARTIFACT_NAME="${SCHEME}-${VERSION}"
+ZIP_NAME="${ARTIFACT_NAME}.zip"
+NOTES_NAME="${ARTIFACT_NAME}.md"
+APPCAST_NAME="appcast.xml"
+ZIP_FILE="${OUTPUT_DIR}/${ZIP_NAME}"
+NOTES_FILE="${OUTPUT_DIR}/${NOTES_NAME}"
+APPCAST_FILE="${OUTPUT_DIR}/${APPCAST_NAME}"
+
+generate_appcast() {
+  local generate_appcast_tool
+  local release_download_url
+
+  generate_appcast_tool="$(find "${BUILD_ROOT}" -type f \
+    -path '*/Sparkle-*/bin/generate_appcast' -print -quit)"
+  if [[ -z ${generate_appcast_tool} ]]; then
+    echo "error: Sparkle generate_appcast tool not found under ${BUILD_ROOT}" >&2
+    exit 1
+  fi
+
+  release_download_url="${REPOSITORY_URL}/releases/download/${TAG}/"
+  "${generate_appcast_tool}" \
+    --download-url-prefix "${release_download_url}" \
+    --release-notes-url-prefix "${release_download_url}" \
+    --link "${REPOSITORY_URL}" \
+    "${OUTPUT_DIR}"
+
+  if [[ ! -f ${APPCAST_FILE} ]]; then
+    echo "error: Sparkle appcast was not generated at ${APPCAST_FILE}" >&2
+    exit 1
+  fi
+}
 
 if [[ ${PUBLISH} == true ]]; then
   for file in "${ZIP_FILE}" "${NOTES_FILE}" "${CHECKSUM_FILE}"; do
@@ -110,10 +116,13 @@ if [[ ${PUBLISH} == true ]]; then
     exit 1
   fi
 
+  generate_appcast
+
   git tag -a "${TAG}" -m "Imaxe ${TAG}"
   git push origin "${TAG}"
   gh release create --verify-tag "${TAG}" \
     "${ZIP_FILE}" \
+    "${NOTES_FILE}" \
     "${CHECKSUM_FILE}" \
     --title "Imaxe ${VERSION}" \
     --notes-file "${NOTES_FILE}"
@@ -167,7 +176,7 @@ if [[ ${APP_VERSION} != "${VERSION}" || ${APP_BUILD} != "${BUILD_NUMBER}" ]]; th
 fi
 
 STAGING_ZIP="${STAGING_DIR}/${ZIP_NAME}"
-STAGING_NOTES="${STAGING_DIR}/release-notes.md"
+STAGING_NOTES="${STAGING_DIR}/${NOTES_NAME}"
 STAGING_CHECKSUM="${STAGING_DIR}/SHA256SUMS.txt"
 
 echo "Creating ${STAGING_ZIP}..."

@@ -18,6 +18,10 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] Clearly document that unsigned or ad-hoc-signed artifacts may be blocked by Gatekeeper, including installation instructions for limited distribution.
 - [ ] Verify download, extraction, and first launch on a Mac without a development environment.
 
+### Sparkle Updates
+
+- [ ] Add `SUFeedURL` after the GitHub Pages appcast is publicly available, then verify an update from a lower `CFBundleVersion` using the published feed and Release assets.
+
 ## P2 — Performance, Compatibility, and Experience
 
 ### Test Reliability
