@@ -17,3 +17,6 @@ Build/
 
 ## SwiftPad generated files
 buildServer.json
+
+## Private EdDSA key backup for Sparkle
+.private-ed-key

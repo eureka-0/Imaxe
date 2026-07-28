@@ -23,3 +23,10 @@ build:
 # Create a GitHub release and upload the built zip file.
 publish:
     ./Scripts/build-zip.sh --publish
+
+_sparkle_find_result := `find ./Build -type d -name "Sparkle-*" | head -n 1`
+sparkle_dir := if _sparkle_find_result != "" { _sparkle_find_result } else { error("Sparkle directory not found.") }
+
+# Generate Sparkle keys for signing updates.
+generate-keys:
+    exec {{ sparkle_dir }}/bin/generate_keys

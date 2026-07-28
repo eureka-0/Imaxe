@@ -104,6 +104,12 @@
     "Ascending" : {
 
     },
+    "Automatically check for updates" : {
+
+    },
+    "Automatically download updates" : {
+
+    },
     "Background color:" : {
 
     },
@@ -111,6 +117,9 @@
 
     },
     "Cancel" : {
+
+    },
+    "Check for Updates" : {
 
     },
     "Choose zoom level" : {
@@ -514,6 +523,9 @@
 
     },
     "Unpin Window" : {
+
+    },
+    "Updates:" : {
 
     },
     "Width" : {

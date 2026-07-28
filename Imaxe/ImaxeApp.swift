@@ -5,9 +5,41 @@
 //  Created by lxlong on 2026/6/14.
 //
 
+import Combine
+import Sparkle
 import SwiftData
 import SwiftUI
 import UniformTypeIdentifiers
+
+// MARK: - CheckForUpdates
+
+final class CheckForUpdatesViewModel: ObservableObject {
+  @Published var canCheckForUpdates: Bool = false
+
+  init(updater: SPUUpdater) {
+    updater.publisher(for: \.canCheckForUpdates)
+      .assign(to: &$canCheckForUpdates)
+  }
+}
+
+struct CheckForUpdatesView: View {
+  @ObservedObject var viewModel: CheckForUpdatesViewModel
+  private let updater: SPUUpdater
+
+  init(updater: SPUUpdater) {
+    self.updater = updater
+    viewModel = CheckForUpdatesViewModel(updater: updater)
+  }
+
+  var body: some View {
+    Button("Check for Updates") {
+      updater.checkForUpdates()
+    }
+    .disabled(!viewModel.canCheckForUpdates)
+  }
+}
+
+// MARK: - AppDelegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationDidFinishLaunching(_: Notification) {
@@ -29,6 +61,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
   }
 }
 
+// MARK: - ImaxeApp
+
 @main
 struct ImaxeApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -36,9 +70,15 @@ struct ImaxeApp: App {
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance: Appearance = AppSettings.Defaults.appearance
 
+  private let updaterController: SPUStandardUpdaterController
   private let modelContainer: ModelContainer
 
   init() {
+    updaterController = SPUStandardUpdaterController(
+      startingUpdater: true,
+      updaterDelegate: nil,
+      userDriverDelegate: nil,
+    )
     let modelFileURL = URL.dataDirectory.appendingPathComponent("database.sqlite")
     do {
       try FileManager.default.ensureExists(for: URL.dataDirectory)
@@ -109,18 +149,23 @@ struct ImaxeApp: App {
       .handlesExternalEvents(matching: ["*"])
 
       Settings {
-        SettingsView()
+        SettingsView(updater: updaterController.updater)
           .applyAppearance(appearance)
       }
     }
     .modelContainer(modelContainer)
     .commands {
+      CommandGroup(after: .appInfo) {
+        CheckForUpdatesView(updater: updaterController.updater)
+      }
       CommandGroup(replacing: .toolbar) {}
       FileOperationCommands(modelContainer: modelContainer)
       ViewCommands()
     }
   }
 }
+
+// MARK: - Helpers
 
 private struct WindowConfigurator: NSViewRepresentable {
   let configure: (NSWindow) -> Void

@@ -5,14 +5,17 @@
 //  Created by lxlong on 2026/6/23.
 //
 
+import Sparkle
 import SwiftUI
 
 // MARK: - SettingsView
 
 struct SettingsView: View {
+  let updater: SPUUpdater
+
   var body: some View {
     TabView {
-      GeneralSettingsView()
+      GeneralSettingsView(updater: updater)
         .tabItem { Label("General", systemImage: "gearshape") }
 
       ImageSettingsView()
@@ -27,6 +30,8 @@ struct SettingsView: View {
 // MARK: - GeneralSettingsView
 
 struct GeneralSettingsView: View {
+  private let updater: SPUUpdater
+
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance = AppSettings.Defaults.appearance
 
@@ -47,6 +52,8 @@ struct GeneralSettingsView: View {
 
   @State private var totalCacheSize: Int = ImageThumbnailCache.totalCacheSizeInBytes()
   @State private var cacheClearErrorMessage: String?
+  @State private var automaticallyChecksForUpdates: Bool
+  @State private var automaticallyDownloadsUpdates: Bool
 
   private var isCacheClearErrorPresented: Binding<Bool> {
     Binding {
@@ -56,6 +63,12 @@ struct GeneralSettingsView: View {
         cacheClearErrorMessage = nil
       }
     }
+  }
+
+  init(updater: SPUUpdater) {
+    self.updater = updater
+    automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
+    automaticallyDownloadsUpdates = updater.automaticallyDownloadsUpdates
   }
 
   var body: some View {
@@ -70,6 +83,24 @@ struct GeneralSettingsView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .gridCellAnchor(.leading)
+      }
+
+      GridRow(alignment: .top) {
+        Text("Updates:")
+
+        VStack(alignment: .leading, spacing: 5) {
+          Toggle("Automatically check for updates", isOn: $automaticallyChecksForUpdates)
+            .onChange(of: automaticallyChecksForUpdates) { _, newValue in
+              updater.automaticallyChecksForUpdates = newValue
+            }
+
+          Toggle("Automatically download updates", isOn: $automaticallyDownloadsUpdates)
+            .disabled(!automaticallyChecksForUpdates)
+            .onChange(of: automaticallyDownloadsUpdates) { _, newValue in
+              updater.automaticallyDownloadsUpdates = newValue
+            }
+        }
         .gridCellAnchor(.leading)
       }
 
