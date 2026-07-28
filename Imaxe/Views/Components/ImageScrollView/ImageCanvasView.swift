@@ -1,9 +1,5 @@
-//
-//  ImageCanvasView.swift
-//  Imaxe
-//
-//  Created by lxlong on 2026/6/20.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
 

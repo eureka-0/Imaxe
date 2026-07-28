@@ -1,7 +1,5 @@
-//
-//  AdaptiveToolbarLayoutState.swift
-//  Imaxe
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import SwiftUI
 
