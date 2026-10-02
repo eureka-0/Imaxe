@@ -656,6 +656,9 @@ private struct ImageInfoPanel: View {
         infoRow(title: "Bit Depth", value: metadata.bitDepthDescription)
         infoRow(title: "Color Space", value: metadata.colorSpaceDescription)
         infoRow(title: "Has Alpha", value: metadata.alphaDescription)
+        if let pageDescription = metadata.pageDescription {
+          infoRow(title: "TIFF Page", value: pageDescription)
+        }
       }
     }
     .padding(14)

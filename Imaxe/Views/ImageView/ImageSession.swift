@@ -461,11 +461,10 @@ final class ImageSession {
 
         currentMetadata = metadata
       }
-      async let documentResult = Self.result {
+      startFolderScan(for: url, imageLoad: imageLoad)
+      let document = await Self.result {
         try await loadImageDocument(url, imageLoad.requestID)
       }
-      async let imageURLs = loadFolderImageURLs(url)
-      let (document, folderURLs) = await (documentResult, imageURLs)
 
       guard imageLoad === activeImageLoad, !Task.isCancelled else {
         removeTemporaryFile(temporaryURL)
@@ -484,7 +483,7 @@ final class ImageSession {
         folderNavigator = FolderNavigator(
           for: url,
           enableLoopBrowsing: enableLoopBrowsing,
-          imageURLs: folderURLs ?? initialImageURLs(from: folderNavigator, for: url),
+          imageURLs: imageLoad.folderURLs ?? initialImageURLs(from: folderNavigator, for: url),
         )
         updateImageFileWatcher()
         if oldTemporaryURL != temporaryURL {
@@ -501,6 +500,7 @@ final class ImageSession {
         }
 
       case let .failure(error):
+        imageLoad.folderTask?.cancel()
         currentMetadata = currentDocument?.metadata
         removeTemporaryFile(temporaryURL)
         handleImageLoadFailure(
@@ -517,6 +517,8 @@ final class ImageSession {
   private final class ImageLoadOperation {
     let requestID = ImageLoader.LoadRequestID()
     var metadataTask: Task<Void, Never>?
+    var folderTask: Task<Void, Never>?
+    var folderURLs: [URL]?
     var hasCommittedDocument = false
   }
 
@@ -563,6 +565,7 @@ final class ImageSession {
 
   private func cancelCurrentImageLoad() {
     imageLoadTask?.cancel()
+    activeImageLoad.folderTask?.cancel()
     currentMetadata = currentDocument?.metadata
     stopLoadingTimer(for: activeImageLoad)
     removeTemporaryFile(pendingTemporaryURL)
@@ -570,6 +573,22 @@ final class ImageSession {
     let requestID = activeImageLoad.requestID
     Task {
       await ImageLoader.shared.cancelLoads(for: requestID)
+    }
+  }
+
+  private func startFolderScan(for url: URL, imageLoad: ImageLoadOperation) {
+    imageLoad.folderTask = Task { [weak self, weak imageLoad] in
+      guard let self, let imageLoad else { return }
+      let urls = await loadFolderImageURLs(url)
+      guard imageLoad === activeImageLoad, !Task.isCancelled else { return }
+      imageLoad.folderURLs = urls
+      if imageLoad.hasCommittedDocument, displayedURL == url, let urls {
+        folderNavigator = FolderNavigator(
+          for: url,
+          enableLoopBrowsing: enableLoopBrowsing,
+          imageURLs: urls,
+        )
+      }
     }
   }
 

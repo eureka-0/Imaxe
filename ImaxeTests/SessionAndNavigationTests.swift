@@ -352,6 +352,53 @@ struct SessionAndNavigationTests {
     #expect(session.folderNavigator?.imageURLs == [secondSiblingURL, secondURL])
   }
 
+  @Test func `slow directory scan does not block document commit`() async throws {
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let sibling = TestSupport.sampleImageURL("sample_1280×853.jpeg")
+    let (gate, continuation) = AsyncStream<Void>.makeStream()
+    defer { continuation.finish() }
+    let session = ImageSession()
+    defer { session.close() }
+    session.loadFolderImageURLs = { _ in
+      for await _ in gate {
+        break
+      }
+      return [sibling, url]
+    }
+    session.loadImage(from: url, addToRecent: false)
+    try await TestSupport.waitUntil { session.currentDocument != nil && !session.isLoading }
+    #expect(session.displayedURL == url)
+    #expect(session.folderNavigator?.currentImageURL == url)
+    continuation.yield()
+    continuation.finish()
+    try await TestSupport.waitUntil { session.folderNavigator?.imageURLs.contains(sibling) == true }
+  }
+
+  @Test func `cancelled slow scan cannot change navigation after image is shown`() async throws {
+    let url = TestSupport.sampleImageURL("sample_1280×853.png")
+    let next = TestSupport.sampleImageURL("sample_1280×853.jpeg")
+    let (gate, continuation) = AsyncStream<Void>.makeStream()
+    defer { continuation.finish() }
+    let session = ImageSession()
+    defer { session.close() }
+    session.loadFolderImageURLs = { sourceURL in
+      if sourceURL == url {
+        for await _ in gate {
+          break
+        }
+        return [url]
+      }
+      return [next]
+    }
+    session.loadImage(from: url, addToRecent: false)
+    try await TestSupport.waitUntil { session.displayedURL == url }
+    session.loadImage(from: next, addToRecent: false)
+    try await TestSupport.waitUntil { session.displayedURL == next && !session.isLoading }
+    continuation.yield()
+    continuation.finish()
+    #expect(session.folderNavigator?.currentImageURL == next)
+  }
+
   @Test func `image loading timer stops after a replaced request`() async throws {
     let directory = URL.temporaryDirectory
       .appending(path: "imaxe-loading-timer-\(UUID().uuidString)", directoryHint: .isDirectory)

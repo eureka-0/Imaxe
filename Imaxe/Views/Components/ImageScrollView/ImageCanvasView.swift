@@ -19,7 +19,7 @@ final class ImageCanvasView: NSView {
   private var gifTimer: Timer?
   private var gifBitmapRep: NSBitmapImageRep?
   private var gifImage: NSImage?
-  private var currentGIFFrame = 0
+  private var gifPlayback = GIFPlaybackState()
   private var userDefaultsObservers: [NSKeyValueObservation] = []
   private var appObservers: [NSObjectProtocol] = []
   private var windowObservers: [NSObjectProtocol] = []
@@ -190,8 +190,8 @@ final class ImageCanvasView: NSView {
       frame.size = pixelSize
     case .printSize:
       let inchesSize = CGSize(
-        width: pixelSize.width / CGFloat(document.metadata.DPI.width),
-        height: pixelSize.height / CGFloat(document.metadata.DPI.height),
+        width: pixelSize.width / CGFloat(document.metadata.displayDPI.width),
+        height: pixelSize.height / CGFloat(document.metadata.displayDPI.height),
       )
       let ppi = window?.screen?.getPPI() ?? Constants.fallbackScreenPPI
       let screenPixelSize = CGSize(
@@ -270,6 +270,7 @@ final class ImageCanvasView: NSView {
   }
 
   private func updateGIFAnimationPlayback() {
+    guard !gifPlayback.isFinished else { return }
     guard isGIFAnimationPlaybackEligible else {
       pauseGIFAnimation()
       return
@@ -296,7 +297,6 @@ final class ImageCanvasView: NSView {
     image.addRepresentation(bitmapRep)
     gifBitmapRep = bitmapRep
     gifImage = image
-    currentGIFFrame = bitmapRep.currentGIFFrame ?? 0
     return bitmapRep
   }
 
@@ -309,7 +309,7 @@ final class ImageCanvasView: NSView {
     pauseGIFAnimation()
     gifBitmapRep = nil
     gifImage = nil
-    currentGIFFrame = 0
+    gifPlayback = GIFPlaybackState()
   }
 
   private func scheduleNextGIFFrame(for bitmapRep: NSBitmapImageRep) {
@@ -346,8 +346,12 @@ final class ImageCanvasView: NSView {
       return
     }
 
-    currentGIFFrame = (currentGIFFrame + 1) % frameCount
-    bitmapRep.setProperty(.currentFrame, withValue: currentGIFFrame)
+    let loopCount = (bitmapRep.value(forProperty: .loopCount) as? NSNumber)?.intValue ?? 1
+    guard gifPlayback.advance(frameCount: frameCount, loopCount: loopCount) else {
+      pauseGIFAnimation()
+      return
+    }
+    bitmapRep.setProperty(.currentFrame, withValue: gifPlayback.frame)
     needsDisplay = true
 
     scheduleNextGIFFrame(for: bitmapRep)

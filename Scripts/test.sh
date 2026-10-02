@@ -15,7 +15,8 @@ Options:
   --ui-only                 Run only the UI-test target.
   --suite <name>            Run a unit-test suite. Repeat to select multiple suites.
                             Accepted names: ImageLoadingTests, ImageViewTests,
-                            RecentImagesTests, SessionAndNavigationTests, SharedUITests.
+                            RecentImagesTests, SessionAndNavigationTests, SharedUITests,
+                            ImageFidelityTests, ImagePerformanceTests, AdaptiveToolbarTests.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.
