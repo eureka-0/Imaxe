@@ -27,6 +27,8 @@
 		</dict>
 	</array>
 
+    <key>SUFeedURL</key>
+    <string>https://eureka-0.github.io/Imaxe/appcast.xml</string>
     <key>SUPublicEDKey</key>
     <string>1aeCYjnxEXKT7rN8fr8An15uI2+LqlyfMDedJxLFgMg=</string>
 </dict>

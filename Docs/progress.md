@@ -26,14 +26,23 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Limited GitHub Distribution
 
-- [ ] Include the supported macOS 15.6+ and Apple Silicon scope in generated GitHub Release notes.
+- [x] Release 说明模板已包含实际最低系统版本、Apple Silicon / arm64、提交变更、安装和迁移说明；正式发布前继续审阅生成内容。
 - [ ] Do not apply for an Apple Developer account: do not configure `Apple Development`, `Developer ID`, notarization, or stapling workflows.
-- [ ] Clearly document that unsigned or ad-hoc-signed artifacts may be blocked by Gatekeeper, including installation instructions for limited distribution.
+- [x] README 与 Release 模板已说明 ad-hoc/Gatekeeper、Applications 安装步骤及 Apple 官方 Open Anyway 操作；未新增 Developer ID 或公证依赖。
 - [ ] Verify download, extraction, and first launch on a Mac without a development environment.
 
 ### Sparkle Updates
 
 - [ ] Add `SUFeedURL` after the GitHub Pages appcast is publicly available, then verify an update from a lower `CFBundleVersion` using the published feed and Release assets.
+- [x] 2026-10-19：确认公开仓库、匿名下载历史 ZIP，并启用 Pages 的 Actions 发布来源；`SUFeedURL` 与初始空 feed、部署工作流已准备。线上 XML 仍需主分支首次部署。
+- [x] 现有 Keychain 公钥匹配 SUPublicEDKey，实际签名通过，修改内容与错误公钥被拒绝；没有导出或更换私钥。
+- [x] 发布流程已加入产物摘要/EdDSA/包内元数据校验、固定提交、线上 feed 与已发布 manifest 构建号比较、draft 资产回读及一致产物恢复逻辑；不再自动切分支或覆盖不匹配资产。
+- [x] 发布脚本在首次 Xcode 调用前取得构建/发布共用的原子目录锁；锁冲突不触发清理，构建/发布冲突、失败重试和终止释放回归通过。
+- [x] 实际归档发现并修复通用二进制问题：发布显式使用 `ARCHS=arm64`，本地真实 ZIP 的架构、版本、feed、公钥、appcast 和深层代码签名均通过校验。
+- [x] 匿名检查实际 v1.0.0 ZIP：包内为 1.0 (4)、最低 macOS 14.0，无 Sparkle/feed/公钥，确认需要先手动迁移一次。
+- [ ] 将已审查的 develop 变更合并 main，等待 Updates 工作流发布初始 feed，再匿名核验 HTTP 200 与 XML 内容；本轮未推送代码。
+- [ ] 在干净 main 选择最终版本/构建号，运行完整 just build / just publish；实际验证中途上传恢复、Pages 失败恢复与匿名新资产下载。
+- [ ] 使用两个正式打包构建完成 A/B 真实升级及第二台普通 Mac 的安装/迁移/授权验收。实施记录见 [AUTO_UPDATE_IMPLEMENTATION_2026-10-19.md](agents/AUTO_UPDATE_IMPLEMENTATION_2026-10-19.md)。
 
 ## P2 — Performance, Compatibility, and Experience
 
@@ -42,6 +51,7 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] Replace timing-based metadata preload coverage with an explicit document-load gate so the session test remains deterministic under parallel test load.
 - [x] Verify equivalent results across repeated image loads without requiring `NSCache` to retain document identity under memory pressure.
 - [x] 保留原等价重载测试，并补充清空缓存后元数据、尺寸及实际渲染像素相等的测试；不依赖对象身份和自动淘汰时机。
+- [x] 发布校验测试的编译与子进程等待移到后台，避免阻塞主线程；保持既有窗口断言和超时阈值不变，最终完整回归 109 项通过。
 
 ### Rendering and Performance
 

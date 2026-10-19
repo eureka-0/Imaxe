@@ -28,9 +28,10 @@ build:
 publish:
     ./Scripts/build-zip.sh --publish
 
-_sparkle_find_result := `find ./Build -type d -name "Sparkle-*" | head -n 1`
-sparkle_dir := if _sparkle_find_result != "" { _sparkle_find_result } else { error("Sparkle directory not found.") }
-
 # Generate Sparkle keys for signing updates.
 generate-keys:
-    exec {{ sparkle_dir }}/bin/generate_keys
+    ./Build/DerivedData/Release/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
+
+# Redeploy a stable appcast after a failed deployment, or select a previous valid release.
+deploy-updates tag="":
+    gh workflow run updates.yml --repo eureka-0/Imaxe -f release_tag={{ quote(tag) }}

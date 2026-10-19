@@ -16,7 +16,8 @@ Options:
   --suite <name>            Run a unit-test suite. Repeat to select multiple suites.
                             Accepted names: ImageLoadingTests, ImageViewTests,
                             RecentImagesTests, SessionAndNavigationTests, SharedUITests,
-                            ImageFidelityTests, ImagePerformanceTests, AdaptiveToolbarTests.
+                            ImageFidelityTests, ImagePerformanceTests, AdaptiveToolbarTests,
+                            ReleaseValidationTests, ReleaseLockTests.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.
