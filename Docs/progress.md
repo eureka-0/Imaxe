@@ -68,7 +68,7 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] 当前是固定分辨率代理；高倍缩放不会恢复来源细节，后续按性能证据决定是否按需提高分辨率。
 - [ ] Xcode 27 / macOS 27 环境曾出现测试宿主连接前超时，重跑可恢复；若再次出现，保留 xcresult 诊断，不将未执行测试记录为通过。
 - [x] 将 ImageCollectionView 的状态与默认配置构造移入初始化器，独立创建 ImageSession 元数据任务；七处泛型隔离警告及一处 weak capture 警告已清除，Xcode 构建和文件诊断均无警告。
-- [ ] 当前 SwiftFormat 的 repeatedGuard 规则仍报告 ImageCollectionView 原有的两条连续 guard；已确认 HEAD 中同样存在，与本轮并发警告修复无关。
+- [x] 合并 ImageCollectionView 中返回条件相同的连续 guard，保留原有短路判断顺序，SwiftFormat repeatedGuard 检查通过。
 
 ## References
 

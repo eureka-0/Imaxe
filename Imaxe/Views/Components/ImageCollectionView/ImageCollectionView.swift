@@ -252,8 +252,7 @@ struct ImageCollectionView<
     Binding {
       effectiveViewMode
     } set: { newValue in
-      guard fixedViewMode == nil else { return }
-      guard newValue != effectiveViewMode else { return }
+      guard fixedViewMode == nil, newValue != effectiveViewMode else { return }
 
       withAnimation(viewModeAnimation) {
         if let viewMode {
