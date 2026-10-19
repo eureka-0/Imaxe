@@ -71,7 +71,7 @@ struct ImaxeApp: App {
 
   init() {
     updaterController = SPUStandardUpdaterController(
-      startingUpdater: true,
+      startingUpdater: !ProcessInfo.processInfo.arguments.contains("--disable-updates-for-testing"),
       updaterDelegate: nil,
       userDriverDelegate: nil,
     )

@@ -26,7 +26,7 @@ struct SettingsView: View {
 // MARK: - GeneralSettingsView
 
 struct GeneralSettingsView: View {
-  private let updater: SPUUpdater
+  @State private var updateSettings: UpdateSettings
 
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance = AppSettings.Defaults.appearance
@@ -48,8 +48,6 @@ struct GeneralSettingsView: View {
 
   @State private var totalCacheSize: Int = ImageThumbnailCache.totalCacheSizeInBytes()
   @State private var cacheClearErrorMessage: String?
-  @State private var automaticallyChecksForUpdates: Bool
-  @State private var automaticallyDownloadsUpdates: Bool
 
   private var isCacheClearErrorPresented: Binding<Bool> {
     Binding {
@@ -62,9 +60,7 @@ struct GeneralSettingsView: View {
   }
 
   init(updater: SPUUpdater) {
-    self.updater = updater
-    automaticallyChecksForUpdates = updater.automaticallyChecksForUpdates
-    automaticallyDownloadsUpdates = updater.automaticallyDownloadsUpdates
+    _updateSettings = State(initialValue: UpdateSettings(updater: updater))
   }
 
   var body: some View {
@@ -86,16 +82,16 @@ struct GeneralSettingsView: View {
         Text("Updates:")
 
         VStack(alignment: .leading, spacing: 5) {
-          Toggle("Automatically check for updates", isOn: $automaticallyChecksForUpdates)
-            .onChange(of: automaticallyChecksForUpdates) { _, newValue in
-              updater.automaticallyChecksForUpdates = newValue
-            }
+          Toggle("Automatically check for updates", isOn: Binding(
+            get: { updateSettings.automaticallyChecksForUpdates },
+            set: { updateSettings.setAutomaticallyChecksForUpdates($0) },
+          ))
 
-          Toggle("Automatically download updates", isOn: $automaticallyDownloadsUpdates)
-            .disabled(!automaticallyChecksForUpdates)
-            .onChange(of: automaticallyDownloadsUpdates) { _, newValue in
-              updater.automaticallyDownloadsUpdates = newValue
-            }
+          Toggle("Automatically download updates", isOn: Binding(
+            get: { updateSettings.automaticallyDownloadsUpdates },
+            set: { updateSettings.setAutomaticallyDownloadsUpdates($0) },
+          ))
+          .disabled(!updateSettings.allowsAutomaticUpdates)
         }
         .gridCellAnchor(.leading)
       }

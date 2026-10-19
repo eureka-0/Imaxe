@@ -17,7 +17,7 @@ Options:
                             Accepted names: ImageLoadingTests, ImageViewTests,
                             RecentImagesTests, SessionAndNavigationTests, SharedUITests,
                             ImageFidelityTests, ImagePerformanceTests, AdaptiveToolbarTests,
-                            ReleaseValidationTests, ReleaseLockTests.
+                            UpdateSettingsTests, ReleaseValidationTests, ReleaseLockTests.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.

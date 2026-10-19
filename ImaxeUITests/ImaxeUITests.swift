@@ -12,6 +12,7 @@ final class ImaxeUITests: XCTestCase {
 
     continueAfterFailure = false
     app = XCUIApplication()
+    app.launchArguments = ["--disable-updates-for-testing"]
     app.terminate()
     app.launch()
     app.activate()

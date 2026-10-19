@@ -38,8 +38,10 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] 现有 Keychain 公钥匹配 SUPublicEDKey，实际签名通过，修改内容与错误公钥被拒绝；没有导出或更换私钥。
 - [x] 发布流程已加入产物摘要/EdDSA/包内元数据校验、固定提交、线上 feed 与已发布 manifest 构建号比较、draft 资产回读及一致产物恢复逻辑；不再自动切分支或覆盖不匹配资产。
 - [x] 发布脚本在首次 Xcode 调用前取得构建/发布共用的原子目录锁；锁冲突不触发清理，构建/发布冲突、失败重试和终止释放回归通过。
+- [x] 更新设置持续观察 Sparkle 的检查、下载与 allowsAutomaticUpdates；默认与禁用下载配置的状态同步测试通过。
 - [x] 实际归档发现并修复通用二进制问题：发布显式使用 `ARCHS=arm64`，本地真实 ZIP 的架构、版本、feed、公钥、appcast 和深层代码签名均通过校验。
 - [x] 匿名检查实际 v1.0.0 ZIP：包内为 1.0 (4)、最低 macOS 14.0，无 Sparkle/feed/公钥，确认需要先手动迁移一次。
+- [x] 单元和 UI 测试增加仅测试启动参数，停用真实更新调度；设置单元测试仍使用独立的 Sparkle fixture 验证状态变化。
 - [ ] 将已审查的 develop 变更合并 main，等待 Updates 工作流发布初始 feed，再匿名核验 HTTP 200 与 XML 内容；本轮未推送代码。
 - [ ] 在干净 main 选择最终版本/构建号，运行完整 just build / just publish；实际验证中途上传恢复、Pages 失败恢复与匿名新资产下载。
 - [ ] 使用两个正式打包构建完成 A/B 真实升级及第二台普通 Mac 的安装/迁移/授权验收。实施记录见 [AUTO_UPDATE_IMPLEMENTATION_2026-10-19.md](agents/AUTO_UPDATE_IMPLEMENTATION_2026-10-19.md)。
