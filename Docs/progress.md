@@ -67,7 +67,8 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] 长 GIF 仍需测量并控制 ImageIO 转码及 AppKit 帧表示的临时内存；保留像素预算已经生效，进程峰值仍明显高于该预算，详见性能报告。
 - [ ] 当前是固定分辨率代理；高倍缩放不会恢复来源细节，后续按性能证据决定是否按需提高分辨率。
 - [ ] Xcode 27 / macOS 27 环境曾出现测试宿主连接前超时，重跑可恢复；若再次出现，保留 xcresult 诊断，不将未执行测试记录为通过。
-- [ ] 编译仍提示 ImageCollectionView 泛型 Identifiable 的 actor 隔离警告，以及 ImageSession 原有 metadata task 的 weak capture 警告；本轮未改动这些路径。
+- [x] 将 ImageCollectionView 的状态与默认配置构造移入初始化器，独立创建 ImageSession 元数据任务；七处泛型隔离警告及一处 weak capture 警告已清除，Xcode 构建和文件诊断均无警告。
+- [ ] 当前 SwiftFormat 的 repeatedGuard 规则仍报告 ImageCollectionView 原有的两条连续 guard；已确认 HEAD 中同样存在，与本轮并发警告修复无关。
 
 ## References
 

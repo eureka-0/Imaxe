@@ -448,19 +448,7 @@ final class ImageSession {
         }
       }
 
-      imageLoad.metadataTask = Task { @MainActor [weak self, weak imageLoad] in
-        guard let self, let imageLoad else { return }
-        let metadataResult = await Self.result {
-          try await loadImageMetadata(url, imageLoad.requestID)
-        }
-        guard imageLoad === activeImageLoad,
-              !imageLoad.hasCommittedDocument,
-              !Task.isCancelled,
-              case let .success(metadata) = metadataResult
-        else { return }
-
-        currentMetadata = metadata
-      }
+      startMetadataLoad(for: url, imageLoad: imageLoad)
       startFolderScan(for: url, imageLoad: imageLoad)
       let document = await Self.result {
         try await loadImageDocument(url, imageLoad.requestID)
@@ -573,6 +561,22 @@ final class ImageSession {
     let requestID = activeImageLoad.requestID
     Task {
       await ImageLoader.shared.cancelLoads(for: requestID)
+    }
+  }
+
+  private func startMetadataLoad(for url: URL, imageLoad: ImageLoadOperation) {
+    imageLoad.metadataTask = Task { [weak self, weak imageLoad] in
+      guard let self, let imageLoad else { return }
+      let metadataResult = await Self.result {
+        try await loadImageMetadata(url, imageLoad.requestID)
+      }
+      guard imageLoad === activeImageLoad,
+            !imageLoad.hasCommittedDocument,
+            !Task.isCancelled,
+            case let .success(metadata) = metadataResult
+      else { return }
+
+      currentMetadata = metadata
     }
   }
 
