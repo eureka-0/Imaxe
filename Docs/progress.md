@@ -42,7 +42,8 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Sparkle Updates
 
-- [ ] P0 启动阻断与修复验收：原 A `1.1.0 (11)` 和原 B `1.1.0 (12)` 的主程序为 ad-hoc + Hardened Runtime，没有 Library Validation 例外，dyld 拒绝加载同样没有 Team ID 的 Sparkle。B 归档启动已复现退出码 134；静态深层签名校验通过不能作为独立启动证据。隔离副本仅添加 `com.apple.security.cs.disable-library-validation` 后已加载 Sparkle 并进入 AppKit 主循环，正式配置与回归正在补齐；新 A 的用户安装验收仍待完成。
+- [ ] P0 启动阻断与修复验收：原 A `1.1.0 (11)` 和原 B `1.1.0 (12)` 的主程序为 ad-hoc + Hardened Runtime，没有 Library Validation 例外，dyld 拒绝加载同样没有 Team ID 的 Sparkle。B 归档启动已复现退出码 134；静态深层签名校验通过不能作为独立启动证据。隔离副本仅添加 `com.apple.security.cs.disable-library-validation` 后已加载 Sparkle 并进入 AppKit 主循环，正式配置及回归已修复；新 A 的最终 ZIP 独立启动和用户安装验收仍需完成后分别记录。
+- [x] 正式签名修复：通过 Xcode 为应用 Debug/Release 配置 `Imaxe/Imaxe.entitlements`，只添加 Library Validation 例外，保留 Hardened Runtime；版本维持 `1.1.0 (12)`。发布校验使用 Security API 读取真实签名标志和 entitlements，拒绝缺少例外的 ad-hoc Hardened Runtime 包。`just test --skip-ui --suite ReleaseValidationTests --no-coverage` 最终 2 项通过、0 失败，包含真实签名 fixture 的缺失例外拒绝用例，结果为 `Build/TestResults/Imaxe-20261020-230442.xcresult`；Swift 类型检查、Xcode 文件诊断、SwiftFormat 和 SwiftLint 均通过。
 - [x] 故障发布已按用户授权撤回：`v1.1.0` 转回 draft，标签和五个资产保留；Updates run `39442929884` 成功恢复空 feed，匿名 HTTP 200、0 条更新且与源文件一致，故障 ZIP 的匿名 URL 返回 404。用户要求直接删除旧故障包及 Build 过时产物，已清理旧 Build（约 4.4 GiB），诊断结论保存在忽略目录 `Docs/agents/SPARKLE_LAUNCH_FAILURE_2026-10-20.md`。
 - [x] 公开空 feed 验收：2026-10-20 匿名请求 `https://eureka-0.github.io/Imaxe/appcast.xml` 返回 HTTP 200，`application/xml`，XML 解析为 1 个 RSS channel、0 个更新条目，与 `Distribution/appcast.xml` 字节一致；SHA-256 为 `91ad5658dd8d8dfa61e843b3d2445fee3997346d5854d67114060ecf676bf1bb`。本项只确认 feed 部署与可访问性。
 - [ ] 发布事件部署限制：`v1.1.0` 的 Updates run `39438881020` 在执行步骤前被 github-pages 环境规则拒绝，原因是仅允许 main branch、未允许 release tag。本次已通过现有 workflow_dispatch 从 main 指定 `release_tag=v1.1.0` 完成部署，但环境规则未改；后续发布前需确认标签部署策略或固定采用 main 手动入口，不将首次自动运行记为成功。

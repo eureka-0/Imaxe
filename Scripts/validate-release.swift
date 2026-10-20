@@ -3,6 +3,7 @@
 
 import CryptoKit
 import Foundation
+import Security
 
 struct ReleaseValidationError: LocalizedError {
   let errorDescription: String?
@@ -30,6 +31,31 @@ func run(_ executable: String, _ arguments: [String]) throws -> String {
   let text = String(decoding: data, as: UTF8.self)
   try require(process.terminationStatus == 0, "\(executable) failed: \(text.prefix(1000))")
   return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
+func validateLibraryValidation(app: URL) throws {
+  var code: SecStaticCode?
+  let status = SecStaticCodeCreateWithPath(app as CFURL, [], &code)
+  guard status == errSecSuccess, let code else {
+    throw ReleaseValidationError("Unable to inspect release code signature: \(status)")
+  }
+  var information: CFDictionary?
+  let flags = SecCSFlags(rawValue: kSecCSSigningInformation)
+  let informationStatus = SecCodeCopySigningInformation(code, flags, &information)
+  guard informationStatus == errSecSuccess,
+        let signature = information as? [String: Any],
+        let rawFlags = signature[kSecCodeInfoFlags as String] as? NSNumber
+  else {
+    throw ReleaseValidationError("Unable to read release signing information")
+  }
+  let signatureFlags = SecCodeSignatureFlags(rawValue: rawFlags.uint32Value)
+  if signatureFlags.contains([.adhoc, .runtime]) {
+    let entitlements = signature[kSecCodeInfoEntitlementsDict as String] as? [String: Any] ?? [:]
+    try require(
+      entitlements["com.apple.security.cs.disable-library-validation"] as? Bool == true,
+      "Ad-hoc hardened runtime requires the library validation exception to load Sparkle",
+    )
+  }
 }
 
 func validate(directory: URL, expectedCommit: String) throws {
@@ -154,6 +180,7 @@ func validate(directory: URL, expectedCommit: String) throws {
   )
   try require(architectures == "arm64", "Expected an Apple Silicon release")
   _ = try run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app.path])
+  try validateLibraryValidation(app: app)
 }
 
 do {
@@ -163,7 +190,9 @@ do {
     "usage: swift Scripts/validate-release.swift <directory> <commit>",
   )
   try validate(directory: URL(fileURLWithPath: arguments[1]), expectedCommit: arguments[2])
-  print("Release checksums, EdDSA signature, appcast and app bundle verified.")
+  print(
+    "Release checksums, EdDSA signature, appcast, app bundle and library validation policy verified.",
+  )
 } catch {
   FileHandle.standardError.write(Data("error: \(error.localizedDescription)\n".utf8))
   exit(1)

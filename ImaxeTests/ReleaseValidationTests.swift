@@ -62,6 +62,15 @@ struct ReleaseValidationTests {
     let version = try await fixture.verify()
     #expect(version.status != 0 && version.output.contains("Appcast version"))
   }
+
+  @Test func `ad hoc hardened release rejects missing library validation exception`() async throws {
+    let fixture = try await Task.detached {
+      try ReleaseFixture(disableLibraryValidation: false)
+    }.value
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let result = try await fixture.verify()
+    #expect(result.status != 0 && result.output.contains("library validation exception"))
+  }
 }
 
 private nonisolated struct ReleaseFixture: Sendable {
@@ -70,7 +79,7 @@ private nonisolated struct ReleaseFixture: Sendable {
   let verifier: URL
   let commit = String(repeating: "a", count: 40)
 
-  init() throws {
+  init(disableLibraryValidation: Bool = true) throws {
     root = FileManager.default.temporaryDirectory
       .appending(path: "imaxe-release-validation-\(UUID().uuidString)")
     artifacts = root.appending(path: "artifacts")
@@ -116,7 +125,7 @@ private nonisolated struct ReleaseFixture: Sendable {
       root.appending(path: "Imaxe.app/Contents/MacOS/Imaxe").path,
     ]
     try Self.succeed("/usr/bin/xcrun", compileArguments)
-    try Self.succeed("/usr/bin/codesign", ["--sign", "-", root.appending(path: "Imaxe.app").path])
+    try signApplication(disableLibraryValidation: disableLibraryValidation)
     let zip = artifacts.appending(path: "Imaxe-1.2.3.zip")
     try Self.succeed(
       "/usr/bin/ditto",
@@ -159,6 +168,23 @@ private nonisolated struct ReleaseFixture: Sendable {
       "/usr/bin/xcrun",
       ["swiftc", root.appending(path: "Scripts/validate-release.swift").path, "-o", verifier.path],
     )
+  }
+
+  private func signApplication(disableLibraryValidation: Bool) throws {
+    var arguments = ["--sign", "-", "--options", "runtime"]
+    if disableLibraryValidation {
+      let entitlements = ["com.apple.security.cs.disable-library-validation": true]
+      let data = try PropertyListSerialization.data(
+        fromPropertyList: entitlements,
+        format: .xml,
+        options: 0,
+      )
+      let entitlementURL = root.appending(path: "Launch.entitlements")
+      try data.write(to: entitlementURL)
+      arguments += ["--entitlements", entitlementURL.path]
+    }
+    arguments.append(root.appending(path: "Imaxe.app").path)
+    try Self.succeed("/usr/bin/codesign", arguments)
   }
 
   func checksums() throws {
