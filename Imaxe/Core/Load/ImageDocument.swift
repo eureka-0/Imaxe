@@ -225,13 +225,18 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
   }
 
   static func estimatedFrameBytes(pixelSize: IntSize, depth: Int?) -> Int {
-    let bytesPerPixel = (depth ?? 8) > 8 ? 8 : 4
+    let bytesPerPixel = estimatedBytesPerPixel(depth: depth)
     let (pixelCount, pixelOverflow) = pixelSize.width.multipliedReportingOverflow(
       by: pixelSize.height,
     )
     guard !pixelOverflow else { return Int.max }
     let (byteCount, byteOverflow) = pixelCount.multipliedReportingOverflow(by: bytesPerPixel)
     return byteOverflow ? Int.max : byteCount
+  }
+
+  static func estimatedBytesPerPixel(depth: Int?) -> Int {
+    let bitsPerComponent = max(8, depth ?? 8)
+    return ((bitsPerComponent - 1) / 8 + 1) * 4
   }
 
   private static func intValue(

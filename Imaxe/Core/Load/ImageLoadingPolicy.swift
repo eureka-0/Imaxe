@@ -34,7 +34,7 @@ nonisolated enum ImageLoadingPolicy {
     let frameCount = strategy == .animatedGIF ? max(1, metadata.imageCount) : 1
     let budget = strategy == .svg ? svgBytes
       : strategy == .animatedGIF ? animationBytes : bitmapBytes
-    let bytesPerPixel = (metadata.depth ?? 8) > 8 ? 8 : 4
+    let bytesPerPixel = ImageMetadata.estimatedBytesPerPixel(depth: metadata.depth)
     let size = metadata.displayPixelSize
     let pixels = Double(size.width) * Double(size.height)
     let allowedPixels = Double(budget) / Double(bytesPerPixel) / Double(frameCount)
