@@ -1,0 +1,236 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build_macos15_tests:
+    # Xcode 26's Icon Composer asset agent intermittently crashes on macOS 15.
+    # Build the complete app and tests on 26, then execute those products on 15.
+    name: Build macOS 15 test products (Xcode 26.3, arm64)
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare build environment
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+          xcrun --kill-cache
+          for tool in just xcbeautify; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              brew install "$tool"
+            fi
+          done
+          cat > "$RUNNER_TEMP/ci-signing.xcconfig" <<'XCCONFIG'
+          CODE_SIGN_IDENTITY = -
+          CODE_SIGN_STYLE = Manual
+          DEVELOPMENT_TEAM =
+          XCCONFIG
+          echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/ci-signing.xcconfig" >> "$GITHUB_ENV"
+          mkdir -p Build/CI
+          git rev-parse HEAD > Build/CI/test-products-commit.txt
+          pwd > Build/CI/test-products-source-root.txt
+          xcodebuild -version > Build/CI/test-products-xcode.txt
+          sw_vers > Build/CI/test-products-build-os.txt
+
+      - name: Build test products
+        run: just test --build-only 2>&1 | tee Build/CI/build-for-testing.log
+
+      - name: Package test products
+        # tar preserves executable modes, framework symlinks and bundle signatures.
+        run: tar -czf Build/CI/macos15-test-products.tar.gz -C Build/DerivedData/Tests/Build Products
+
+      - name: Upload build evidence and test products
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: macos15-test-products
+          path: |
+            Build/CI/
+            Build/TestResults/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  tests:
+    name: Tests (${{ matrix.runner }}, Xcode ${{ matrix.xcode }}, arm64)
+    needs: build_macos15_tests
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            xcode: "26.3"
+          - runner: macos-26
+            xcode: "26.3"
+          - runner: xcode-27
+            xcode: "27.0"
+    env:
+      # Pin a stable toolchain per image, including the macOS 27 image.
+      # macOS 15's default Xcode 16.4 lacks default actor-isolation support.
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare test environment
+        id: prepare
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          # Test-host subprocesses may not inherit DEVELOPER_DIR. Keep xcrun
+          # and Xcode's helper agents on the same toolchain as this job.
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+          xcrun --kill-cache
+          echo "TEST_RUNNER_DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          for tool in just xcbeautify; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              brew install "$tool"
+            fi
+          done
+
+          # Apply ad-hoc signing to the app AND test targets without certificates.
+          # Keep signing enabled: UI testing needs signed executable bundles.
+          cat > "$RUNNER_TEMP/ci-signing.xcconfig" <<'XCCONFIG'
+          CODE_SIGN_IDENTITY = -
+          CODE_SIGN_STYLE = Manual
+          DEVELOPMENT_TEAM =
+          XCCONFIG
+          echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/ci-signing.xcconfig" >> "$GITHUB_ENV"
+
+          mkdir -p Build/CI
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            sw_vers
+            uname -m
+            xcode-select --print-path
+            xcodebuild -version
+            xcrun swift --version
+            xcrun --show-sdk-version
+            just --version
+            xcbeautify --version
+          } | tee Build/CI/environment.txt
+          {
+            echo '### Test environment'
+            echo '```text'
+            cat Build/CI/environment.txt
+            echo '```'
+            echo 'The runner OS patch version can change; this is not an exact macOS 15.6 test.'
+            echo 'Slow-volume testing is intentionally skipped. VM timings are observations, not release performance gates.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download macOS 15 test products
+        if: ${{ matrix.runner == 'macos-15' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos15-test-products
+          path: Build/ImportedTests
+
+      - name: Restore macOS 15 test products
+        id: restore_products
+        if: ${{ matrix.runner == 'macos-15' }}
+        run: |
+          evidence=Build/ImportedTests/CI
+          test "$(cat "$evidence/test-products-commit.txt")" = "$GITHUB_SHA"
+          # Tests use #filePath for repository fixtures; require the same checkout path.
+          test "$(cat "$evidence/test-products-source-root.txt")" = "$GITHUB_WORKSPACE"
+          xcodebuild -version > Build/CI/test-products-consumer-xcode.txt
+          cmp "$evidence/test-products-xcode.txt" Build/CI/test-products-consumer-xcode.txt
+          mkdir -p Build/DerivedData/Tests/Build
+          tar -xzf "$evidence/macos15-test-products.tar.gz" -C Build/DerivedData/Tests/Build
+          cp "$evidence"/test-products-*.txt Build/CI/
+          echo 'TEST_EXECUTION_ARGS=--test-without-building' >> "$GITHUB_ENV"
+          echo 'macOS 15 executes full test products built on macOS 26 with Xcode 26.3; native asset compilation on 15 remains unverified.' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Unit tests and coverage
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/unit-tests.log
+
+      - name: AppKit window tests and coverage
+        # Window animations share the main run loop. Keep pixel decoding and
+        # fixture compilation out of this test host so animation states are observable.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/window-tests.log
+
+      - name: UI tests
+        # Still collect UI evidence when a unit assertion fails; do not hide failures.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --ui-only --no-coverage 2>&1 | tee Build/CI/ui-tests.log
+
+      - name: Collect test results
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          shopt -s nullglob
+          results=(Build/TestResults/*.xcresult)
+          validation_status=0
+          if ((${#results[@]} > 0)); then
+            # Preserve evidence even if extracting a result summary fails.
+            tar -czf Build/CI/xcresults.tar.gz -C Build/TestResults .
+          fi
+          for result in "${results[@]}"; do
+            name="$(basename "$result" .xcresult)"
+            xcrun xcresulttool get test-results summary --path "$result" > "Build/CI/$name.json"
+            jq -r '"### " + .title, "Result: \(.result); total: \(.totalTestCount); passed: \(.passedTests); failed: \(.failedTests); skipped: \(.skippedTests)"' \
+              "Build/CI/$name.json" >> "$GITHUB_STEP_SUMMARY"
+            # An empty or entirely skipped suite is not executed coverage.
+            if ! jq -e '.passedTests > 0' "Build/CI/$name.json" >/dev/null; then
+              validation_status=1
+              xcrun xcresulttool get log --type build --path "$result" > "Build/CI/$name-build.json"
+            fi
+          done
+          exit "$validation_status"
+
+      - name: Upload test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.runner }}-xcode-${{ matrix.xcode }}-arm64
+          path: Build/CI/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0
+
+  macos_compatibility_gate:
+    # Use this stable name as the required status check after the first hosted run.
+    name: macOS compatibility (unit + UI)
+    if: ${{ always() }}
+    needs: [build_macos15_tests, tests]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require test build and every macOS test job to pass
+        env:
+          BUILD_RESULT: ${{ needs.build_macos15_tests.result }}
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: test "$BUILD_RESULT" = success && test "$TEST_RESULT" = success

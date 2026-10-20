@@ -1,9 +1,5 @@
-//
-//  ImageLoader.swift
-//  Imaxe
-//
-//  Created by lxlong on 2026/6/19.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
 import ImageIO
@@ -95,7 +91,7 @@ actor ImageLoader {
   private var metadataLoadTasks: [URL: ImageMetadataLoadTask] = [:]
   private var documentLoadTasks: [URL: ImageDocumentLoadTask] = [:]
 
-  private init() {
+  init() {
     metadataCache.name = "com.imaxe.Imaxe.metadataCache"
     metadataCache.countLimit = 500
 
@@ -144,15 +140,6 @@ actor ImageLoader {
   nonisolated static func isSVG(_ url: URL) -> Bool {
     actualImageType(for: url) == nil
       && imageTypes(for: url).contains { $0.conforms(to: .svg) }
-  }
-
-  nonisolated static func requiresDownsampling(_ size: NSSize) -> Bool {
-    guard size.width.isFinite, size.height.isFinite,
-          size.width > 0, size.height > 0
-    else { return false }
-
-    return size.width > Constants.maximumImageDimension
-      || size.height > Constants.maximumImageDimension
   }
 
   nonisolated static func imageTypes(for url: URL) -> [UTType] {
@@ -459,9 +446,10 @@ actor ImageLoader {
     }
   }
 
-  private nonisolated static func loadBitmap(
+  nonisolated static func loadBitmap(
     from url: URL,
     fileSnapshot: FileSnapshot,
+    maximumDimension: Int? = nil,
   ) throws -> ImageDocument {
     let freshURL = url.freshFileURL
     let sourceOptions = [kCGImageSourceShouldCache: false] as CFDictionary
@@ -470,22 +458,42 @@ actor ImageLoader {
     }
     let metadata = try ImageMetadata(bitmapURL: freshURL, imageSource: imageSource)
 
-    if Self.requiresDownsampling(metadata.displayPixelSize.nsSize) {
-      if metadata.isAnimated {
-        guard let animation = try downsampledAnimatedGIF(from: imageSource) else {
-          throw ImageLoadingError.corruptImage(freshURL)
-        }
+    let dimension = maximumDimension ?? ImageLoadingPolicy.maximumDimension(for: metadata)
+    switch ImageLoadingStrategy(metadata: metadata) {
+    case .animatedGIF:
+      return try loadGIF(
+        from: freshURL,
+        imageSource: imageSource,
+        metadata: metadata,
+        fileSnapshot: fileSnapshot,
+        maximumDimension: dimension,
+      )
+    case .tiffFirstPage:
+      // AppKit treats TIFF pages as alternative representations. Retain only page zero.
+      guard let page = downsampledBitmap(
+        from: imageSource,
+        metadata: metadata,
+        maximumDimension: dimension,
+      ) else { throw ImageLoadingError.corruptImage(freshURL) }
+      return ImageDocument(
+        url: freshURL,
+        fileSnapshot: fileSnapshot,
+        metadata: metadata,
+        content: .staticBitmap(page.image),
+        renderedPixelSize: page.pixelSize,
+      )
+    case .staticBitmap:
+      break
+    case .svg:
+      throw ImageLoadingError.unsupportedImageType(freshURL)
+    }
 
-        return ImageDocument(
-          url: freshURL,
-          fileSnapshot: fileSnapshot,
-          metadata: metadata,
-          content: .animatedGIF(animation.image, data: animation.data),
-          renderedPixelSize: animation.pixelSize,
-        )
-      }
-
-      guard let thumbnail = downsampledBitmap(from: imageSource, metadata: metadata) else {
+    if max(metadata.displayPixelSize.width, metadata.displayPixelSize.height) > dimension {
+      guard let thumbnail = downsampledBitmap(
+        from: imageSource,
+        metadata: metadata,
+        maximumDimension: dimension,
+      ) else {
         throw ImageLoadingError.corruptImage(freshURL)
       }
 
@@ -509,19 +517,46 @@ actor ImageLoader {
       throw ImageLoadingError.corruptImage(freshURL)
     }
 
-    let content: ImageContent = if metadata.isAnimated,
-                                   nsImage.animatedGIFRepresentation != nil
-    {
-      .animatedGIF(nsImage, data: imageData)
-    } else {
-      .staticBitmap(nsImage)
-    }
+    nsImage.size = metadata.displayPixelSize.nsSize
 
     return ImageDocument(
       url: freshURL,
       fileSnapshot: fileSnapshot,
       metadata: metadata,
-      content: content,
+      content: .staticBitmap(nsImage),
+    )
+  }
+
+  private nonisolated static func loadGIF(
+    from url: URL,
+    imageSource: CGImageSource,
+    metadata: ImageMetadata,
+    fileSnapshot: FileSnapshot,
+    maximumDimension: Int,
+  ) throws -> ImageDocument {
+    if max(metadata.displayPixelSize.width, metadata.displayPixelSize.height) > maximumDimension {
+      guard let animation = try downsampledAnimatedGIF(
+        from: imageSource,
+        maximumDimension: maximumDimension,
+      ) else { throw ImageLoadingError.corruptImage(url) }
+      return ImageDocument(
+        url: url,
+        fileSnapshot: fileSnapshot,
+        metadata: metadata,
+        content: .animatedGIF(animation.image, data: animation.data),
+        renderedPixelSize: animation.pixelSize,
+      )
+    }
+    let data = try Data(contentsOf: url, options: [.mappedIfSafe, .uncached])
+    guard let image = NSImage(data: data), image.animatedGIFRepresentation != nil else {
+      throw ImageLoadingError.corruptImage(url)
+    }
+    image.size = metadata.displayPixelSize.nsSize
+    return ImageDocument(
+      url: url,
+      fileSnapshot: fileSnapshot,
+      metadata: metadata,
+      content: .animatedGIF(image, data: data),
     )
   }
 
@@ -542,7 +577,10 @@ actor ImageLoader {
       throw ImageLoadingError.corruptImage(freshURL)
     }
 
-    let pixelSize = downsampledImageSize(for: metadata.displayPixelSize.nsSize)
+    let pixelSize = downsampledImageSize(
+      for: metadata.displayPixelSize.nsSize,
+      maximumDimension: CGFloat(ImageLoadingPolicy.maximumDimension(for: metadata)),
+    )
 
     guard let nsImage = rasterizedSVGImage(from: sourceImage, pixelSize: pixelSize) else {
       throw ImageLoadingError.corruptImage(freshURL)
@@ -694,6 +732,10 @@ actor ImageLoader {
   private nonisolated static func downsampledDestinationTypes(
     for metadata: ImageMetadata,
   ) -> [UTType] {
+    // JPEG/HEIC fallbacks may discard 16-bit channels or transparency.
+    if (metadata.depth ?? 8) > 8 {
+      return [.tiff, .png]
+    }
     var destinationTypes: [UTType] = []
 
     if let containerType = metadata.containerType,

@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Xinlong Liu.
 
 set -euo pipefail
 
@@ -13,7 +15,13 @@ Options:
   --ui-only                 Run only the UI-test target.
   --suite <name>            Run a unit-test suite. Repeat to select multiple suites.
                             Accepted names: ImageLoadingTests, ImageViewTests,
-                            RecentImagesTests, SessionAndNavigationTests, SharedUITests.
+                            RecentImagesTests, SessionAndNavigationTests, SharedUITests,
+                            ImageFidelityTests, ImageCompatibilityTests, ImagePerformanceTests,
+                            AdaptiveToolbarTests,
+                            UpdateSettingsTests, ReleaseValidationTests, ReleaseLockTests.
+  --skip-suite <name>       Exclude a unit-test suite. Repeat to exclude multiple suites.
+  --build-only              Build all test products without running tests.
+  --test-without-building   Run existing test products from Build/DerivedData/Tests.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.
@@ -33,8 +41,11 @@ require_value() {
 test_mode="all"
 coverage_enabled="YES"
 coverage_report="NO"
+build_action="test"
 suite_filters=()
 suite_count=0
+skipped_suites=()
+skipped_suite_count=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -58,6 +69,23 @@ while [[ $# -gt 0 ]]; do
     suite_count=$((suite_count + 1))
     shift
     ;;
+  --skip-suite)
+    require_value "$1" "${2:-}"
+    skipped_suites+=("$2")
+    skipped_suite_count=$((skipped_suite_count + 1))
+    shift
+    ;;
+  --build-only | --test-without-building)
+    if [[ $build_action != "test" ]]; then
+      echo "error: --build-only and --test-without-building are mutually exclusive" >&2
+      exit 2
+    fi
+    if [[ $1 == "--build-only" ]]; then
+      build_action="build-for-testing"
+    else
+      build_action="test-without-building"
+    fi
+    ;;
   --no-coverage)
     coverage_enabled="NO"
     ;;
@@ -77,8 +105,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ $test_mode == "ui" && $suite_count -gt 0 ]]; then
-  echo "error: --suite only selects suites in ImaxeTests and cannot be used with --ui-only" >&2
+if [[ $test_mode == "ui" && ($suite_count -gt 0 || $skipped_suite_count -gt 0) ]]; then
+  echo "error: --suite and --skip-suite select ImaxeTests suites and cannot be used with --ui-only" >&2
   exit 2
 fi
 
@@ -87,10 +115,24 @@ if [[ $coverage_enabled == "NO" && $coverage_report == "YES" ]]; then
   exit 2
 fi
 
+if [[ $build_action == "build-for-testing" &&
+  ($test_mode != "all" || $suite_count -gt 0 || $skipped_suite_count -gt 0 || $coverage_report == "YES") ]]; then
+  echo "error: --build-only builds all test targets and cannot use test filters or --coverage-report" >&2
+  exit 2
+fi
+
 RESULTS_DIRECTORY="./Build/TestResults"
 DERIVED_DATA_DIRECTORY="./Build/DerivedData/Tests"
 mkdir -p "${RESULTS_DIRECTORY}"
 RESULT_BUNDLE="${RESULTS_DIRECTORY}/Imaxe-$(date '+%Y%m%d-%H%M%S').xcresult"
+
+if [[ $test_mode != "unit" ]]; then
+  # Keep UI fixtures outside the runner's private container so the app can select them.
+  mkdir -p ./Build/UITestFixtures
+  for name in a b c; do
+    cp './Images/sample_1280×853.png' "./Build/UITestFixtures/${name}.png"
+  done
+fi
 
 cleanup_result_bundles() {
   local result_bundles
@@ -124,15 +166,29 @@ cleanup_result_bundles() {
 trap cleanup_result_bundles EXIT
 
 xcodebuild_arguments=(
-  test
-  -project Imaxe.xcodeproj
-  -scheme Imaxe
+  "${build_action}"
   -destination 'platform=macOS,arch=arm64'
-  -configuration Debug
-  -derivedDataPath "${DERIVED_DATA_DIRECTORY}"
   -enableCodeCoverage "${coverage_enabled}"
   -resultBundlePath "${RESULT_BUNDLE}"
 )
+
+if [[ $build_action == "test-without-building" ]]; then
+  shopt -s nullglob
+  test_runs=("${DERIVED_DATA_DIRECTORY}"/Build/Products/*.xctestrun)
+  shopt -u nullglob
+  if ((${#test_runs[@]} != 1)); then
+    echo "error: --test-without-building requires exactly one .xctestrun in ${DERIVED_DATA_DIRECTORY}/Build/Products" >&2
+    exit 2
+  fi
+  xcodebuild_arguments+=(-xctestrun "${test_runs[0]}")
+else
+  xcodebuild_arguments+=(
+    -project Imaxe.xcodeproj
+    -scheme Imaxe
+    -configuration Debug
+    -derivedDataPath "${DERIVED_DATA_DIRECTORY}"
+  )
+fi
 
 case "$test_mode" in
 unit)
@@ -146,6 +202,12 @@ esac
 if ((suite_count > 0)); then
   for suite in "${suite_filters[@]}"; do
     xcodebuild_arguments+=("-only-testing:ImaxeTests/${suite}")
+  done
+fi
+
+if ((skipped_suite_count > 0)); then
+  for suite in "${skipped_suites[@]}"; do
+    xcodebuild_arguments+=("-skip-testing:ImaxeTests/${suite}")
   done
 fi
 

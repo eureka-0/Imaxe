@@ -1,9 +1,5 @@
-//
-//  ImageViewTests.swift
-//  ImaxeTests
-//
-//  Created by lxlong on 2026/6/14.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
 import ImageIO
@@ -12,7 +8,7 @@ import SwiftUI
 import Testing
 
 @MainActor
-@Suite("Image View")
+@Suite("Image View", .serialized)
 struct ImageViewTests {
   @Test func `bitmap image document uses pixel size`() async throws {
     let url = URL.temporaryDirectory

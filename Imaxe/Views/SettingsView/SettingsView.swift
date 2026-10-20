@@ -1,18 +1,17 @@
-//
-//  SettingsView.swift
-//  Imaxe
-//
-//  Created by lxlong on 2026/6/23.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
+import Sparkle
 import SwiftUI
 
 // MARK: - SettingsView
 
 struct SettingsView: View {
+  let updater: SPUUpdater
+
   var body: some View {
     TabView {
-      GeneralSettingsView()
+      GeneralSettingsView(updater: updater)
         .tabItem { Label("General", systemImage: "gearshape") }
 
       ImageSettingsView()
@@ -27,6 +26,8 @@ struct SettingsView: View {
 // MARK: - GeneralSettingsView
 
 struct GeneralSettingsView: View {
+  @State private var updateSettings: UpdateSettings
+
   @AppStorage(AppSettings.Keys.appearance.rawValue)
   private var appearance = AppSettings.Defaults.appearance
 
@@ -58,6 +59,10 @@ struct GeneralSettingsView: View {
     }
   }
 
+  init(updater: SPUUpdater) {
+    _updateSettings = State(initialValue: UpdateSettings(updater: updater))
+  }
+
   var body: some View {
     Grid(alignment: .trailing, horizontalSpacing: 8, verticalSpacing: 20) {
       GridRow {
@@ -70,6 +75,24 @@ struct GeneralSettingsView: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
+        .gridCellAnchor(.leading)
+      }
+
+      GridRow(alignment: .top) {
+        Text("Updates:")
+
+        VStack(alignment: .leading, spacing: 5) {
+          Toggle("Automatically check for updates", isOn: Binding(
+            get: { updateSettings.automaticallyChecksForUpdates },
+            set: { updateSettings.setAutomaticallyChecksForUpdates($0) },
+          ))
+
+          Toggle("Automatically download updates", isOn: Binding(
+            get: { updateSettings.automaticallyDownloadsUpdates },
+            set: { updateSettings.setAutomaticallyDownloadsUpdates($0) },
+          ))
+          .disabled(!updateSettings.allowsAutomaticUpdates)
+        }
         .gridCellAnchor(.leading)
       }
 

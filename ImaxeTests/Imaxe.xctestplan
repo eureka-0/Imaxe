@@ -9,6 +9,12 @@
     }
   ],
   "defaultOptions" : {
+    "commandLineArgumentEntries" : [
+      {
+        "argument" : "--disable-updates-for-testing",
+        "enabled" : true
+      }
+    ],
     "performanceAntipatternCheckerEnabled" : true,
     "targetForVariableExpansion" : {
       "containerPath" : "container:Imaxe.xcodeproj",

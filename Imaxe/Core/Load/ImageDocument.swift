@@ -1,9 +1,5 @@
-//
-//  ImageDocument.swift
-//  Imaxe
-//
-//  Created by lxlong on 2026/7/14.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
 import ImageIO
@@ -24,6 +20,7 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
   let DPI: IntSize
   let depth: Int?
   let colorModel: String?
+  let colorProfileName: String?
   let hasAlpha: Bool
   let estimatedFullFrameBytes: Int
   let isAnimated: Bool
@@ -48,18 +45,29 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
 
   var bitDepthDescription: String {
     if let depth {
-      "\(depth) Bits/Pixel"
+      "\(depth) Bits/Channel"
     } else {
       "Unknown"
     }
   }
 
   var colorSpaceDescription: String {
-    if let colorModel {
+    if let colorProfileName {
+      colorProfileName
+    } else if let colorModel {
       colorModel
     } else {
       "Unknown"
     }
+  }
+
+  var displayDPI: IntSize {
+    orientation.swapsDimensions ? IntSize(width: DPI.height, height: DPI.width) : DPI
+  }
+
+  var pageDescription: String? {
+    guard containerType?.conforms(to: .tiff) == true, imageCount > 1 else { return nil }
+    return "1 / \(imageCount)"
   }
 
   var alphaDescription: String {
@@ -129,13 +137,14 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     DPI = Self.imageDPI(from: properties)
     self.depth = depth
     colorModel = properties[kCGImagePropertyColorModel] as? String
+    colorProfileName = properties[kCGImagePropertyProfileName] as? String
     self.hasAlpha = hasAlpha
     estimatedFullFrameBytes = Self.estimatedFrameBytes(
       pixelSize: displayPixelSize,
       depth: depth,
     )
     isAnimated = imageCount > 1 && containerType?.conforms(to: .gif) == true
-    isMultiPage = imageCount > 1
+    isMultiPage = imageCount > 1 && containerType?.conforms(to: .tiff) == true
     isSVG = false
   }
 
@@ -169,6 +178,7 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     DPI = IntSize(width: 72, height: 72)
     depth = nil
     colorModel = nil
+    colorProfileName = nil
     hasAlpha = true
     estimatedFullFrameBytes = Self.estimatedFrameBytes(pixelSize: pixelSize, depth: nil)
     isAnimated = false
@@ -190,6 +200,7 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     from properties: [CFString: Any],
   ) -> CGImagePropertyOrientation {
     guard let rawValue = intValue(for: kCGImagePropertyOrientation, in: properties),
+          (1 ... 8).contains(rawValue),
           let orientation = CGImagePropertyOrientation(rawValue: UInt32(rawValue))
     else { return .up }
 
@@ -214,13 +225,18 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
   }
 
   static func estimatedFrameBytes(pixelSize: IntSize, depth: Int?) -> Int {
-    let bytesPerPixel = (depth ?? 8) > 8 ? 8 : 4
+    let bytesPerPixel = estimatedBytesPerPixel(depth: depth)
     let (pixelCount, pixelOverflow) = pixelSize.width.multipliedReportingOverflow(
       by: pixelSize.height,
     )
     guard !pixelOverflow else { return Int.max }
     let (byteCount, byteOverflow) = pixelCount.multipliedReportingOverflow(by: bytesPerPixel)
     return byteOverflow ? Int.max : byteCount
+  }
+
+  static func estimatedBytesPerPixel(depth: Int?) -> Int {
+    let bitsPerComponent = max(8, depth ?? 8)
+    return ((bitsPerComponent - 1) / 8 + 1) * 4
   }
 
   private static func intValue(
@@ -279,6 +295,25 @@ nonisolated enum ImageContent: Sendable {
 
 // MARK: - ImageDocument
 
+nonisolated struct GIFPlaybackState {
+  private(set) var frame = 0
+  private(set) var completedLoops = 0
+  private(set) var isFinished = false
+
+  mutating func advance(frameCount: Int, loopCount: Int) -> Bool {
+    guard frameCount > 1, !isFinished else { return false }
+    if frame + 1 == frameCount {
+      completedLoops += 1
+      if loopCount > 0, completedLoops >= loopCount {
+        isFinished = true
+        return false
+      }
+    }
+    frame = (frame + 1) % frameCount
+    return true
+  }
+}
+
 nonisolated struct ImageDocument: Sendable {
   let id: UUID
   let url: URL
@@ -304,7 +339,14 @@ nonisolated struct ImageDocument: Sendable {
   }
 
   var cacheCost: Int {
-    ImageMetadata.estimatedFrameBytes(pixelSize: renderedPixelSize, depth: metadata.depth)
+    let frameBytes = ImageMetadata.estimatedFrameBytes(
+      pixelSize: renderedPixelSize,
+      depth: metadata.depth,
+    )
+    guard case let .animatedGIF(_, data) = content else { return frameBytes }
+    let (frames, overflow) = frameBytes.multipliedReportingOverflow(by: metadata.imageCount)
+    let (total, totalOverflow) = frames.addingReportingOverflow(data.count)
+    return overflow || totalOverflow ? Int.max : total
   }
 
   init(

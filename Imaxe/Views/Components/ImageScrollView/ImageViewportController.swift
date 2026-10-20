@@ -1,9 +1,5 @@
-//
-//  ImageViewportController.swift
-//  Imaxe
-//
-//  Created by Codex on 2026/6/28.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import Foundation
 

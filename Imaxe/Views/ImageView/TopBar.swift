@@ -1,9 +1,5 @@
-//
-//  TopBar.swift
-//  Imaxe
-//
-//  Created by lxlong on 2026/7/20.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
 import SwiftUI
@@ -660,6 +656,9 @@ private struct ImageInfoPanel: View {
         infoRow(title: "Bit Depth", value: metadata.bitDepthDescription)
         infoRow(title: "Color Space", value: metadata.colorSpaceDescription)
         infoRow(title: "Has Alpha", value: metadata.alphaDescription)
+        if let pageDescription = metadata.pageDescription {
+          infoRow(title: "TIFF Page", value: pageDescription)
+        }
       }
     }
     .padding(14)

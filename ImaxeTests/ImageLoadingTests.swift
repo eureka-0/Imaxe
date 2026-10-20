@@ -1,9 +1,5 @@
-//
-//  ImageLoadingTests.swift
-//  ImaxeTests
-//
-//  Created by lxlong on 2026/6/14.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
 import ImageIO
@@ -168,8 +164,10 @@ struct ImageLoadingTests {
     #expect(metadata.displayPixelSize == IntSize(width: 4267, height: 4267))
     #expect(document.pixelSize == NSSize(width: 4267, height: 4267))
     #expect(document.nsImage.representations.count == 1)
-    #expect(bitmapRep.pixelsWide == 4267)
-    #expect(bitmapRep.pixelsHigh == 4267)
+    #expect(document.isDownsampled)
+    #expect(document.cacheCost <= ImageLoadingPolicy.svgBytes)
+    #expect(bitmapRep.pixelsWide == document.renderedPixelSize.width)
+    #expect(bitmapRep.pixelsHigh == document.renderedPixelSize.height)
   }
 
   @Test func `svg without explicit dimensions uses the image fallback size`() async throws {
@@ -322,15 +320,7 @@ struct ImageLoadingTests {
     #expect(thumbnail.image.representations.first is NSBitmapImageRep)
   }
 
-  @Test func `image loader only requires downsampling beyond the texture dimension`() {
-    let maximumDimension = Constants.maximumImageDimension
-
-    #expect(ImageLoader.requiresDownsampling(NSSize(width: maximumDimension + 1, height: 1)))
-    #expect(ImageLoader.requiresDownsampling(NSSize(width: 1, height: maximumDimension + 1)))
-    #expect(!ImageLoader.requiresDownsampling(
-      NSSize(width: maximumDimension, height: maximumDimension),
-    ))
-
+  @Test func `image proxy sizing retains aspect ratio`() {
     #expect(ImageLoader.downsampledImageSize(
       for: NSSize(width: 20, height: 10),
       maximumDimension: 16,

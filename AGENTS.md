@@ -29,11 +29,11 @@ Do not expand into RAW editing, professional color grading, layers, batch proces
 
 ## Rules
 
+- Unless explicitly specified otherwise, save agent-generated documents and helper files in ./docs/agents/ which are ignored by git and may be deleted at any time.
 - Use SwiftUI for the app shell, settings, commands, overlays, alerts, and lightweight feature UI. Use AppKit through `NSViewRepresentable` for the image canvas.
 - AppKit owns rendering, zooming, scrolling, clamping, fitting, drag / mouse / trackpad behavior, and window-size-sensitive geometry.
 - Prefer non-destructive editing models and compose edits during export.
 - Use ImageIO / Core Graphics when a feature needs explicit control over thumbnail size, downsampling, cache / decode timing, metadata, orientation, incremental loading, or export.
-- Keep changes tightly scoped to the requested task.
 - Record any new problems discovered while modifying code in `progress.md` as soon as they are found.
 - Use 2-space indentation, simple imports, and clear method separation.
 - Use Swift Observation (`@Observable`) for current view models / sessions.

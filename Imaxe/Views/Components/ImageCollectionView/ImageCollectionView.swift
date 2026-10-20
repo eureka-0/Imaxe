@@ -1,9 +1,5 @@
-//
-//  ImageCollectionView.swift
-//  Imaxe
-//
-//  Created by lxlong on 2026/7/4.
-//
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 Xinlong Liu.
 
 import Observation
 import SwiftUI
@@ -203,7 +199,7 @@ struct ImageCollectionView<
   private var fixedViewMode: ImageCollectionViewMode?
   private var gridItemSize: Binding<CGFloat>?
 
-  @State private var viewModel = ImageCollectionViewModel<Item>()
+  @State private var viewModel: ImageCollectionViewModel<Item>
   @State private var magnifyBaseGridItemSize: CGFloat?
   @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
 
@@ -256,8 +252,7 @@ struct ImageCollectionView<
     Binding {
       effectiveViewMode
     } set: { newValue in
-      guard fixedViewMode == nil else { return }
-      guard newValue != effectiveViewMode else { return }
+      guard fixedViewMode == nil, newValue != effectiveViewMode else { return }
 
       withAnimation(viewModeAnimation) {
         if let viewMode {
@@ -308,13 +303,14 @@ struct ImageCollectionView<
 
   init(
     _ items: [Item],
-    configuration: ImageCollectionConfiguration<Item> = .init(),
+    configuration: ImageCollectionConfiguration<Item>? = nil,
     @ViewBuilder listRow: @escaping (Item, ImageCollectionItemState) -> ListRowContent,
     @ViewBuilder gridItem: @escaping (Item, ImageCollectionItemState) -> GridItemContent,
     @ViewBuilder contextMenu: @escaping (Item) -> ContextMenuContent,
   ) {
+    _viewModel = State(initialValue: ImageCollectionViewModel<Item>())
     self.items = items
-    self.configuration = configuration
+    self.configuration = configuration ?? ImageCollectionConfiguration<Item>()
     self.listRow = listRow
     self.gridItem = gridItem
     self.contextMenu = contextMenu
@@ -592,7 +588,7 @@ struct ImageCollectionView<
 extension ImageCollectionView where ContextMenuContent == EmptyView {
   init(
     _ items: [Item],
-    configuration: ImageCollectionConfiguration<Item> = .init(),
+    configuration: ImageCollectionConfiguration<Item>? = nil,
     @ViewBuilder listRow: @escaping (Item, ImageCollectionItemState) -> ListRowContent,
     @ViewBuilder gridItem: @escaping (Item, ImageCollectionItemState) -> GridItemContent,
   ) {
@@ -610,11 +606,11 @@ extension ImageCollectionView where ContextMenuContent == EmptyView {
 extension ImageCollectionView where ListRowContent == EmptyView {
   init(
     _ items: [Item],
-    configuration: ImageCollectionConfiguration<Item> = .init(),
+    configuration: ImageCollectionConfiguration<Item>? = nil,
     @ViewBuilder gridItem: @escaping (Item, ImageCollectionItemState) -> GridItemContent,
     @ViewBuilder contextMenu: @escaping (Item) -> ContextMenuContent,
   ) {
-    var configuration = configuration
+    var configuration = configuration ?? ImageCollectionConfiguration<Item>()
     configuration.defaultViewMode = .grid
 
     self.init(
@@ -632,7 +628,7 @@ extension ImageCollectionView where ListRowContent == EmptyView {
 extension ImageCollectionView where ListRowContent == EmptyView, ContextMenuContent == EmptyView {
   init(
     _ items: [Item],
-    configuration: ImageCollectionConfiguration<Item> = .init(),
+    configuration: ImageCollectionConfiguration<Item>? = nil,
     @ViewBuilder gridItem: @escaping (Item, ImageCollectionItemState) -> GridItemContent,
   ) {
     self.init(
@@ -648,11 +644,11 @@ extension ImageCollectionView where ListRowContent == EmptyView, ContextMenuCont
 extension ImageCollectionView where GridItemContent == EmptyView {
   init(
     _ items: [Item],
-    configuration: ImageCollectionConfiguration<Item> = .init(),
+    configuration: ImageCollectionConfiguration<Item>? = nil,
     @ViewBuilder listRow: @escaping (Item, ImageCollectionItemState) -> ListRowContent,
     @ViewBuilder contextMenu: @escaping (Item) -> ContextMenuContent,
   ) {
-    var configuration = configuration
+    var configuration = configuration ?? ImageCollectionConfiguration<Item>()
     configuration.defaultViewMode = .list
 
     self.init(
@@ -670,7 +666,7 @@ extension ImageCollectionView where GridItemContent == EmptyView {
 extension ImageCollectionView where GridItemContent == EmptyView, ContextMenuContent == EmptyView {
   init(
     _ items: [Item],
-    configuration: ImageCollectionConfiguration<Item> = .init(),
+    configuration: ImageCollectionConfiguration<Item>? = nil,
     @ViewBuilder listRow: @escaping (Item, ImageCollectionItemState) -> ListRowContent,
   ) {
     self.init(
