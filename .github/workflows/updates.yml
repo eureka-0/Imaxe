@@ -53,7 +53,7 @@ jobs:
           if [[ -z "$tag" ]]; then
             tag="$(gh api --paginate --slurp "repos/$GH_REPO/releases" |
               jq -r '[.[][] | select(.draft == false and .prerelease == false) |
-                select(any(.assets[]; .name == "appcast.xml"))][0].tag_name // empty')"
+                select(any(.assets[]; .name == "release.json"))][0].tag_name // empty')"
           fi
           if [[ -z "$tag" ]]; then
             cp Distribution/appcast.xml _site/appcast.xml
@@ -63,20 +63,19 @@ jobs:
             directory="$RUNNER_TEMP/imaxe-update"
             mkdir -p "$directory"
             gh release download "$tag" --dir "$directory" \
-              --pattern 'Imaxe-*.zip' --pattern 'Imaxe-*.md' \
-              --pattern appcast.xml --pattern release.json --pattern SHA256SUMS.txt
+              --pattern 'Imaxe-*.zip' --pattern release.json --pattern SHA256SUMS.txt
             commit="$(gh api "repos/$GH_REPO/commits/$tag" --jq .sha)"
             swift Scripts/validate-release.swift "$directory" "$commit"
             version="$(jq -r .version "$directory/release.json")"
             [[ "$tag" == "v$version" ]]
-            for name in "Imaxe-$version.zip" "Imaxe-$version.md"; do
+            for name in "Imaxe-$version.zip" release.json SHA256SUMS.txt; do
               curl --fail --silent --show-error --location \
                 --proto '=https' --proto-redir '=https' \
                 "https://github.com/$GH_REPO/releases/download/$tag/$name" \
                 -o "$RUNNER_TEMP/public-asset"
               cmp -s "$directory/$name" "$RUNNER_TEMP/public-asset"
             done
-            cp "$directory/appcast.xml" _site/appcast.xml
+            jq -jr .appcastXML "$directory/release.json" > _site/appcast.xml
           fi
           touch _site/.nojekyll
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0

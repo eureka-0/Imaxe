@@ -20,6 +20,8 @@ struct ReleaseValidationTests {
     var changedZIP = originalZIP
     changedZIP.append(0)
     try changedZIP.write(to: zip)
+    let checksum = try await fixture.verify()
+    #expect(checksum.status != 0 && checksum.output.contains("Checksum mismatch"))
     try fixture.checksums()
     let signature = try await fixture.verify()
     #expect(signature.status != 0 && signature.output.contains("Invalid update signature"))
@@ -27,20 +29,20 @@ struct ReleaseValidationTests {
     try fixture.checksums()
 
     let notes = fixture.artifacts.appending(path: "Imaxe-1.2.3.md")
+    let originalNotes = try String(contentsOf: notes, encoding: .utf8)
     try "Changed after signing".write(to: notes, atomically: true, encoding: .utf8)
-    let checksum = try await fixture.verify()
-    #expect(checksum.status != 0 && checksum.output.contains("Checksum mismatch"))
-    try fixture.checksums()
+    let changedNotes = try await fixture.verify()
+    #expect(changedNotes.status != 0 && changedNotes.output.contains("Release notes differ"))
+    try originalNotes.write(to: notes, atomically: true, encoding: .utf8)
 
     let appcast = fixture.artifacts.appending(path: "appcast.xml")
     let originalXML = try String(contentsOf: appcast, encoding: .utf8)
-    try originalXML.replacingOccurrences(of: "/download/v1.2.3/", with: "/download/latest/")
-      .write(to: appcast, atomically: true, encoding: .utf8)
-    try fixture.checksums()
+    try fixture.updateAppcast(
+      originalXML.replacingOccurrences(of: "/download/v1.2.3/", with: "/download/latest/"),
+    )
     let url = try await fixture.verify()
     #expect(url.status != 0 && url.output.contains("download URL"))
-    try originalXML.write(to: appcast, atomically: true, encoding: .utf8)
-    try fixture.checksums()
+    try fixture.updateAppcast(originalXML)
 
     let commit = try await fixture.verify(commit: String(repeating: "b", count: 40))
     #expect(commit.status != 0 && commit.output.contains("commit"))
@@ -56,11 +58,17 @@ struct ReleaseValidationTests {
     #expect(key.status != 0 && key.output.contains("source public key"))
     try originalManifest.write(to: manifestURL)
 
-    try originalXML.replacingOccurrences(of: "<sparkle:version>12", with: "<sparkle:version>13")
-      .write(to: appcast, atomically: true, encoding: .utf8)
-    try fixture.checksums()
+    try fixture.updateAppcast(
+      originalXML.replacingOccurrences(of: "<sparkle:version>12", with: "<sparkle:version>13"),
+    )
     let version = try await fixture.verify()
     #expect(version.status != 0 && version.output.contains("Appcast version"))
+
+    try fixture.updateAppcast(
+      originalXML.replacingOccurrences(of: "# Imaxe 1.2.3", with: "# Imaxe 1.2.3 (12)"),
+    )
+    let title = try await fixture.verify()
+    #expect(title.status != 0 && title.output.contains("without a build number"))
   }
 
   @Test func `ad hoc hardened release rejects missing library validation exception`() async throws {
@@ -70,6 +78,15 @@ struct ReleaseValidationTests {
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let result = try await fixture.verify()
     #expect(result.status != 0 && result.output.contains("library validation exception"))
+  }
+
+  @Test func `release verifies without Markdown or appcast attachments`() async throws {
+    let fixture = try await Task.detached { try ReleaseFixture() }.value
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    try FileManager.default.removeItem(at: fixture.artifacts.appending(path: "appcast.xml"))
+    try FileManager.default.removeItem(at: fixture.artifacts.appending(path: "Imaxe-1.2.3.md"))
+    let result = try await fixture.verify()
+    #expect(result.status == 0, "\(result.output)")
   }
 }
 
@@ -134,7 +151,8 @@ private nonisolated struct ReleaseFixture: Sendable {
     let data = try Data(contentsOf: zip)
     let signature = try key.signature(for: data).base64EncodedString()
     let downloadURL = "https://github.com/eureka-0/Imaxe/releases/download/v1.2.3/Imaxe-1.2.3.zip"
-    let notesURL = downloadURL.replacingOccurrences(of: ".zip", with: ".md")
+    let notes = "# Imaxe 1.2.3\n\nFixture release notes"
+    let notesURL = "https://github.com/eureka-0/Imaxe/releases/tag/v1.2.3"
     let xml = """
     <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
       <channel><item>
@@ -142,14 +160,15 @@ private nonisolated struct ReleaseFixture: Sendable {
         <sparkle:shortVersionString>1.2.3</sparkle:shortVersionString>
         <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
         <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
-        <sparkle:releaseNotesLink>\(notesURL)</sparkle:releaseNotesLink>
+        <sparkle:fullReleaseNotesLink>\(notesURL)</sparkle:fullReleaseNotesLink>
+        <description sparkle:format="markdown"><![CDATA[\(notes)]]></description>
         <enclosure url="\(downloadURL)"
           length="\(data.count)" type="application/octet-stream" sparkle:edSignature="\(signature)"/>
       </item></channel>
     </rss>
     """
     try xml.write(to: artifacts.appending(path: "appcast.xml"), atomically: true, encoding: .utf8)
-    try "Fixture release notes".write(
+    try notes.write(
       to: artifacts.appending(path: "Imaxe-1.2.3.md"),
       atomically: true,
       encoding: .utf8,
@@ -161,6 +180,7 @@ private nonisolated struct ReleaseFixture: Sendable {
       "minimumSystemVersion": "15.6",
       "feedURL": feed,
       "publicEDKey": publicKey,
+      "appcastXML": xml,
     ]
     try JSONEncoder().encode(manifest).write(to: artifacts.appending(path: "release.json"))
     try checksums()
@@ -188,7 +208,7 @@ private nonisolated struct ReleaseFixture: Sendable {
   }
 
   func checksums() throws {
-    let names = ["Imaxe-1.2.3.zip", "Imaxe-1.2.3.md", "appcast.xml", "release.json"]
+    let names = ["Imaxe-1.2.3.zip", "release.json"]
     let lines = try names.map { name in
       let digest = try SHA256.hash(data: Data(contentsOf: artifacts.appending(path: name)))
         .map { String(format: "%02x", $0) }.joined()
@@ -196,6 +216,18 @@ private nonisolated struct ReleaseFixture: Sendable {
     }
     try (lines.joined(separator: "\n") + "\n")
       .write(to: artifacts.appending(path: "SHA256SUMS.txt"), atomically: true, encoding: .utf8)
+  }
+
+  func updateAppcast(_ xml: String) throws {
+    try xml.write(to: artifacts.appending(path: "appcast.xml"), atomically: true, encoding: .utf8)
+    let manifestURL = artifacts.appending(path: "release.json")
+    var manifest = try JSONDecoder().decode(
+      [String: String].self,
+      from: Data(contentsOf: manifestURL),
+    )
+    manifest["appcastXML"] = xml
+    try JSONEncoder().encode(manifest).write(to: manifestURL)
+    try checksums()
   }
 
   func verify(commit: String? = nil) async throws -> (status: Int32, output: String) {

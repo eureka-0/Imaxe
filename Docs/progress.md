@@ -42,9 +42,10 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Sparkle Updates
 
-- [ ] P0 启动阻断与修复验收：原 A `1.1.0 (11)` 和原 B `1.1.0 (12)` 的主程序为 ad-hoc + Hardened Runtime，没有 Library Validation 例外，dyld 拒绝加载同样没有 Team ID 的 Sparkle。B 归档启动已复现退出码 134；静态深层签名校验通过不能作为独立启动证据。正式配置及回归已修复，新 A 的最终 ZIP 独立启动已通过，用户安装验收仍待完成。
+- [x] P0 启动阻断已修复：原 A `1.1.0 (11)` 和原 B `1.1.0 (12)` 的主程序为 ad-hoc + Hardened Runtime，没有 Library Validation 例外，dyld 拒绝加载同样没有 Team ID 的 Sparkle。B 归档启动曾复现退出码 134；补充正式配置和回归后，新 A 的最终 ZIP 独立启动通过，用户已确认安装新的 `1.1.0 (12)` 后启动成功。真实 A/B 更新及其他安装/性能验收继续单独跟踪。
 - [x] 正式签名修复：通过 Xcode 为应用 Debug/Release 配置 `Imaxe/Imaxe.entitlements`，只添加 Library Validation 例外，保留 Hardened Runtime；版本维持 `1.1.0 (12)`。发布校验使用 Security API 读取真实签名标志和 entitlements，拒绝缺少例外的 ad-hoc Hardened Runtime 包。`just test --skip-ui --suite ReleaseValidationTests --no-coverage` 最终 2 项通过、0 失败，包含真实签名 fixture 的缺失例外拒绝用例，结果为 `Build/TestResults/Imaxe-20261020-230442.xcresult`；Swift 类型检查、Xcode 文件诊断、SwiftFormat 和 SwiftLint 均通过。
 - [x] 修复后的内部 A 已重建：从干净功能分支提交 `01f9730e396f8584f94d3d860e979f886051b13b` 构建 `1.1.0 (12)`，目录为 `Build/Releases/Imaxe-1.1.0-12-01f9730e396f/`；ZIP SHA-256 为 `3a076f75a3cd41d8f763c9121822b61155ea3c99698f22c6f96db6b66a2a329c`。实际 ZIP 的 EdDSA、文件摘要、包内元数据、arm64、最低 macOS 15.6、深层签名和 Library Validation 策略均通过。最终 ZIP 解压后通过 LaunchServices 正常启动，启用正常 Sparkle 初始化，进程持续运行超过一分钟；采样确认加载 Sparkle 并进入 AppKit 主事件循环，证据为 `Build/LaunchChecks/A-12/launch.sample.txt`。这不替代用户安装、图片交互或 A/B 升级验收。
+- [x] 精简正式附件：Release 只上传 ZIP、`release.json` 和 `SHA256SUMS.txt`；appcast 与 Markdown 仅作为本地构建产物，说明以内嵌 Markdown 写入 feed，完整 feed 数据保存在 manifest 中，经部署校验后发布到 Pages。Release 标题和说明只使用营销版本号，构建号留作更新比较与机器元数据。三个发布验证用例和发布锁用例通过，真实 A ZIP 的三附件副本也通过完整验证；结果为 `Build/TestResults/Imaxe-20261020-232844.xcresult`，Swift/格式/shell/Updates workflow 静态检查通过。
 - [x] 故障发布已按用户授权撤回：`v1.1.0` 转回 draft，标签和五个资产保留；Updates run `39442929884` 成功恢复空 feed，匿名 HTTP 200、0 条更新且与源文件一致，故障 ZIP 的匿名 URL 返回 404。用户要求直接删除旧故障包及 Build 过时产物，已清理旧 Build（约 4.4 GiB），诊断结论保存在忽略目录 `Docs/agents/SPARKLE_LAUNCH_FAILURE_2026-10-20.md`。
 - [x] 公开空 feed 验收：2026-10-20 匿名请求 `https://eureka-0.github.io/Imaxe/appcast.xml` 返回 HTTP 200，`application/xml`，XML 解析为 1 个 RSS channel、0 个更新条目，与 `Distribution/appcast.xml` 字节一致；SHA-256 为 `91ad5658dd8d8dfa61e843b3d2445fee3997346d5854d67114060ecf676bf1bb`。本项只确认 feed 部署与可访问性。
 - [ ] 发布事件部署限制：`v1.1.0` 的 Updates run `39438881020` 在执行步骤前被 github-pages 环境规则拒绝，原因是仅允许 main branch、未允许 release tag。本次已通过现有 workflow_dispatch 从 main 指定 `release_tag=v1.1.0` 完成部署，但环境规则未改；后续发布前需确认标签部署策略或固定采用 main 手动入口，不将首次自动运行记为成功。
@@ -68,6 +69,10 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [ ] 使用两个正式打包构建完成 A/B 真实升级及第二台普通 Mac 的安装/迁移/授权验收；旧版 1.0 (4) 不含 Sparkle，只用于手动迁移验收。
 
 ## P2 — Performance, Compatibility, and Experience
+
+### Home and Recent Images
+
+- [ ] Home 的 Clear Recent Images 当前没有确认，直接清空全部最近记录，不受搜索筛选限制；磁盘原图和收藏记录保留。后续明确确认交互与“清空全部 / 仅移除失效”两个操作的边界；`RecentImagesStore.removeMissingFiles` 已有实现但未接入 UI，加入入口前需处理权限不足、外置盘/NAS 暂时离线与真实文件失效的区别。本轮只核对并记录，不改动 Home 行为。
 
 ### Test Reliability
 

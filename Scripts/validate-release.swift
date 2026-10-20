@@ -92,7 +92,7 @@ func validate(directory: URL, expectedCommit: String) throws {
 
   let zipName = "Imaxe-\(version).zip"
   let notesName = "Imaxe-\(version).md"
-  let names = [zipName, notesName, "appcast.xml", "release.json"]
+  let names = [zipName, "release.json"]
   let checksums = try String(
     contentsOf: directory.appendingPathComponent("SHA256SUMS.txt"),
     encoding: .utf8,
@@ -107,10 +107,15 @@ func validate(directory: URL, expectedCommit: String) throws {
     )
   }
 
-  let document = try XMLDocument(
-    contentsOf: directory.appendingPathComponent("appcast.xml"),
-    options: .nodeLoadExternalEntitiesNever,
-  )
+  guard let appcastXML = manifest["appcastXML"] else {
+    throw ReleaseValidationError("Missing embedded appcast in release manifest")
+  }
+  let localAppcast = directory.appendingPathComponent("appcast.xml")
+  if FileManager.default.fileExists(atPath: localAppcast.path) {
+    let localXML = try String(contentsOf: localAppcast, encoding: .utf8)
+    try require(localXML == appcastXML, "Local appcast differs from release manifest")
+  }
+  let document = try XMLDocument(xmlString: appcastXML, options: .nodeLoadExternalEntitiesNever)
   let items = try document.nodes(forXPath: "/rss/channel/item").compactMap { $0 as? XMLElement }
   try require(items.count == 1, "Expected one stable full-package update")
   guard let item = items.first else { throw ReleaseValidationError("Missing update item") }
@@ -151,8 +156,26 @@ func validate(directory: URL, expectedCommit: String) throws {
     "Unexpected update archive content type",
   )
   try require(value("hardwareRequirements") == "arm64", "Appcast hardware requirements mismatch")
-  let notes = "https://github.com/eureka-0/Imaxe/releases/download/v\(version)/\(notesName)"
-  try require(value("releaseNotesLink") == notes, "Appcast release notes URL mismatch")
+  let notesURL = "https://github.com/eureka-0/Imaxe/releases/tag/v\(version)"
+  try require(value("fullReleaseNotesLink") == notesURL, "Appcast release notes URL mismatch")
+  try require(value("releaseNotesLink") == nil, "Release notes must not depend on a Markdown asset")
+  guard let description = item.elements(forName: "description").first,
+        description.attribute(forLocalName: "format", uri: namespace)?.stringValue == "markdown",
+        let text = description.stringValue
+  else { throw ReleaseValidationError("Missing embedded Markdown release notes") }
+  let notes = text.trimmingCharacters(in: .whitespacesAndNewlines)
+  try require(
+    notes.components(separatedBy: .newlines).first == "# Imaxe \(version)",
+    "Release notes must use the marketing version without a build number",
+  )
+  let localNotes = directory.appendingPathComponent(notesName)
+  if FileManager.default.fileExists(atPath: localNotes.path) {
+    let localText = try String(contentsOf: localNotes, encoding: .utf8)
+    try require(
+      localText.trimmingCharacters(in: .whitespacesAndNewlines) == notes,
+      "Release notes differ from the embedded appcast",
+    )
+  }
 
   let temporary = FileManager.default.temporaryDirectory
     .appendingPathComponent("imaxe-release-\(UUID().uuidString)")
