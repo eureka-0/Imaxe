@@ -47,6 +47,11 @@ jobs:
         run: |
           test "$(uname -m)" = arm64
           test -d "$DEVELOPER_DIR"
+          # Test-host subprocesses may not inherit DEVELOPER_DIR. Keep xcrun
+          # and Xcode's helper agents on the same toolchain as this job.
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+          xcrun --kill-cache
+          echo "TEST_RUNNER_DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
           for tool in just xcbeautify; do
             if ! command -v "$tool" >/dev/null 2>&1; then
               brew install "$tool"
@@ -68,6 +73,7 @@ jobs:
             echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
             sw_vers
             uname -m
+            xcode-select --print-path
             xcodebuild -version
             xcrun swift --version
             xcrun --show-sdk-version
@@ -84,7 +90,13 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Unit tests and coverage
-        run: just test --skip-ui --coverage-report 2>&1 | tee Build/CI/unit-tests.log
+        run: just test --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/unit-tests.log
+
+      - name: AppKit window tests and coverage
+        # Window animations share the main run loop. Keep pixel decoding and
+        # fixture compilation out of this test host so animation states are observable.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: just test --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/window-tests.log
 
       - name: UI tests
         # Still collect UI evidence when a unit assertion fails; do not hide failures.
@@ -96,6 +108,7 @@ jobs:
         run: |
           shopt -s nullglob
           results=(Build/TestResults/*.xcresult)
+          validation_status=0
           if ((${#results[@]} > 0)); then
             # Preserve evidence even if extracting a result summary fails.
             tar -czf Build/CI/xcresults.tar.gz -C Build/TestResults .
@@ -106,8 +119,12 @@ jobs:
             jq -r '"### " + .title, "Result: \(.result); total: \(.totalTestCount); passed: \(.passedTests); failed: \(.failedTests); skipped: \(.skippedTests)"' \
               "Build/CI/$name.json" >> "$GITHUB_STEP_SUMMARY"
             # An empty or entirely skipped suite is not executed coverage.
-            jq -e '.passedTests > 0' "Build/CI/$name.json" >/dev/null
+            if ! jq -e '.passedTests > 0' "Build/CI/$name.json" >/dev/null; then
+              validation_status=1
+              xcrun xcresulttool get log --type build --path "$result" > "Build/CI/$name-build.json"
+            fi
           done
+          exit "$validation_status"
 
       - name: Upload test evidence
         if: ${{ !cancelled() }}

@@ -19,6 +19,7 @@ Options:
                             ImageFidelityTests, ImageCompatibilityTests, ImagePerformanceTests,
                             AdaptiveToolbarTests,
                             UpdateSettingsTests, ReleaseValidationTests, ReleaseLockTests.
+  --skip-suite <name>       Exclude a unit-test suite. Repeat to exclude multiple suites.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.
@@ -40,6 +41,8 @@ coverage_enabled="YES"
 coverage_report="NO"
 suite_filters=()
 suite_count=0
+skipped_suites=()
+skipped_suite_count=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -63,6 +66,12 @@ while [[ $# -gt 0 ]]; do
     suite_count=$((suite_count + 1))
     shift
     ;;
+  --skip-suite)
+    require_value "$1" "${2:-}"
+    skipped_suites+=("$2")
+    skipped_suite_count=$((skipped_suite_count + 1))
+    shift
+    ;;
   --no-coverage)
     coverage_enabled="NO"
     ;;
@@ -82,8 +91,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-if [[ $test_mode == "ui" && $suite_count -gt 0 ]]; then
-  echo "error: --suite only selects suites in ImaxeTests and cannot be used with --ui-only" >&2
+if [[ $test_mode == "ui" && ($suite_count -gt 0 || $skipped_suite_count -gt 0) ]]; then
+  echo "error: --suite and --skip-suite select ImaxeTests suites and cannot be used with --ui-only" >&2
   exit 2
 fi
 
@@ -159,6 +168,12 @@ esac
 if ((suite_count > 0)); then
   for suite in "${suite_filters[@]}"; do
     xcodebuild_arguments+=("-only-testing:ImaxeTests/${suite}")
+  done
+fi
+
+if ((skipped_suite_count > 0)); then
+  for suite in "${skipped_suites[@]}"; do
+    xcodebuild_arguments+=("-skip-testing:ImaxeTests/${suite}")
   done
 fi
 

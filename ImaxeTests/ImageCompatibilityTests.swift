@@ -190,6 +190,7 @@ struct ImageCompatibilityTests {
     let metadata = try ImageMetadata(bitmapURL: url, imageSource: source)
     #expect(metadata.depth == 32)
     #expect(metadata.estimatedFullFrameBytes == 64 * 32 * 16)
+    let original = try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
     let proxy = try #require(ImageLoader.downsampledBitmap(
       from: source,
       metadata: metadata,
@@ -199,11 +200,41 @@ struct ImageCompatibilityTests {
     let decoded = try #require(CGImageSourceCreateImageAtIndex(proxySource, 0, nil))
     #expect(decoded.bitsPerComponent == 32)
     #expect(decoded.bitmapInfo.contains(.floatComponents))
-    let color = try #require(NSBitmapImageRep(cgImage: decoded).colorAt(x: 8, y: 4))
-    #expect(abs(color.redComponent - 0.25) < 0.001)
-    #expect(abs(color.greenComponent - 0.5) < 0.001)
-    #expect(abs(color.blueComponent - 1.5) < 0.001)
+    // Check raw storage independently of AppKit's color-space conversion.
+    // Check the source too, so encoding and proxy preservation remain separate assertions.
+    for (label, bitmap) in [("source", original), ("proxy", decoded)] {
+      let samples = try floatRGBSample(bitmap, x: 8, y: 4)
+      for (channel, values) in zip(samples, [Float(0.25), 0.5, 1.5]).enumerated() {
+        let (actual, expected) = values
+        #expect(abs(actual - expected) < 0.001, "\(label) channel \(channel) lost its raw sample.")
+      }
+    }
     try expectDisplayedColor(proxy.image, matches: image)
+  }
+
+  private func floatRGBSample(_ image: CGImage, x: Int, y: Int) throws -> [Float] {
+    try #require(image.bitsPerComponent == 32)
+    try #require(image.bitsPerPixel == 96 || image.bitsPerPixel == 128)
+    try #require(image.bitmapInfo.contains(.floatComponents))
+    try #require(image.colorSpace?.numberOfComponents == 3)
+    let alphaFirst: [CGImageAlphaInfo] = [.first, .premultipliedFirst, .noneSkipFirst]
+    let firstColorComponent = alphaFirst.contains(image.alphaInfo) ? 1 : 0
+    try #require(firstColorComponent + 3 <= image.bitsPerPixel / 32)
+    let byteOrder = image.bitmapInfo.intersection(.byteOrderMask)
+    try #require(byteOrder == .byteOrder32Little || byteOrder == .byteOrder32Big)
+    let bytes = try #require(image.dataProvider?.data) as Data
+    try #require(x >= 0 && x < image.width && y >= 0 && y < image.height)
+    let bytesPerPixel = image.bitsPerPixel / 8
+    let offset = y * image.bytesPerRow + x * bytesPerPixel
+    try #require(offset + bytesPerPixel <= bytes.count)
+    return (0 ..< 3).map { component in
+      let start = offset + (firstColorComponent + component) * 4
+      let bits = (0 ..< 4).reduce(UInt32.zero) { value, byte in
+        let shift = byteOrder == .byteOrder32Little ? byte * 8 : (3 - byte) * 8
+        return value | (UInt32(bytes[start + byte]) << shift)
+      }
+      return Float(bitPattern: bits)
+    }
   }
 
   private func componentImage(space: CGColorSpace, samples: [UInt8]) throws -> CGImage {

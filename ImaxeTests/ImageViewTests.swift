@@ -8,7 +8,7 @@ import SwiftUI
 import Testing
 
 @MainActor
-@Suite("Image View")
+@Suite("Image View", .serialized)
 struct ImageViewTests {
   @Test func `bitmap image document uses pixel size`() async throws {
     let url = URL.temporaryDirectory
