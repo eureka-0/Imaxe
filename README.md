@@ -2,7 +2,8 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/eureka-0/Imaxe)](https://github.com/eureka-0/Imaxe/releases)
 [![Static Badge](https://img.shields.io/badge/macOS-15.6%2B%20Apple%20Silicon-orange)](#requirements)
-[![GitHub License](https://img.shields.io/github/license/eureka-0/Imaxe)](#license)
+[![GitHub License](https://img.shields.io/github/license/eureka-0/Imaxe)](LICENSE)
+[![CI](https://github.com/eureka-0/Imaxe/actions/workflows/ci.yml/badge.svg)](https://github.com/eureka-0/Imaxe/actions/workflows/ci.yml)
 
 Imaxe is a native macOS image viewer for fast, everyday image browsing. It is built with SwiftUI and AppKit, with an emphasis on responsive image switching, smooth zooming and panning, and a lightweight browsing experience.
 
