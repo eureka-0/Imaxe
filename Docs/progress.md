@@ -4,10 +4,10 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ## 当前发布范围与合并约定
 
-- 本次目标为 1.1.0；正式构建号在发布准备 PR 中确定，合入 main 后从干净、与远端一致的 main 打包，保留 macOS 15.6+、arm64、ad-hoc 分发与现有更新签名密钥。
+- 本次正式候选 B 为 `1.1.0 (12)`，高于内部升级基线 A 的 `1.1.0 (11)`；发布准备 PR 合入 main 后，从干净、与远端一致的 main 构建 B，保留 macOS 15.6+、arm64、ad-hoc 分发与现有更新签名密钥。
 - 范围包括已有图片保真、加载预算与导航修复、Sparkle 设置同步、发布资产校验及 Pages feed；本轮补兼容样本和发布前验证，不引入分块渲染、按需恢复高分辨率或 HDR 显示承诺。
-- 本轮 develop 收尾后通过 PR 合入 main，并由 GitHub 自动删除 develop；之后从最新 main 创建具体功能分支，通过 PR 合并后删除，不再保留长期 develop。
-- 本轮 PR 建议使用 merge commit 保留已有开发历史；后续较小功能 PR 默认 squash merge。合并、推送、打标签和正式发布由用户安排。
+- develop 已通过 PR #1 合入 main，并由 GitHub 自动删除；之后从最新 main 创建具体功能分支，通过 PR 合并后删除，不再保留长期 develop。
+- PR #1 使用 merge commit 保留已有开发历史；后续较小功能 PR 默认 squash merge。发布准备按用户要求分步提交并创建 PR；合并、打标签和正式发布仍由用户安排。
 - 不申请 Apple Developer 账号，不配置 Apple Development、Developer ID、公证或 stapling；这是分发约束，不是待实现任务。
 - 用户已明确将真实慢卷测试降为低优先级待验收，本轮不下载新图片，使用仓库现有图片和本地生成样本。
 
@@ -42,8 +42,9 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Sparkle Updates
 
-- [ ] 公开 feed 与真实升级验收：SUFeedURL 已配置，待初始 Pages 部署后验证公开 RSS，再从含 Sparkle 的较低 CFBundleVersion 通过正式 feed 和 Release 资产完成升级。
-- [x] 2026-10-19：确认公开仓库、匿名下载历史 ZIP，并启用 Pages 的 Actions 发布来源；`SUFeedURL` 与初始空 feed、部署工作流已准备。线上 XML 仍需主分支首次部署。
+- [x] 公开空 feed 验收：2026-10-20 匿名请求 `https://eureka-0.github.io/Imaxe/appcast.xml` 返回 HTTP 200，`application/xml`，XML 解析为 1 个 RSS channel、0 个更新条目，与 `Distribution/appcast.xml` 字节一致；SHA-256 为 `91ad5658dd8d8dfa61e843b3d2445fee3997346d5854d67114060ecf676bf1bb`。本项只确认 feed 部署与可访问性。
+- [ ] 真实升级验收：从含 Sparkle 和现有公钥的低构建号 A，通过隔离 feed 升级到候选 B；正式发布后再核验生产 feed 和匿名 Release 资产的完整升级链路。
+- [x] 2026-10-19：确认公开仓库、匿名下载历史 ZIP，并启用 Pages 的 Actions 发布来源；`SUFeedURL`、初始空 feed 和部署工作流已准备，次日完成首次线上部署。
 - [x] 现有 Keychain 公钥匹配 SUPublicEDKey，实际签名通过，修改内容与错误公钥被拒绝；没有导出或更换私钥。
 - [x] 发布流程已加入产物摘要/EdDSA/包内元数据校验、固定提交、线上 feed 与已发布 manifest 构建号比较、draft 资产回读及一致产物恢复逻辑；不再自动切分支或覆盖不匹配资产。
 - [x] 发布脚本在首次 Xcode 调用前取得构建/发布共用的原子目录锁；锁冲突不触发清理，构建/发布冲突、失败重试和终止释放回归通过。
@@ -51,23 +52,28 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] 实际归档发现并修复通用二进制问题：发布显式使用 `ARCHS=arm64`，本地真实 ZIP 的架构、版本、feed、公钥、appcast 和深层代码签名均通过校验。
 - [x] 匿名检查实际 v1.0.0 ZIP：包内为 1.0 (4)、最低 macOS 14.0，无 Sparkle/feed/公钥，确认需要先手动迁移一次。
 - [x] 单元和 UI 测试增加仅测试启动参数，停用真实更新调度；设置单元测试仍使用独立的 Sparkle fixture 验证状态变化。
-- [ ] 将已审查的 develop 变更合并 main，等待 Updates 工作流发布初始 feed，再匿名核验 HTTP 200 与 XML 内容；本轮未推送代码。
-- [ ] 最终版本/构建号通过发布准备 PR 合入 main，随后在干净 main 运行完整 just build / just publish；实际验证中途上传恢复、Pages 失败恢复与匿名新资产下载。
+- [x] PR #1 已于 2026-10-20 合并 main，合并提交为 `f66f4c3d`，远端 develop 已删除；Updates run `39427222348` 成功部署初始空 feed，匿名 HTTP 与 XML 验收通过。后续 main 的 `7459e278` 仅补充 README CI 徽标。
+- [x] 内部升级基线 A：从干净且与远端一致的 main `7459e278aff8afffd55b2d591a7e9439553aba56` 执行 `just build`，生成 `1.1.0 (11)`、arm64、最低 macOS 15.6 的完整签名更新包；feed、公钥、EdDSA、深层代码签名及全部文件摘要校验通过，未创建标签或 Release。产物位于 `Build/Releases/Imaxe-1.1.0-11-7459e278aff8/`，ZIP SHA-256 为 `bbe211f94d84c6d565eb3e534ec4c660b1406368b891773c8513ff1a4763eaf4`；旧的 9/10/11 号历史 ZIP 均缺少 feed 与公钥，不用于 A/B 升级。
+- [x] 发布准备版本已确定为 `1.1.0 (12)`，应用 Debug 与 Release 的构建号同步从 11 增加到 12，测试目标版本保持不变；内部 A 保留 11，B 的应用身份、更新公钥、生产 feed 与签名方式保持一致。
+- [ ] 发布准备 PR 通过 CI 并合并后，从干净且与远端一致的 main 执行 `just build` 构建 B，记录来源提交和 ZIP 摘要。分支构建与合并后的提交不同，不能直接当作可发布产物；后续修改代码需递增构建号并重建，不能复用旧包的验收结论。
+- [ ] 正式包性能、普通 Mac 安装及 A/B 升级验收完成后，由用户执行 `just publish`；该命令会推送标签并公开 Release。发布后验证上传中断恢复、Pages 失败恢复与匿名资产下载，发布前不以空 feed 验收替代真实升级结果。
 - [ ] 使用两个正式打包构建完成 A/B 真实升级及第二台普通 Mac 的安装/迁移/授权验收；旧版 1.0 (4) 不含 Sparkle，只用于手动迁移验收。
 
 ## P2 — Performance, Compatibility, and Experience
 
 ### Test Reliability
 
-- [ ] PR #1 第四轮云端 CI（run `39420553605`，提交 `98773472`）：预构建和产物恢复成功；macOS 15 的单元与窗口套件分别为 96 通过/1 慢卷跳过及 17 通过，浮点 TIFF 新断言获得执行证据。剩余失败为冷启动 UI 性能测试：`XCTApplicationLaunchMetric` 第 0 次采集到 1 个指标，第 1 次为 0 个，报 `Received unexpected number of metrics`；其他 3 项 UI 测试通过，macOS 26、27 全部通过。下载的 xcresult action 日志确认各轮确实终止旧进程并启动新进程，错误发生在 XCTest 指标汇总；具体启动事件缺失原因未确定，不将其记为产品性能超标。
+- [x] PR #1 云端 CI 验收完成：第五轮 run `39423318582`，来源提交 `2b9c43c3`，macOS 15 / Xcode 26.3、macOS 26 / Xcode 26.3、macOS 27 / Xcode 27.0 的单元、独立窗口与 UI 步骤全部成功，预构建与 `macOS compatibility (unit + UI)` 汇总检查通过。慢卷保持按配置跳过，云端测量不作为正式 Release 包性能结论。
+- [x] main required status check 已生效：ruleset `25415148` 为 active，分支有效规则要求 `macOS compatibility (unit + UI)`，来源限定为 GitHub Actions（integration ID `15368`），与第五轮真实检查匹配；管理员 `always` bypass 保留。当前未要求分支必须先更新至最新 main（strict 为 false），未改动用户设置。
+- [x] PR #1 第四轮启动测量故障已在第五轮验收：run `39420553605` 的 macOS 15 单元与窗口套件分别为 96 通过/1 慢卷跳过及 17 通过，3 项 UI 通过；唯一失败为 `XCTApplicationLaunchMetric` 第 0 次采集 1 个指标、第 1 次为 0 个。xcresult 确认各轮均重启进程，错误发生在 XCTest 指标汇总；调整为墙钟测量后，第五轮三个系统的完整 UI 均通过，第四轮仍保留为失败运行。
 - [x] 冷启动 UI 测量改用所有系统一致的 `XCTClockMetric`：保留三轮测量，每轮显式终止应用并等待 `.notRunning`，手动计时只覆盖 `app.launch()`，随后要求应用进入前台且菜单可访问；日志标记为 `app_launch_call_wall_time`。Apple 文档说明 `launch()` 本身会终止已有实例，因此不将本次故障归因为未重新启动；墙钟测量避免依赖本轮缺失的系统启动事件，但与旧的系统首帧/响应指标不可直接比较，精确首帧仍按 P1 正式包性能项补验。
-- [x] 冷启动测量修复本机验证：完整 `just test --ui-only --no-coverage` 与 CI 同路径的 `just test --test-without-building --ui-only --no-coverage` 均为 4 项 UI 通过、0 失败；结果为 `Build/TestResults/Imaxe-20261020-202849.xcresult` 与 `Imaxe-20261020-203034.xcresult`，两份结果均记录 3 个单调时钟样本，只执行模式没有重新编译。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 和 diff 检查通过；本机为 macOS 27.0.1 / Xcode 27.1，macOS 15 新测量仍待下一轮云端复验，未重跑未修改的单元套件。
+- [x] 冷启动测量修复本机验证：完整 `just test --ui-only --no-coverage` 与 CI 同路径的 `just test --test-without-building --ui-only --no-coverage` 均为 4 项 UI 通过、0 失败；结果为 `Build/TestResults/Imaxe-20261020-202849.xcresult` 与 `Imaxe-20261020-203034.xcresult`，两份结果均记录 3 个单调时钟样本，只执行模式没有重新编译。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 和 diff 检查通过；本机为 macOS 27.0.1 / Xcode 27.1，随后第五轮云端 CI 的三个系统全部通过。
 - [ ] 本机冷启动补验观察：新增的“每次启动自动出现窗口”检查在 `Build/TestResults/Imaxe-20261020-202447.xcresult` 失败，当时进程已退出并重新进入前台，但窗口 AX 元素不存在；该运行 3 项 UI 通过、1 失败，未记为通过。原有窗口用例会在需要时使用 New 打开窗口，因此冷启动测量只验证进程和菜单，窗口及图片可见性继续由原有用例验证；自动呈现 Home 窗口的实际行为后续单独复核，未据此认定其导致云端首帧指标缺失。
-- [ ] PR #1 第三轮云端 CI（run `39416951796`，提交 `ecef102a`）：macOS 26、27 全部通过；macOS 15 再次在 `CompileAssetCatalogVariant` 崩溃，三个测试调用均为 0 项执行。已下载构建日志，确认 `AssetCatalogAgent-AssetRuntime` 连接中断并伴随 CoreMedia 覆盖运行时缺失符号；第二轮未复现不能证明资源编译问题已根治，浮点样本的新断言在 macOS 15 仍未得到执行证据。
+- [ ] macOS 15 原生资源编译限制：第三轮 run `39416951796` 的 `CompileAssetCatalogVariant` 崩溃，三个测试调用均为 0 项执行；日志包含 `AssetCatalogAgent-AssetRuntime` 连接中断和 CoreMedia 缺失符号。第五轮已通过构建/执行分离完成运行兼容性验收，但未修复原生编译稳定性；该工具链限制不再阻塞当前 CI 路径。
 - [x] macOS 15 CI 改为构建与执行分离：在 macOS 26 使用 Xcode 26.3 和 ad-hoc 签名构建完整应用、单元与 UI 测试产物，经 tar 保留权限、符号链接及签名后上传同一工作流；macOS 15 校验提交 SHA、源码路径和 Xcode 版本，再通过 `just test --test-without-building` 分别运行原有三个测试组。未删除 Icon Composer 图标、跳过失败用例或降低浮点样本断言；macOS 26、27 保留各自原生构建和测试。
 - [x] 测试脚本增加 `--build-only` 与 `--test-without-building`，保留既有测试过滤及覆盖率导出；两个模式互斥，构建模式拒绝测试过滤或覆盖率报告，只执行模式要求恰好一份 `.xctestrun`。汇总检查同时要求预构建 job 与全部系统测试成功，产物恢复失败时禁止回退到 macOS 15 原生构建；PR/手动触发与 `fail-fast: false` 保持不变。
 - [x] 构建与执行分离的本机验证：`just test --build-only` 成功；完整产物经 tar 打包、解包和两份应用 bundle 的深层签名校验后还原，分别通过 `--test-without-building` 执行其余单元、窗口和 UI 测试，结果为 96 通过/1 慢卷跳过、17 通过及 4 通过，合计 117 通过、0 失败、1 跳过。两组单元标识并集为原有 114 项且无交集，覆盖率正常导出，三个执行日志均无资源或 Swift 重新编译；结果为 `Build/TestResults/Imaxe-20261020-200250.xcresult`、`Imaxe-20261020-200332.xcresult`、`Imaxe-20261020-200402.xcresult`。本机仍为 macOS 27.0.1 / Xcode 27.1；参数互斥检查、SwiftLint、ShellCheck、shfmt、YAML/步骤语法和 actionlint 通过。
-- [ ] 构建与执行分离后的云端验收：第四轮 run `39420553605` 已确认 macOS 26 构建的完整产物能在 macOS 15 启动，单元与窗口套件全部通过，包含浮点 TIFF 的来源/代理样本断言；3 项 UI 通过，冷启动 UI 仍因系统启动指标缺失而失败。下一轮需复验调整后的冷启动测量及完整矩阵；macOS 15 上 Xcode 26.3 的原生资源编译稳定性继续保留为未解决的工具链边界，不纳入这条运行兼容性测试路径。
+- [x] 构建与执行分离后的云端验收：第五轮 run `39423318582` 已确认 macOS 26 构建的完整产物在 macOS 15 通过单元、窗口和全部 UI 测试，包含浮点 TIFF 的来源/代理样本断言及三轮启动墙钟测量；macOS 26、27 的原生构建和测试均通过。macOS 15 原生资源编译稳定性继续单独跟踪。
 - [x] PR #1 第二轮浮点样本故障已在第四轮验收：run `39414212147` 的 macOS 15 浮点 TIFF `NSBitmapImageRep.colorAt` 蓝色分量为 1.0，未满足 1.5 的期望；改为分别检查来源与代理的底层浮点样本、保留 AppKit 渲染对照后，第四轮 run `39420553605` 的三个系统单元套件均通过，未降低超范围样本要求。
 - [x] 调整浮点 TIFF 验收取样：直接从 Core Graphics 解码图的 `dataProvider` 按行跨度、分量字节序和通道布局读取 Float32；来源 TIFF 与代理 TIFF 分别检查 `[0.25, 0.5, 1.5]`，容差仍为 0.001，保留 32 位/浮点标志、16 字节 RGBA 预算及 AppKit 实际渲染对照。不对 macOS 15 跳过或放宽断言；若底层样本确实被截断，仍会明确报告来源/代理及通道。
 - [x] 浮点取样修复本机验证：默认 `just test --skip-ui --suite ImageCompatibilityTests --no-coverage` 覆盖 5 项测试、9 组输入，全部通过，结果为 `Build/TestResults/Imaxe-20261020-193734.xcresult`；Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 与 diff 检查通过。临时 CI 签名配置下的两次宿主启动挂起均已终止，未计入通过；macOS 15 的新断言随后在第四轮云端 CI 中通过。
@@ -75,11 +81,11 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] 修正 CI 工具链选择：除 `DEVELOPER_DIR` 外，同步设置 runner 的 `xcode-select`、清除 xcrun 查找缓存，并通过 `TEST_RUNNER_DEVELOPER_DIR` 显式传给测试宿主；记录实际全局选择，避免子进程回到镜像默认 Xcode。第二轮已确认 macOS 15 资源编译及 macOS 26 发布校验通过。
 - [x] 隔离窗口动画单元测试：`ImageViewTests` 使用 Swift Testing 的 `.serialized`，CI 通过 `--suite` / 新增 `--skip-suite` 分别启动窗口套件与其余单元测试；不再让图片解码、性能样本及发布 fixture 编译与窗口动画共用测试宿主，保留原有断言与超时阈值。零测试的编译失败也保留所有结果摘要和完整 build 日志，供资源代理问题复查。
 - [x] CI 修复本机复验：窗口套件 17 通过，其余单元测试 96 通过、1 项慢卷跳过，均无失败，覆盖率正常导出；对比原云端单元测试标识，两组并集完整覆盖原 114 项且无交集。结果为 `Build/TestResults/Imaxe-20261020-190916.xcresult` 与 `Build/TestResults/Imaxe-20261020-191152.xcresult`；编译失败产物回放确认保留两份摘要和 build 日志，退出状态仍为失败。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat、shfmt、工作流静态检查及 diff 检查通过。
-- [x] CI 修复后的本机 UI 复验：初次 `Build/TestResults/Imaxe-20261020-191250.xcresult` 在启用自动化模式时超时，未执行测试；当时只读检查显示本机自动化模式关闭且需要用户认证，未修改系统安全设置。随后重试 4 通过、0 失败，结果为 `Build/TestResults/Imaxe-20261020-191533.xcresult`；与两组单元测试合计 117 通过、0 失败、1 项慢卷跳过。此前本机两次宿主停在 dyld 文件打开阶段，均终止且未记为通过，保留旧派生目录后重建通过；三个云端组合仍需推送修复后重新验收。
+- [x] CI 修复后的本机 UI 复验：初次 `Build/TestResults/Imaxe-20261020-191250.xcresult` 在启用自动化模式时超时，未执行测试；当时只读检查显示本机自动化模式关闭且需要用户认证，未修改系统安全设置。随后重试 4 通过、0 失败，结果为 `Build/TestResults/Imaxe-20261020-191533.xcresult`；与两组单元测试合计 117 通过、0 失败、1 项慢卷跳过。此前本机两次宿主停在 dyld 文件打开阶段，均终止且未记为通过，保留旧派生目录后重建通过；第五轮云端 CI 的三个系统随后全部通过。
 - [x] 添加 GitHub Actions CI：仅对目标分支为 `main` 的 PR 及手动操作触发，不因 push 触发；ARM64 `macos-15` / `macos-26` 使用 Xcode 26.3，`xcode-27`（macOS 27）使用稳定版 Xcode 27.0，通过 `just test` 分别运行单元测试（含覆盖率）及完整 UI 测试。保持 `fail-fast: false`，收集三个系统的独立结果；临时配置所有测试目标的 ad-hoc 签名，不依赖开发证书，保存环境、日志、结果摘要和完整 xcresult 14 天。汇总 job 为 `macos_compatibility_gate`，检查名为 `macOS compatibility (unit + UI)`，矩阵全部成功后才通过。
 - [x] CI 测试入口本机验证：使用与 CI 相同的临时签名配置分别运行测试，单元测试 113 通过、0 失败、1 项慢卷跳过，UI 测试 4 通过、0 失败，覆盖率报告正常导出。结果为 `Build/TestResults/Imaxe-20261020-155435.xcresult` 和 `Build/TestResults/Imaxe-20261020-155514.xcresult`；运行环境为本机 macOS 27.0.1 / Xcode 27.1，不代表三个云端组合已通过。
 - [x] 三系统矩阵静态验证：YAML、触发事件、三个 runner / Xcode 配对、`fail-fast: false`、汇总依赖、全部 shell 步骤语法及 `git diff --check` 通过。actionlint 1.7.12 尚未内置官方 `xcode-27` 标签，使用仅允许此标签的临时配置后，CI 与既有 Updates 工作流均通过 actionlint；未关闭其他检查。
-- [ ] CI 云端首轮验收：创建面向 main 的 PR 后检查三个系统及各自固定工具链的实际运行结果，尤其是 UI 自动化权限、原生文件选择器和测试宿主启动；手动触发入口需工作流先存在于默认分支。当前本机验证不能代替云端执行；成功后将 `macOS compatibility (unit + UI)` 加入 main ruleset 的 required status checks，原则上禁止直接 push，管理员 bypass 保持现有约定。
+- [x] CI 云端及合并条件验收：PR #1 第五轮完整矩阵通过，原生文件选择器、UI 自动化和测试宿主均实际执行；工作流现已在默认分支，手动触发入口可用。main ruleset 已要求 `macOS compatibility (unit + UI)` 成功后合并，管理员 bypass 保持现有约定；手动触发本身尚未另行执行。
 - [ ] CI 覆盖边界：runner 标签只固定系统大版本，不能证明恰好 macOS 15.6 的最低版本兼容；ARM64 矩阵不覆盖 Intel。慢卷保持显式跳过，云端启动/内存指标不作为正式包性能验收。
 - [x] Replace timing-based metadata preload coverage with an explicit document-load gate so the session test remains deterministic under parallel test load.
 - [x] Verify equivalent results across repeated image loads without requiring `NSCache` to retain document identity under memory pressure.
