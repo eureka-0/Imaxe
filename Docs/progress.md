@@ -4,7 +4,7 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ## 当前发布范围与合并约定
 
-- 本次目标为 1.1.0；正式构建号在发布准备 PR 中确定，合入 main 后从干净、与远端一致的 main 打包，保留 macOS 15.6+、arm64、ad-hoc 分发与现有更新签名密钥。
+- 本次正式候选 B 为 `1.1.0 (12)`，高于内部升级基线 A 的 `1.1.0 (11)`；发布准备 PR 合入 main 后，从干净、与远端一致的 main 构建 B，保留 macOS 15.6+、arm64、ad-hoc 分发与现有更新签名密钥。
 - 范围包括已有图片保真、加载预算与导航修复、Sparkle 设置同步、发布资产校验及 Pages feed；本轮补兼容样本和发布前验证，不引入分块渲染、按需恢复高分辨率或 HDR 显示承诺。
 - develop 已通过 PR #1 合入 main，并由 GitHub 自动删除；之后从最新 main 创建具体功能分支，通过 PR 合并后删除，不再保留长期 develop。
 - PR #1 使用 merge commit 保留已有开发历史；后续较小功能 PR 默认 squash merge。发布准备按用户要求分步提交并创建 PR；合并、打标签和正式发布仍由用户安排。
@@ -54,7 +54,9 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] 单元和 UI 测试增加仅测试启动参数，停用真实更新调度；设置单元测试仍使用独立的 Sparkle fixture 验证状态变化。
 - [x] PR #1 已于 2026-10-20 合并 main，合并提交为 `f66f4c3d`，远端 develop 已删除；Updates run `39427222348` 成功部署初始空 feed，匿名 HTTP 与 XML 验收通过。后续 main 的 `7459e278` 仅补充 README CI 徽标。
 - [x] 内部升级基线 A：从干净且与远端一致的 main `7459e278aff8afffd55b2d591a7e9439553aba56` 执行 `just build`，生成 `1.1.0 (11)`、arm64、最低 macOS 15.6 的完整签名更新包；feed、公钥、EdDSA、深层代码签名及全部文件摘要校验通过，未创建标签或 Release。产物位于 `Build/Releases/Imaxe-1.1.0-11-7459e278aff8/`，ZIP SHA-256 为 `bbe211f94d84c6d565eb3e534ec4c660b1406368b891773c8513ff1a4763eaf4`；旧的 9/10/11 号历史 ZIP 均缺少 feed 与公钥，不用于 A/B 升级。
-- [ ] 最终版本/构建号通过发布准备 PR 合入 main，随后在干净 main 运行完整 just build / just publish；实际验证中途上传恢复、Pages 失败恢复与匿名新资产下载。
+- [x] 发布准备版本已确定为 `1.1.0 (12)`，应用 Debug 与 Release 的构建号同步从 11 增加到 12，测试目标版本保持不变；内部 A 保留 11，B 的应用身份、更新公钥、生产 feed 与签名方式保持一致。
+- [ ] 发布准备 PR 通过 CI 并合并后，从干净且与远端一致的 main 执行 `just build` 构建 B，记录来源提交和 ZIP 摘要。分支构建与合并后的提交不同，不能直接当作可发布产物；后续修改代码需递增构建号并重建，不能复用旧包的验收结论。
+- [ ] 正式包性能、普通 Mac 安装及 A/B 升级验收完成后，由用户执行 `just publish`；该命令会推送标签并公开 Release。发布后验证上传中断恢复、Pages 失败恢复与匿名资产下载，发布前不以空 feed 验收替代真实升级结果。
 - [ ] 使用两个正式打包构建完成 A/B 真实升级及第二台普通 Mac 的安装/迁移/授权验收；旧版 1.0 (4) 不含 Sparkle，只用于手动迁移验收。
 
 ## P2 — Performance, Compatibility, and Experience
