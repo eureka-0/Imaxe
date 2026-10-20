@@ -20,6 +20,8 @@ Options:
                             AdaptiveToolbarTests,
                             UpdateSettingsTests, ReleaseValidationTests, ReleaseLockTests.
   --skip-suite <name>       Exclude a unit-test suite. Repeat to exclude multiple suites.
+  --build-only              Build all test products without running tests.
+  --test-without-building   Run existing test products from Build/DerivedData/Tests.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.
@@ -39,6 +41,7 @@ require_value() {
 test_mode="all"
 coverage_enabled="YES"
 coverage_report="NO"
+build_action="test"
 suite_filters=()
 suite_count=0
 skipped_suites=()
@@ -72,6 +75,17 @@ while [[ $# -gt 0 ]]; do
     skipped_suite_count=$((skipped_suite_count + 1))
     shift
     ;;
+  --build-only | --test-without-building)
+    if [[ $build_action != "test" ]]; then
+      echo "error: --build-only and --test-without-building are mutually exclusive" >&2
+      exit 2
+    fi
+    if [[ $1 == "--build-only" ]]; then
+      build_action="build-for-testing"
+    else
+      build_action="test-without-building"
+    fi
+    ;;
   --no-coverage)
     coverage_enabled="NO"
     ;;
@@ -98,6 +112,12 @@ fi
 
 if [[ $coverage_enabled == "NO" && $coverage_report == "YES" ]]; then
   echo "error: --coverage-report cannot be used with --no-coverage" >&2
+  exit 2
+fi
+
+if [[ $build_action == "build-for-testing" &&
+  ($test_mode != "all" || $suite_count -gt 0 || $skipped_suite_count -gt 0 || $coverage_report == "YES") ]]; then
+  echo "error: --build-only builds all test targets and cannot use test filters or --coverage-report" >&2
   exit 2
 fi
 
@@ -146,15 +166,29 @@ cleanup_result_bundles() {
 trap cleanup_result_bundles EXIT
 
 xcodebuild_arguments=(
-  test
-  -project Imaxe.xcodeproj
-  -scheme Imaxe
+  "${build_action}"
   -destination 'platform=macOS,arch=arm64'
-  -configuration Debug
-  -derivedDataPath "${DERIVED_DATA_DIRECTORY}"
   -enableCodeCoverage "${coverage_enabled}"
   -resultBundlePath "${RESULT_BUNDLE}"
 )
+
+if [[ $build_action == "test-without-building" ]]; then
+  shopt -s nullglob
+  test_runs=("${DERIVED_DATA_DIRECTORY}"/Build/Products/*.xctestrun)
+  shopt -u nullglob
+  if ((${#test_runs[@]} != 1)); then
+    echo "error: --test-without-building requires exactly one .xctestrun in ${DERIVED_DATA_DIRECTORY}/Build/Products" >&2
+    exit 2
+  fi
+  xcodebuild_arguments+=(-xctestrun "${test_runs[0]}")
+else
+  xcodebuild_arguments+=(
+    -project Imaxe.xcodeproj
+    -scheme Imaxe
+    -configuration Debug
+    -derivedDataPath "${DERIVED_DATA_DIRECTORY}"
+  )
+fi
 
 case "$test_mode" in
 unit)

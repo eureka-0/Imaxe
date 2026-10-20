@@ -59,10 +59,15 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Test Reliability
 
+- [ ] PR #1 第三轮云端 CI（run `39416951796`，提交 `ecef102a`）：macOS 26、27 全部通过；macOS 15 再次在 `CompileAssetCatalogVariant` 崩溃，三个测试调用均为 0 项执行。已下载构建日志，确认 `AssetCatalogAgent-AssetRuntime` 连接中断并伴随 CoreMedia 覆盖运行时缺失符号；第二轮未复现不能证明资源编译问题已根治，浮点样本的新断言在 macOS 15 仍未得到执行证据。
+- [x] macOS 15 CI 改为构建与执行分离：在 macOS 26 使用 Xcode 26.3 和 ad-hoc 签名构建完整应用、单元与 UI 测试产物，经 tar 保留权限、符号链接及签名后上传同一工作流；macOS 15 校验提交 SHA、源码路径和 Xcode 版本，再通过 `just test --test-without-building` 分别运行原有三个测试组。未删除 Icon Composer 图标、跳过失败用例或降低浮点样本断言；macOS 26、27 保留各自原生构建和测试。
+- [x] 测试脚本增加 `--build-only` 与 `--test-without-building`，保留既有测试过滤及覆盖率导出；两个模式互斥，构建模式拒绝测试过滤或覆盖率报告，只执行模式要求恰好一份 `.xctestrun`。汇总检查同时要求预构建 job 与全部系统测试成功，产物恢复失败时禁止回退到 macOS 15 原生构建；PR/手动触发与 `fail-fast: false` 保持不变。
+- [x] 构建与执行分离的本机验证：`just test --build-only` 成功；完整产物经 tar 打包、解包和两份应用 bundle 的深层签名校验后还原，分别通过 `--test-without-building` 执行其余单元、窗口和 UI 测试，结果为 96 通过/1 慢卷跳过、17 通过及 4 通过，合计 117 通过、0 失败、1 跳过。两组单元标识并集为原有 114 项且无交集，覆盖率正常导出，三个执行日志均无资源或 Swift 重新编译；结果为 `Build/TestResults/Imaxe-20261020-200250.xcresult`、`Imaxe-20261020-200332.xcresult`、`Imaxe-20261020-200402.xcresult`。本机仍为 macOS 27.0.1 / Xcode 27.1；参数互斥检查、SwiftLint、ShellCheck、shfmt、YAML/步骤语法和 actionlint 通过。
+- [ ] 构建与执行分离后的云端验收：需在下一轮 PR CI 确认 macOS 15 能执行全部原有测试，尤其是浮点 TIFF 的来源/代理样本断言及 UI 测试；本机打包还原验证不能代替跨系统执行。macOS 15 上 Xcode 26.3 的原生资源编译稳定性继续保留为未解决的工具链边界，不纳入这条运行兼容性测试路径。
 - [ ] PR #1 第二轮云端 CI（run `39414212147`）：macOS 26、27 全部通过；macOS 15 的资源编译、窗口套件和 UI 测试已通过，唯一失败为浮点 TIFF 的 `NSBitmapImageRep.colorAt` 蓝色分量断言（实际 1.0，期望 1.5）。需分别验证底层浮点样本与 AppKit 渲染，不以颜色访问接口的返回值直接证明代理像素被截断，也不降低超范围样本的验收要求。
 - [x] 调整浮点 TIFF 验收取样：直接从 Core Graphics 解码图的 `dataProvider` 按行跨度、分量字节序和通道布局读取 Float32；来源 TIFF 与代理 TIFF 分别检查 `[0.25, 0.5, 1.5]`，容差仍为 0.001，保留 32 位/浮点标志、16 字节 RGBA 预算及 AppKit 实际渲染对照。不对 macOS 15 跳过或放宽断言；若底层样本确实被截断，仍会明确报告来源/代理及通道。
 - [x] 浮点取样修复本机验证：默认 `just test --skip-ui --suite ImageCompatibilityTests --no-coverage` 覆盖 5 项测试、9 组输入，全部通过，结果为 `Build/TestResults/Imaxe-20261020-193734.xcresult`；Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 与 diff 检查通过。临时 CI 签名配置下的两次宿主启动挂起均已终止，未计入通过；macOS 15 的新断言仍待推送后云端复验。
-- [x] PR #1 首轮云端故障修复验收：run `39393986174` 的 macOS 15 资源代理崩溃、macOS 26 Xcode 工具链混用和 macOS 27 窗口同步测试超时，均在第二轮 run `39414212147` 中未再出现；三平台窗口套件和 UI 测试均通过，26、27 整个任务通过。第二轮剩余的 macOS 15 浮点样本断言单独跟踪，不将首轮失败运行改记为通过。
+- [x] PR #1 首轮云端故障阶段性复验：run `39393986174` 的 macOS 26 Xcode 工具链混用和 macOS 27 窗口同步测试超时，在第二、三轮均未再出现，26、27 整个任务通过。macOS 15 的资源编译及窗口/UI 测试曾在第二轮通过，但资源代理在第三轮再次崩溃；该问题继续单独跟踪，不将偶尔编译成功记为已根治。
 - [x] 修正 CI 工具链选择：除 `DEVELOPER_DIR` 外，同步设置 runner 的 `xcode-select`、清除 xcrun 查找缓存，并通过 `TEST_RUNNER_DEVELOPER_DIR` 显式传给测试宿主；记录实际全局选择，避免子进程回到镜像默认 Xcode。第二轮已确认 macOS 15 资源编译及 macOS 26 发布校验通过。
 - [x] 隔离窗口动画单元测试：`ImageViewTests` 使用 Swift Testing 的 `.serialized`，CI 通过 `--suite` / 新增 `--skip-suite` 分别启动窗口套件与其余单元测试；不再让图片解码、性能样本及发布 fixture 编译与窗口动画共用测试宿主，保留原有断言与超时阈值。零测试的编译失败也保留所有结果摘要和完整 build 日志，供资源代理问题复查。
 - [x] CI 修复本机复验：窗口套件 17 通过，其余单元测试 96 通过、1 项慢卷跳过，均无失败，覆盖率正常导出；对比原云端单元测试标识，两组并集完整覆盖原 114 项且无交集。结果为 `Build/TestResults/Imaxe-20261020-190916.xcresult` 与 `Build/TestResults/Imaxe-20261020-191152.xcresult`；编译失败产物回放确认保留两份摘要和 build 日志，退出状态仍为失败。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat、shfmt、工作流静态检查及 diff 检查通过。

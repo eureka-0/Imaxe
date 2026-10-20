@@ -13,8 +13,70 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build_macos15_tests:
+    # Xcode 26's Icon Composer asset agent intermittently crashes on macOS 15.
+    # Build the complete app and tests on 26, then execute those products on 15.
+    name: Build macOS 15 test products (Xcode 26.3, arm64)
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare build environment
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          sudo xcode-select --switch "$DEVELOPER_DIR"
+          xcrun --kill-cache
+          for tool in just xcbeautify; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              brew install "$tool"
+            fi
+          done
+          cat > "$RUNNER_TEMP/ci-signing.xcconfig" <<'XCCONFIG'
+          CODE_SIGN_IDENTITY = -
+          CODE_SIGN_STYLE = Manual
+          DEVELOPMENT_TEAM =
+          XCCONFIG
+          echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/ci-signing.xcconfig" >> "$GITHUB_ENV"
+          mkdir -p Build/CI
+          git rev-parse HEAD > Build/CI/test-products-commit.txt
+          pwd > Build/CI/test-products-source-root.txt
+          xcodebuild -version > Build/CI/test-products-xcode.txt
+          sw_vers > Build/CI/test-products-build-os.txt
+
+      - name: Build test products
+        run: just test --build-only 2>&1 | tee Build/CI/build-for-testing.log
+
+      - name: Package test products
+        # tar preserves executable modes, framework symlinks and bundle signatures.
+        run: tar -czf Build/CI/macos15-test-products.tar.gz -C Build/DerivedData/Tests/Build Products
+
+      - name: Upload build evidence and test products
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: macos15-test-products
+          path: |
+            Build/CI/
+            Build/TestResults/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
   tests:
     name: Tests (${{ matrix.runner }}, Xcode ${{ matrix.xcode }}, arm64)
+    needs: build_macos15_tests
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
@@ -89,19 +151,42 @@ jobs:
             echo 'Slow-volume testing is intentionally skipped. VM timings are observations, not release performance gates.'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Download macOS 15 test products
+        if: ${{ matrix.runner == 'macos-15' }}
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: macos15-test-products
+          path: Build/ImportedTests
+
+      - name: Restore macOS 15 test products
+        id: restore_products
+        if: ${{ matrix.runner == 'macos-15' }}
+        run: |
+          evidence=Build/ImportedTests/CI
+          test "$(cat "$evidence/test-products-commit.txt")" = "$GITHUB_SHA"
+          # Tests use #filePath for repository fixtures; require the same checkout path.
+          test "$(cat "$evidence/test-products-source-root.txt")" = "$GITHUB_WORKSPACE"
+          xcodebuild -version > Build/CI/test-products-consumer-xcode.txt
+          cmp "$evidence/test-products-xcode.txt" Build/CI/test-products-consumer-xcode.txt
+          mkdir -p Build/DerivedData/Tests/Build
+          tar -xzf "$evidence/macos15-test-products.tar.gz" -C Build/DerivedData/Tests/Build
+          cp "$evidence"/test-products-*.txt Build/CI/
+          echo 'TEST_EXECUTION_ARGS=--test-without-building' >> "$GITHUB_ENV"
+          echo 'macOS 15 executes full test products built on macOS 26 with Xcode 26.3; native asset compilation on 15 remains unverified.' >> "$GITHUB_STEP_SUMMARY"
+
       - name: Unit tests and coverage
-        run: just test --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/unit-tests.log
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/unit-tests.log
 
       - name: AppKit window tests and coverage
         # Window animations share the main run loop. Keep pixel decoding and
         # fixture compilation out of this test host so animation states are observable.
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        run: just test --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/window-tests.log
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/window-tests.log
 
       - name: UI tests
         # Still collect UI evidence when a unit assertion fails; do not hide failures.
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        run: just test --ui-only --no-coverage 2>&1 | tee Build/CI/ui-tests.log
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --ui-only --no-coverage 2>&1 | tee Build/CI/ui-tests.log
 
       - name: Collect test results
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
@@ -140,11 +225,12 @@ jobs:
     # Use this stable name as the required status check after the first hosted run.
     name: macOS compatibility (unit + UI)
     if: ${{ always() }}
-    needs: tests
+    needs: [build_macos15_tests, tests]
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require every macOS test job to pass
+      - name: Require test build and every macOS test job to pass
         env:
+          BUILD_RESULT: ${{ needs.build_macos15_tests.result }}
           TEST_RESULT: ${{ needs.tests.result }}
-        run: test "$TEST_RESULT" = success
+        run: test "$BUILD_RESULT" = success && test "$TEST_RESULT" = success
