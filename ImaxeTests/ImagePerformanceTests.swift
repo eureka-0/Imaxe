@@ -130,7 +130,8 @@ struct ImagePerformanceTests {
     ])
   }
 
-  @Test func `optional slow volume image opens and draws`() async throws {
+  @Test(.enabled(if: ProcessInfo.processInfo.environment["IMAXE_SLOW_VOLUME_IMAGE"] != nil))
+  func `optional slow volume image opens and draws`() async throws {
     guard let path = ProcessInfo.processInfo.environment["IMAXE_SLOW_VOLUME_IMAGE"] else { return }
     let url = URL(fileURLWithPath: path)
     let start = ContinuousClock.now

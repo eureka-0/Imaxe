@@ -97,6 +97,14 @@ DERIVED_DATA_DIRECTORY="./Build/DerivedData/Tests"
 mkdir -p "${RESULTS_DIRECTORY}"
 RESULT_BUNDLE="${RESULTS_DIRECTORY}/Imaxe-$(date '+%Y%m%d-%H%M%S').xcresult"
 
+if [[ $test_mode != "unit" ]]; then
+  # Keep UI fixtures outside the runner's private container so the app can select them.
+  mkdir -p ./Build/UITestFixtures
+  for name in a b c; do
+    cp './Images/sample_1280×853.png' "./Build/UITestFixtures/${name}.png"
+  done
+fi
+
 cleanup_result_bundles() {
   local result_bundles
   local bundle
