@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Tests (${{ matrix.runner }}, Xcode ${{ matrix.xcode }}, arm64)
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            xcode: "26.3"
+          - runner: macos-26
+            xcode: "26.3"
+          - runner: xcode-27
+            xcode: "27.0"
+    env:
+      # Pin a stable toolchain per image, including the macOS 27 image.
+      # macOS 15's default Xcode 16.4 lacks default actor-isolation support.
+      DEVELOPER_DIR: /Applications/Xcode_${{ matrix.xcode }}.app/Contents/Developer
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Prepare test environment
+        id: prepare
+        run: |
+          test "$(uname -m)" = arm64
+          test -d "$DEVELOPER_DIR"
+          for tool in just xcbeautify; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              brew install "$tool"
+            fi
+          done
+
+          # Apply ad-hoc signing to the app AND test targets without certificates.
+          # Keep signing enabled: UI testing needs signed executable bundles.
+          cat > "$RUNNER_TEMP/ci-signing.xcconfig" <<'XCCONFIG'
+          CODE_SIGN_IDENTITY = -
+          CODE_SIGN_STYLE = Manual
+          DEVELOPMENT_TEAM =
+          XCCONFIG
+          echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/ci-signing.xcconfig" >> "$GITHUB_ENV"
+
+          mkdir -p Build/CI
+          {
+            echo "Commit: $GITHUB_SHA"
+            echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
+            sw_vers
+            uname -m
+            xcodebuild -version
+            xcrun swift --version
+            xcrun --show-sdk-version
+            just --version
+            xcbeautify --version
+          } | tee Build/CI/environment.txt
+          {
+            echo '### Test environment'
+            echo '```text'
+            cat Build/CI/environment.txt
+            echo '```'
+            echo 'The runner OS patch version can change; this is not an exact macOS 15.6 test.'
+            echo 'Slow-volume testing is intentionally skipped. VM timings are observations, not release performance gates.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Unit tests and coverage
+        run: just test --skip-ui --coverage-report 2>&1 | tee Build/CI/unit-tests.log
+
+      - name: UI tests
+        # Still collect UI evidence when a unit assertion fails; do not hide failures.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: just test --ui-only --no-coverage 2>&1 | tee Build/CI/ui-tests.log
+
+      - name: Collect test results
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: |
+          shopt -s nullglob
+          results=(Build/TestResults/*.xcresult)
+          if ((${#results[@]} > 0)); then
+            # Preserve evidence even if extracting a result summary fails.
+            tar -czf Build/CI/xcresults.tar.gz -C Build/TestResults .
+          fi
+          for result in "${results[@]}"; do
+            name="$(basename "$result" .xcresult)"
+            xcrun xcresulttool get test-results summary --path "$result" > "Build/CI/$name.json"
+            jq -r '"### " + .title, "Result: \(.result); total: \(.totalTestCount); passed: \(.passedTests); failed: \(.failedTests); skipped: \(.skippedTests)"' \
+              "Build/CI/$name.json" >> "$GITHUB_STEP_SUMMARY"
+            # An empty or entirely skipped suite is not executed coverage.
+            jq -e '.passedTests > 0' "Build/CI/$name.json" >/dev/null
+          done
+
+      - name: Upload test evidence
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-results-${{ matrix.runner }}-xcode-${{ matrix.xcode }}-arm64
+          path: Build/CI/
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0
+
+  macos_compatibility_gate:
+    # Use this stable name as the required status check after the first hosted run.
+    name: macOS compatibility (unit + UI)
+    if: ${{ always() }}
+    needs: tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every macOS test job to pass
+        env:
+          TEST_RESULT: ${{ needs.tests.result }}
+        run: test "$TEST_RESULT" = success

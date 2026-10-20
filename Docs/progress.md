@@ -59,6 +59,11 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Test Reliability
 
+- [x] 添加 GitHub Actions CI：仅对目标分支为 `main` 的 PR 及手动操作触发，不因 push 触发；ARM64 `macos-15` / `macos-26` 使用 Xcode 26.3，`xcode-27`（macOS 27）使用稳定版 Xcode 27.0，通过 `just test` 分别运行单元测试（含覆盖率）及完整 UI 测试。保持 `fail-fast: false`，收集三个系统的独立结果；临时配置所有测试目标的 ad-hoc 签名，不依赖开发证书，保存环境、日志、结果摘要和完整 xcresult 14 天。汇总 job 为 `macos_compatibility_gate`，检查名为 `macOS compatibility (unit + UI)`，矩阵全部成功后才通过。
+- [x] CI 测试入口本机验证：使用与 CI 相同的临时签名配置分别运行测试，单元测试 113 通过、0 失败、1 项慢卷跳过，UI 测试 4 通过、0 失败，覆盖率报告正常导出。结果为 `Build/TestResults/Imaxe-20261020-155435.xcresult` 和 `Build/TestResults/Imaxe-20261020-155514.xcresult`；运行环境为本机 macOS 27.0.1 / Xcode 27.1，不代表三个云端组合已通过。
+- [x] 三系统矩阵静态验证：YAML、触发事件、三个 runner / Xcode 配对、`fail-fast: false`、汇总依赖、全部 shell 步骤语法及 `git diff --check` 通过。actionlint 1.7.12 尚未内置官方 `xcode-27` 标签，使用仅允许此标签的临时配置后，CI 与既有 Updates 工作流均通过 actionlint；未关闭其他检查。
+- [ ] CI 云端首轮验收：创建面向 main 的 PR 后检查三个系统及各自固定工具链的实际运行结果，尤其是 UI 自动化权限、原生文件选择器和测试宿主启动；手动触发入口需工作流先存在于默认分支。当前本机验证不能代替云端执行；成功后将 `macOS compatibility (unit + UI)` 加入 main ruleset 的 required status checks，原则上禁止直接 push，管理员 bypass 保持现有约定。
+- [ ] CI 覆盖边界：runner 标签只固定系统大版本，不能证明恰好 macOS 15.6 的最低版本兼容；ARM64 矩阵不覆盖 Intel。慢卷保持显式跳过，云端启动/内存指标不作为正式包性能验收。
 - [x] Replace timing-based metadata preload coverage with an explicit document-load gate so the session test remains deterministic under parallel test load.
 - [x] Verify equivalent results across repeated image loads without requiring `NSCache` to retain document identity under memory pressure.
 - [x] 保留原等价重载测试，并补充清空缓存后元数据、尺寸及实际渲染像素相等的测试；不依赖对象身份和自动淘汰时机。
