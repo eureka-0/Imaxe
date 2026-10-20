@@ -45,11 +45,23 @@ final class ImaxeUITests: XCTestCase {
   }
 
   func testColdProcessLaunchPerformance() {
-    app.terminate()
     let options = XCTMeasureOptions()
     options.iterationCount = 3
-    measure(metrics: [XCTApplicationLaunchMetric(waitUntilResponsive: true)], options: options) {
+    options.invocationOptions = [.manuallyStart, .manuallyStop]
+    // Observe the launch() call's wall time consistently across supported systems.
+    // This includes UI automation overhead, not the system's first-frame metric.
+    print(
+      "IMAXE_COLD_LAUNCH_METRIC app_launch_call_wall_time;",
+      "iterations=3; excludes_termination=true",
+    )
+    measure(metrics: [XCTClockMetric()], options: options) {
+      app.terminate()
+      XCTAssertTrue(app.wait(for: .notRunning, timeout: 5))
+      startMeasuring()
       app.launch()
+      stopMeasuring()
+      XCTAssertTrue(app.wait(for: .runningForeground, timeout: 5))
+      XCTAssertTrue(app.menuBars.firstMatch.waitForExistence(timeout: 5))
     }
   }
 

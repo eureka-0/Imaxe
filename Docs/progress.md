@@ -31,7 +31,7 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 - [x] 建立独立性能套件：七种格式的冷加载器打开、100%/4× 离屏画布首绘、30 次 5000×4000 大图请求、被 gate 阻塞的目录扫描；分别记录正确性和耗时。
 - [x] 补充两个同时存在的 AppKit 窗口、40 帧 GIF、96 帧 GIF 代理预算和主动清空缓存后的等价重载。
-- [x] P1 本机基础场景：新增独立进程冷启动到首帧可响应的 3 次测量，以及文件选择器打开图片、可见画布 100%/连续放大、前台导航与窗口截图；UI 测试单独记录时间和 physical footprint，额外采集独立应用进程短段 RSS。Debug 基线不等同于正式 Release 包性能。
+- [x] P1 本机基础场景：新增三轮独立进程重启、`app.launch()` 调用墙钟计时及启动后前台/菜单可访问性验证，以及文件选择器打开图片、可见画布 100%/连续放大、前台导航与窗口截图；UI 测试单独记录时间和 physical footprint，额外采集独立应用进程短段 RSS。启动墙钟时间包含 UI 自动化开销，退出等待与启动后的状态检查在计时区间之外，不能等同于系统精确首帧指标；Debug 基线不等同于正式 Release 包性能。
 - [ ] P1 正式包性能补验：在合并后生成的 Release 候选上记录精确的图片可见首帧、主线程停顿分布及稳定 RSS；当前 AX 可见墙钟时间、短段 RSS 和离屏首绘不能替代这三项。
 
 ### Limited GitHub Distribution
@@ -59,14 +59,18 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Test Reliability
 
+- [ ] PR #1 第四轮云端 CI（run `39420553605`，提交 `98773472`）：预构建和产物恢复成功；macOS 15 的单元与窗口套件分别为 96 通过/1 慢卷跳过及 17 通过，浮点 TIFF 新断言获得执行证据。剩余失败为冷启动 UI 性能测试：`XCTApplicationLaunchMetric` 第 0 次采集到 1 个指标，第 1 次为 0 个，报 `Received unexpected number of metrics`；其他 3 项 UI 测试通过，macOS 26、27 全部通过。下载的 xcresult action 日志确认各轮确实终止旧进程并启动新进程，错误发生在 XCTest 指标汇总；具体启动事件缺失原因未确定，不将其记为产品性能超标。
+- [x] 冷启动 UI 测量改用所有系统一致的 `XCTClockMetric`：保留三轮测量，每轮显式终止应用并等待 `.notRunning`，手动计时只覆盖 `app.launch()`，随后要求应用进入前台且菜单可访问；日志标记为 `app_launch_call_wall_time`。Apple 文档说明 `launch()` 本身会终止已有实例，因此不将本次故障归因为未重新启动；墙钟测量避免依赖本轮缺失的系统启动事件，但与旧的系统首帧/响应指标不可直接比较，精确首帧仍按 P1 正式包性能项补验。
+- [x] 冷启动测量修复本机验证：完整 `just test --ui-only --no-coverage` 与 CI 同路径的 `just test --test-without-building --ui-only --no-coverage` 均为 4 项 UI 通过、0 失败；结果为 `Build/TestResults/Imaxe-20261020-202849.xcresult` 与 `Imaxe-20261020-203034.xcresult`，两份结果均记录 3 个单调时钟样本，只执行模式没有重新编译。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 和 diff 检查通过；本机为 macOS 27.0.1 / Xcode 27.1，macOS 15 新测量仍待下一轮云端复验，未重跑未修改的单元套件。
+- [ ] 本机冷启动补验观察：新增的“每次启动自动出现窗口”检查在 `Build/TestResults/Imaxe-20261020-202447.xcresult` 失败，当时进程已退出并重新进入前台，但窗口 AX 元素不存在；该运行 3 项 UI 通过、1 失败，未记为通过。原有窗口用例会在需要时使用 New 打开窗口，因此冷启动测量只验证进程和菜单，窗口及图片可见性继续由原有用例验证；自动呈现 Home 窗口的实际行为后续单独复核，未据此认定其导致云端首帧指标缺失。
 - [ ] PR #1 第三轮云端 CI（run `39416951796`，提交 `ecef102a`）：macOS 26、27 全部通过；macOS 15 再次在 `CompileAssetCatalogVariant` 崩溃，三个测试调用均为 0 项执行。已下载构建日志，确认 `AssetCatalogAgent-AssetRuntime` 连接中断并伴随 CoreMedia 覆盖运行时缺失符号；第二轮未复现不能证明资源编译问题已根治，浮点样本的新断言在 macOS 15 仍未得到执行证据。
 - [x] macOS 15 CI 改为构建与执行分离：在 macOS 26 使用 Xcode 26.3 和 ad-hoc 签名构建完整应用、单元与 UI 测试产物，经 tar 保留权限、符号链接及签名后上传同一工作流；macOS 15 校验提交 SHA、源码路径和 Xcode 版本，再通过 `just test --test-without-building` 分别运行原有三个测试组。未删除 Icon Composer 图标、跳过失败用例或降低浮点样本断言；macOS 26、27 保留各自原生构建和测试。
 - [x] 测试脚本增加 `--build-only` 与 `--test-without-building`，保留既有测试过滤及覆盖率导出；两个模式互斥，构建模式拒绝测试过滤或覆盖率报告，只执行模式要求恰好一份 `.xctestrun`。汇总检查同时要求预构建 job 与全部系统测试成功，产物恢复失败时禁止回退到 macOS 15 原生构建；PR/手动触发与 `fail-fast: false` 保持不变。
 - [x] 构建与执行分离的本机验证：`just test --build-only` 成功；完整产物经 tar 打包、解包和两份应用 bundle 的深层签名校验后还原，分别通过 `--test-without-building` 执行其余单元、窗口和 UI 测试，结果为 96 通过/1 慢卷跳过、17 通过及 4 通过，合计 117 通过、0 失败、1 跳过。两组单元标识并集为原有 114 项且无交集，覆盖率正常导出，三个执行日志均无资源或 Swift 重新编译；结果为 `Build/TestResults/Imaxe-20261020-200250.xcresult`、`Imaxe-20261020-200332.xcresult`、`Imaxe-20261020-200402.xcresult`。本机仍为 macOS 27.0.1 / Xcode 27.1；参数互斥检查、SwiftLint、ShellCheck、shfmt、YAML/步骤语法和 actionlint 通过。
-- [ ] 构建与执行分离后的云端验收：需在下一轮 PR CI 确认 macOS 15 能执行全部原有测试，尤其是浮点 TIFF 的来源/代理样本断言及 UI 测试；本机打包还原验证不能代替跨系统执行。macOS 15 上 Xcode 26.3 的原生资源编译稳定性继续保留为未解决的工具链边界，不纳入这条运行兼容性测试路径。
-- [ ] PR #1 第二轮云端 CI（run `39414212147`）：macOS 26、27 全部通过；macOS 15 的资源编译、窗口套件和 UI 测试已通过，唯一失败为浮点 TIFF 的 `NSBitmapImageRep.colorAt` 蓝色分量断言（实际 1.0，期望 1.5）。需分别验证底层浮点样本与 AppKit 渲染，不以颜色访问接口的返回值直接证明代理像素被截断，也不降低超范围样本的验收要求。
+- [ ] 构建与执行分离后的云端验收：第四轮 run `39420553605` 已确认 macOS 26 构建的完整产物能在 macOS 15 启动，单元与窗口套件全部通过，包含浮点 TIFF 的来源/代理样本断言；3 项 UI 通过，冷启动 UI 仍因系统启动指标缺失而失败。下一轮需复验调整后的冷启动测量及完整矩阵；macOS 15 上 Xcode 26.3 的原生资源编译稳定性继续保留为未解决的工具链边界，不纳入这条运行兼容性测试路径。
+- [x] PR #1 第二轮浮点样本故障已在第四轮验收：run `39414212147` 的 macOS 15 浮点 TIFF `NSBitmapImageRep.colorAt` 蓝色分量为 1.0，未满足 1.5 的期望；改为分别检查来源与代理的底层浮点样本、保留 AppKit 渲染对照后，第四轮 run `39420553605` 的三个系统单元套件均通过，未降低超范围样本要求。
 - [x] 调整浮点 TIFF 验收取样：直接从 Core Graphics 解码图的 `dataProvider` 按行跨度、分量字节序和通道布局读取 Float32；来源 TIFF 与代理 TIFF 分别检查 `[0.25, 0.5, 1.5]`，容差仍为 0.001，保留 32 位/浮点标志、16 字节 RGBA 预算及 AppKit 实际渲染对照。不对 macOS 15 跳过或放宽断言；若底层样本确实被截断，仍会明确报告来源/代理及通道。
-- [x] 浮点取样修复本机验证：默认 `just test --skip-ui --suite ImageCompatibilityTests --no-coverage` 覆盖 5 项测试、9 组输入，全部通过，结果为 `Build/TestResults/Imaxe-20261020-193734.xcresult`；Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 与 diff 检查通过。临时 CI 签名配置下的两次宿主启动挂起均已终止，未计入通过；macOS 15 的新断言仍待推送后云端复验。
+- [x] 浮点取样修复本机验证：默认 `just test --skip-ui --suite ImageCompatibilityTests --no-coverage` 覆盖 5 项测试、9 组输入，全部通过，结果为 `Build/TestResults/Imaxe-20261020-193734.xcresult`；Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 与 diff 检查通过。临时 CI 签名配置下的两次宿主启动挂起均已终止，未计入通过；macOS 15 的新断言随后在第四轮云端 CI 中通过。
 - [x] PR #1 首轮云端故障阶段性复验：run `39393986174` 的 macOS 26 Xcode 工具链混用和 macOS 27 窗口同步测试超时，在第二、三轮均未再出现，26、27 整个任务通过。macOS 15 的资源编译及窗口/UI 测试曾在第二轮通过，但资源代理在第三轮再次崩溃；该问题继续单独跟踪，不将偶尔编译成功记为已根治。
 - [x] 修正 CI 工具链选择：除 `DEVELOPER_DIR` 外，同步设置 runner 的 `xcode-select`、清除 xcrun 查找缓存，并通过 `TEST_RUNNER_DEVELOPER_DIR` 显式传给测试宿主；记录实际全局选择，避免子进程回到镜像默认 Xcode。第二轮已确认 macOS 15 资源编译及 macOS 26 发布校验通过。
 - [x] 隔离窗口动画单元测试：`ImageViewTests` 使用 Swift Testing 的 `.serialized`，CI 通过 `--suite` / 新增 `--skip-suite` 分别启动窗口套件与其余单元测试；不再让图片解码、性能样本及发布 fixture 编译与窗口动画共用测试宿主，保留原有断言与超时阈值。零测试的编译失败也保留所有结果摘要和完整 build 日志，供资源代理问题复查。
