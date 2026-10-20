@@ -42,8 +42,14 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ### Sparkle Updates
 
+- [x] P0 启动阻断已修复：原 A `1.1.0 (11)` 和原 B `1.1.0 (12)` 的主程序为 ad-hoc + Hardened Runtime，没有 Library Validation 例外，dyld 拒绝加载同样没有 Team ID 的 Sparkle。B 归档启动曾复现退出码 134；补充正式配置和回归后，新 A 的最终 ZIP 独立启动通过，用户已确认安装新的 `1.1.0 (12)` 后启动成功。真实 A/B 更新及其他安装/性能验收继续单独跟踪。
+- [x] 正式签名修复：通过 Xcode 为应用 Debug/Release 配置 `Imaxe/Imaxe.entitlements`，只添加 Library Validation 例外，保留 Hardened Runtime；版本维持 `1.1.0 (12)`。发布校验使用 Security API 读取真实签名标志和 entitlements，拒绝缺少例外的 ad-hoc Hardened Runtime 包。`just test --skip-ui --suite ReleaseValidationTests --no-coverage` 最终 2 项通过、0 失败，包含真实签名 fixture 的缺失例外拒绝用例，结果为 `Build/TestResults/Imaxe-20261020-230442.xcresult`；Swift 类型检查、Xcode 文件诊断、SwiftFormat 和 SwiftLint 均通过。
+- [x] 修复后的内部 A 已重建：从干净功能分支提交 `01f9730e396f8584f94d3d860e979f886051b13b` 构建 `1.1.0 (12)`，目录为 `Build/Releases/Imaxe-1.1.0-12-01f9730e396f/`；ZIP SHA-256 为 `3a076f75a3cd41d8f763c9121822b61155ea3c99698f22c6f96db6b66a2a329c`。实际 ZIP 的 EdDSA、文件摘要、包内元数据、arm64、最低 macOS 15.6、深层签名和 Library Validation 策略均通过。最终 ZIP 解压后通过 LaunchServices 正常启动，启用正常 Sparkle 初始化，进程持续运行超过一分钟；采样确认加载 Sparkle 并进入 AppKit 主事件循环，证据为 `Build/LaunchChecks/A-12/launch.sample.txt`。这不替代用户安装、图片交互或 A/B 升级验收。
+- [x] 精简正式附件：Release 只上传 ZIP、`release.json` 和 `SHA256SUMS.txt`；appcast 与 Markdown 仅作为本地构建产物，说明以内嵌 Markdown 写入 feed，完整 feed 数据保存在 manifest 中，经部署校验后发布到 Pages。Release 标题和说明只使用营销版本号，构建号留作更新比较与机器元数据。三个发布验证用例和发布锁用例通过，真实 A ZIP 的三附件副本也通过完整验证；结果为 `Build/TestResults/Imaxe-20261020-232844.xcresult`，Swift/格式/shell/Updates workflow 静态检查通过。
+- [x] 故障发布已按用户授权撤回：`v1.1.0` 转回 draft，标签和五个资产保留；Updates run `39442929884` 成功恢复空 feed，匿名 HTTP 200、0 条更新且与源文件一致，故障 ZIP 的匿名 URL 返回 404。用户要求直接删除旧故障包及 Build 过时产物，已清理旧 Build（约 4.4 GiB），诊断结论保存在忽略目录 `Docs/agents/SPARKLE_LAUNCH_FAILURE_2026-10-20.md`。
 - [x] 公开空 feed 验收：2026-10-20 匿名请求 `https://eureka-0.github.io/Imaxe/appcast.xml` 返回 HTTP 200，`application/xml`，XML 解析为 1 个 RSS channel、0 个更新条目，与 `Distribution/appcast.xml` 字节一致；SHA-256 为 `91ad5658dd8d8dfa61e843b3d2445fee3997346d5854d67114060ecf676bf1bb`。本项只确认 feed 部署与可访问性。
-- [ ] 真实升级验收：从含 Sparkle 和现有公钥的低构建号 A，通过隔离 feed 升级到候选 B；正式发布后再核验生产 feed 和匿名 Release 资产的完整升级链路。
+- [ ] 发布事件部署限制：`v1.1.0` 的 Updates run `39438881020` 在执行步骤前被 github-pages 环境规则拒绝，原因是仅允许 main branch、未允许 release tag。本次已通过现有 workflow_dispatch 从 main 指定 `release_tag=v1.1.0` 完成部署，但环境规则未改；后续发布前需确认标签部署策略或固定采用 main 手动入口，不将首次自动运行记为成功。
+- [ ] 真实升级验收：原 A/B 因启动阻断失效且本地产物已删除；按用户最新决定，修复后重新构建 `1.1.0 (12)` 作为内部 A，由用户安装测试，通过后才构建 `1.1.0 (13)` 作为 B 并重新发布。仍需验证下载、验签、替换、重启和用户数据保留；旧 `v1.1.0` 标签和草稿资产的来源一致性须在重新发布前单独处理，不能复用旧包的验收结论。
 - [x] 2026-10-19：确认公开仓库、匿名下载历史 ZIP，并启用 Pages 的 Actions 发布来源；`SUFeedURL`、初始空 feed 和部署工作流已准备，次日完成首次线上部署。
 - [x] 现有 Keychain 公钥匹配 SUPublicEDKey，实际签名通过，修改内容与错误公钥被拒绝；没有导出或更换私钥。
 - [x] 发布流程已加入产物摘要/EdDSA/包内元数据校验、固定提交、线上 feed 与已发布 manifest 构建号比较、draft 资产回读及一致产物恢复逻辑；不再自动切分支或覆盖不匹配资产。
@@ -55,11 +61,18 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] PR #1 已于 2026-10-20 合并 main，合并提交为 `f66f4c3d`，远端 develop 已删除；Updates run `39427222348` 成功部署初始空 feed，匿名 HTTP 与 XML 验收通过。后续 main 的 `7459e278` 仅补充 README CI 徽标。
 - [x] 内部升级基线 A：从干净且与远端一致的 main `7459e278aff8afffd55b2d591a7e9439553aba56` 执行 `just build`，生成 `1.1.0 (11)`、arm64、最低 macOS 15.6 的完整签名更新包；feed、公钥、EdDSA、深层代码签名及全部文件摘要校验通过，未创建标签或 Release。产物位于 `Build/Releases/Imaxe-1.1.0-11-7459e278aff8/`，ZIP SHA-256 为 `bbe211f94d84c6d565eb3e534ec4c660b1406368b891773c8513ff1a4763eaf4`；旧的 9/10/11 号历史 ZIP 均缺少 feed 与公钥，不用于 A/B 升级。
 - [x] 发布准备版本已确定为 `1.1.0 (12)`，应用 Debug 与 Release 的构建号同步从 11 增加到 12，测试目标版本保持不变；内部 A 保留 11，B 的应用身份、更新公钥、生产 feed 与签名方式保持一致。
-- [ ] 发布准备 PR 通过 CI 并合并后，从干净且与远端一致的 main 执行 `just build` 构建 B，记录来源提交和 ZIP 摘要。分支构建与合并后的提交不同，不能直接当作可发布产物；后续修改代码需递增构建号并重建，不能复用旧包的验收结论。
-- [ ] 正式包性能、普通 Mac 安装及 A/B 升级验收完成后，由用户执行 `just publish`；该命令会推送标签并公开 Release。发布后验证上传中断恢复、Pages 失败恢复与匿名资产下载，发布前不以空 feed 验收替代真实升级结果。
+- [x] 发布准备 PR #2 的 CI run `39435527143` 全部通过后，按用户授权以 merge commit 合并，保留 `5a810229` 与 `a1e9f0c5` 两次独立提交。从干净且与远端一致的 main `5ff38f1126229db9d2045b81b5e7454aed295258` 构建 B `1.1.0 (12)`；目录为 `Build/Releases/Imaxe-1.1.0-12-5ff38f112622/`，ZIP SHA-256 为 `8963918a411210c3ce8325728c7511c664911b19dbf0863a7314c868c0c4e41b`，摘要、EdDSA、包内元数据及深层代码签名校验通过。
+- [x] 用户随后明确授权正式发布 B；已整理英文 release notes、更新其摘要并保持 B ZIP 不变，执行 `just publish` 后于北京时间 2026-10-20 22:24:06 公开稳定版 `v1.1.0`。标签指向上述 B 来源提交，五个资产上传及回读校验通过；GitHub Release 正文与发布说明资产一致。发布不代表此前未执行的性能、普通 Mac 安装和真实升级验收已经完成。
+- [x] 正式发布资产匿名下载验收：ZIP、Markdown、appcast、manifest 和 SHA256SUMS 五个公开 URL 均下载成功，与本地发布资产逐字节一致；下载副本再次通过 `Scripts/validate-release.swift` 的摘要、EdDSA、appcast、架构及包内签名校验，副本位于 `Build/PublicVerification/v1.1.0/`。
+- [x] Pages 发布失败后的手动恢复验收：main 的 Updates run `39439124403` 成功完成稳定 feed 校验、部署和公开字节检查。再次匿名读取不带查询参数的生产 URL 为 HTTP 200、有效 XML、1 条 `1.1.0 (12)` 更新，最低 macOS 15.6、arm64，下载及 release notes 链接正确，与正式 Release 的 appcast 逐字节一致；SHA-256 为 `f92c5e556a3a2c9242358631a2817f745faa6f83c44b0f187aac7f7becc21855`。只证明本次环境规则拒绝后的手动恢复，不扩展为任意中断恢复或真实应用升级验收。
+- [ ] 继续补齐正式包性能、普通 Mac 安装及 A/B 升级验收；上传中断恢复尚未通过真实发布故障验收，不能以脚本校验或公开下载代替。
 - [ ] 使用两个正式打包构建完成 A/B 真实升级及第二台普通 Mac 的安装/迁移/授权验收；旧版 1.0 (4) 不含 Sparkle，只用于手动迁移验收。
 
 ## P2 — Performance, Compatibility, and Experience
+
+### Home and Recent Images
+
+- [ ] Home 的 Clear Recent Images 当前没有确认，直接清空全部最近记录，不受搜索筛选限制；磁盘原图和收藏记录保留。后续明确确认交互与“清空全部 / 仅移除失效”两个操作的边界；`RecentImagesStore.removeMissingFiles` 已有实现但未接入 UI，加入入口前需处理权限不足、外置盘/NAS 暂时离线与真实文件失效的区别。本轮只核对并记录，不改动 Home 行为。
 
 ### Test Reliability
 

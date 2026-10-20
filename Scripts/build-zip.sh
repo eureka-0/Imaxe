@@ -82,7 +82,7 @@ OUTPUT_DIR="${BUILD_ROOT}/Releases/${RELEASE_ID}"
 ARCHIVE_PATH="${BUILD_ROOT}/Archives/${RELEASE_ID}.xcarchive"
 ZIP_NAME="Imaxe-${VERSION}.zip"
 NOTES_NAME="Imaxe-${VERSION}.md"
-ASSETS=("${ZIP_NAME}" "${NOTES_NAME}" appcast.xml release.json SHA256SUMS.txt)
+ASSETS=("${ZIP_NAME}" release.json SHA256SUMS.txt)
 
 TEMP_DIR="$(mktemp -d "${BUILD_ROOT}/.release-check.XXXXXX")"
 
@@ -137,11 +137,16 @@ if [[ ${PUBLISH} == true ]]; then
   fi
   if [[ -z ${REMOTE_TAG_COMMIT} ]]; then git push origin "refs/tags/${TAG}"; fi
 
-  if ! gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets >"${TEMP_DIR}/release.json"; then
+  if ! gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${TEMP_DIR}/release.json"; then
     gh release create "${TAG}" --repo "${REPOSITORY}" --verify-tag --draft \
       --title "Imaxe ${VERSION}" --notes-file "${OUTPUT_DIR}/${NOTES_NAME}"
-    gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets >"${TEMP_DIR}/release.json"
+    gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${TEMP_DIR}/release.json"
   fi
+  jq -e --arg zip "${ZIP_NAME}" \
+    'all(.assets[]; .name == $zip or .name == "release.json" or .name == "SHA256SUMS.txt")' \
+    "${TEMP_DIR}/release.json" >/dev/null || fail "release contains unexpected assets"
+  jq -e --rawfile notes "${OUTPUT_DIR}/${NOTES_NAME}" '.body == $notes' \
+    "${TEMP_DIR}/release.json" >/dev/null || fail "release notes differ from the verified artifact"
   mkdir -p "${TEMP_DIR}/download"
   for asset in "${ASSETS[@]}"; do
     if jq -e --arg name "${asset}" '.assets[] | select(.name == $name)' "${TEMP_DIR}/release.json" >/dev/null; then
@@ -181,39 +186,19 @@ INFO="${APP}/Contents/Info.plist"
 MINIMUM_SYSTEM="$(plist "${INFO}" LSMinimumSystemVersion)"
 ARTIFACTS="${TEMP_DIR}/artifacts"
 ditto -c -k --sequesterRsrc --keepParent "${APP}" "${ARTIFACTS}/${ZIP_NAME}"
-PREVIOUS_TAG="$(git describe --tags --abbrev=0 2>/dev/null || true)"
-CHANGE_RANGE="HEAD"
-if [[ -n ${PREVIOUS_TAG} ]]; then CHANGE_RANGE="${PREVIOUS_TAG}..HEAD"; fi
-cat >"${ARTIFACTS}/${NOTES_NAME}" <<EOF
-# Imaxe ${VERSION} (${BUILD_NUMBER})
-
-Requires macOS ${MINIMUM_SYSTEM}+ and an Apple Silicon Mac (arm64).
-
-## Changes
-
-$(git log --no-merges --format='- %s' "${CHANGE_RANGE}")
-
-## Installation and updates
-
-This app is ad-hoc signed and is not notarized. macOS Gatekeeper may block first launch.
-Download from ${REPOSITORY_URL}/releases, unzip, quit Imaxe, and move Imaxe.app to Applications.
-If blocked, follow the Open Anyway instructions at https://support.apple.com/en-us/102445.
-Do not disable system-wide security checks.
-
-Version 1.0.0 users must install this update manually once. Later versions can use Check for Updates.
-Sparkle update signatures verify the update archive; they do not replace macOS first-launch approval.
-Source commit: ${COMMIT}
-EOF
+[[ "$(head -n 1 Distribution/release-notes.md)" == "# Imaxe ${VERSION}" ]] || fail "update release notes for this version"
+cp Distribution/release-notes.md "${ARTIFACTS}/${NOTES_NAME}"
 
 "${SPARKLE_BIN}/generate_appcast" --maximum-deltas 0 \
   --download-url-prefix "${REPOSITORY_URL}/releases/download/${TAG}/" \
-  --release-notes-url-prefix "${REPOSITORY_URL}/releases/download/${TAG}/" \
+  --embed-release-notes --full-release-notes-url "${REPOSITORY_URL}/releases/tag/${TAG}" \
   --link "${REPOSITORY_URL}" "${ARTIFACTS}"
 jq -n --arg version "${VERSION}" --arg build "${BUILD_NUMBER}" --arg commit "${COMMIT}" \
   --arg minimumSystemVersion "${MINIMUM_SYSTEM}" --arg feedURL "${FEED_URL}" --arg publicEDKey "${PUBLIC_KEY}" \
-  '{version:$version,build:$build,commit:$commit,minimumSystemVersion:$minimumSystemVersion,feedURL:$feedURL,publicEDKey:$publicEDKey}' \
+  --rawfile appcastXML "${ARTIFACTS}/appcast.xml" \
+  '{version:$version,build:$build,commit:$commit,minimumSystemVersion:$minimumSystemVersion,feedURL:$feedURL,publicEDKey:$publicEDKey,appcastXML:$appcastXML}' \
   >"${ARTIFACTS}/release.json"
-(cd "${ARTIFACTS}" && shasum -a 256 "${ZIP_NAME}" "${NOTES_NAME}" appcast.xml release.json >SHA256SUMS.txt)
+(cd "${ARTIFACTS}" && shasum -a 256 "${ZIP_NAME}" release.json >SHA256SUMS.txt)
 swift Scripts/validate-release.swift "${ARTIFACTS}" "${COMMIT}"
 mv "${ARTIFACTS}" "${OUTPUT_DIR}"
 CREATED_ARCHIVE=false
