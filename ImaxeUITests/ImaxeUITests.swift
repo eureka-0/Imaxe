@@ -22,10 +22,13 @@ final class ImaxeUITests: XCTestCase {
 
     continueAfterFailure = false
     app = XCUIApplication()
-    let directory = URL(fileURLWithPath: "/private/tmp/com.imaxe.ImaxeUITests", isDirectory: true)
-      .appending(path: "imaxe-ui-\(UUID().uuidString)", directoryHint: .isDirectory)
+    let runID = ProcessInfo.processInfo.environment["IMAXE_TEST_RUN_ID"] ?? UUID().uuidString
+    let testID = UUID().uuidString
+    let directory = URL(fileURLWithPath: "/private/tmp/com.imaxe.ImaxeTests", isDirectory: true)
+      .appending(path: runID, directoryHint: .isDirectory)
+      .appending(path: testID, directoryHint: .isDirectory)
     testDirectory = directory
-    app.launchEnvironment = ["IMAXE_UI_TEST_DIRECTORY": directory.path]
+    app.launchEnvironment = ["IMAXE_TEST_RUN_ID": runID, "IMAXE_TEST_ID": testID]
     app.launchArguments = [
       "--disable-updates-for-testing",
       "-AppleLanguages",

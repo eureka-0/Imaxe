@@ -28,22 +28,22 @@ struct SettingsView: View {
 struct GeneralSettingsView: View {
   @State private var updateSettings: UpdateSettings
 
-  @AppStorage(AppSettings.Keys.appearance.rawValue)
+  @AppStorage(AppSettings.Keys.appearance.rawValue, store: AppSettings.userDefaults)
   private var appearance = AppSettings.Defaults.appearance
 
-  @AppStorage(AppSettings.Keys.backgroundColor.rawValue)
+  @AppStorage(AppSettings.Keys.backgroundColor.rawValue, store: AppSettings.userDefaults)
   private var backgroundColor = AppSettings.Defaults.backgroundColor
 
-  @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
+  @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue, store: AppSettings.userDefaults)
   private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
 
-  @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue)
+  @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue, store: AppSettings.userDefaults)
   private var enableLoopBrowsing = AppSettings.Defaults.enableLoopBrowsing
 
-  @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue)
+  @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue, store: AppSettings.userDefaults)
   private var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange
 
-  @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue)
+  @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue, store: AppSettings.userDefaults)
   private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
 
   @State private var totalCacheSize: Int = ImageThumbnailCache.totalCacheSizeInBytes()
@@ -235,22 +235,31 @@ struct GeneralSettingsView: View {
 // MARK: - ImageSettingsView
 
 struct ImageSettingsView: View {
-  @AppStorage(AppSettings.Keys.imageActualSizeStrategy.rawValue)
+  @AppStorage(AppSettings.Keys.imageActualSizeStrategy.rawValue, store: AppSettings.userDefaults)
   private var imageActualSizeStrategy = AppSettings.Defaults.imageActualSizeStrategy
 
-  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue)
+  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue, store: AppSettings.userDefaults)
   private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
 
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue)
+  @AppStorage(
+    AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue,
+    store: AppSettings.userDefaults,
+  )
   private var fixedLoadedImageWindowWidth = AppSettings.Defaults.fixedLoadedImageWindowWidth
 
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue)
+  @AppStorage(
+    AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue,
+    store: AppSettings.userDefaults,
+  )
   private var fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
 
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
+  @AppStorage(
+    AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue,
+    store: AppSettings.userDefaults,
+  )
   private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
 
-  @AppStorage(AppSettings.Keys.imageInterpolationStrategy.rawValue)
+  @AppStorage(AppSettings.Keys.imageInterpolationStrategy.rawValue, store: AppSettings.userDefaults)
   private var imageInterpolationStrategy = AppSettings.Defaults.imageInterpolationStrategy
 
   @FocusState private var widthInputFocused: Bool

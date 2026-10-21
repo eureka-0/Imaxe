@@ -23,7 +23,7 @@ struct ImageViewTests {
   }
 
   @Test func `canvas occupies image pixel size in backing pixels`() async throws {
-    let defaults = UserDefaults.standard
+    let defaults = AppSettings.userDefaults
     let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
     let previousValue = defaults.object(forKey: key)
     defaults.set(ImageActualSizeStrategy.pixelSize.rawValue, forKey: key)
@@ -55,7 +55,7 @@ struct ImageViewTests {
   }
 
   @Test func `downsampled proxy keeps source sized canvas`() throws {
-    let defaults = UserDefaults.standard
+    let defaults = AppSettings.userDefaults
     let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
     let previousValue = defaults.object(forKey: key)
     defaults.set(ImageActualSizeStrategy.pointSize.rawValue, forKey: key)

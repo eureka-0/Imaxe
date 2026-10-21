@@ -19,16 +19,16 @@ struct ContentView: View {
   @State private var didLoadInitialURL = false
   @State private var isTargetedForDrop = false
 
-  @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue)
+  @AppStorage(AppSettings.Keys.topBarHideDelay.rawValue, store: AppSettings.userDefaults)
   private var topBarHideDelay = AppSettings.Defaults.topBarHideDelay
 
-  @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue)
+  @AppStorage(AppSettings.Keys.enableLoopBrowsing.rawValue, store: AppSettings.userDefaults)
   private var enableLoopBrowsing = AppSettings.Defaults.enableLoopBrowsing
 
-  @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue)
+  @AppStorage(AppSettings.Keys.actionOnImageFileChange.rawValue, store: AppSettings.userDefaults)
   private var actionOnImageFileChange = AppSettings.Defaults.actionOnImageFileChange
 
-  @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue)
+  @AppStorage(AppSettings.Keys.recentImagesCountLimit.rawValue, store: AppSettings.userDefaults)
   private var recentImagesCountLimit = AppSettings.Defaults.recentImagesCountLimit
 
   private var imageSessionPreferences: ImageSession.Preferences {

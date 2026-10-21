@@ -9,9 +9,15 @@ import UniformTypeIdentifiers
 // MARK: - HomeView
 
 struct HomeView: View {
-  @AppStorage("recentImagesViewMode") private var recentImagesViewModeRawValue =
+  @AppStorage(
+    "recentImagesViewMode",
+    store: AppSettings.userDefaults,
+  ) private var recentImagesViewModeRawValue =
     ImageCollectionViewMode.grid.rawValue
-  @AppStorage("recentImagesGridItemSize") private var recentImagesGridItemSize = 120.0
+  @AppStorage(
+    "recentImagesGridItemSize",
+    store: AppSettings.userDefaults,
+  ) private var recentImagesGridItemSize = 120.0
 
   @Environment(\.dismissWindow) private var dismissWindow
   @Environment(\.openWindow) private var openWindow

@@ -81,11 +81,11 @@ final class RecentImage {
 enum RecentImagesStore {
   static var recentImagesCountLimit: Int {
     let key = AppSettings.Keys.recentImagesCountLimit.rawValue
-    guard UserDefaults.standard.object(forKey: key) != nil else {
+    guard AppSettings.userDefaults.object(forKey: key) != nil else {
       return AppSettings.Defaults.recentImagesCountLimit
     }
 
-    let value = UserDefaults.standard.integer(forKey: key)
+    let value = AppSettings.userDefaults.integer(forKey: key)
     return value > 0 ? value : AppSettings.Defaults.recentImagesCountLimit
   }
 

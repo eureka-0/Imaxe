@@ -628,8 +628,8 @@ nonisolated extension String {
 nonisolated extension URL {
   static var dataDirectory: URL {
     #if DEBUG
-      if let directory = ProcessInfo.processInfo.environment["IMAXE_UI_TEST_DIRECTORY"] {
-        return URL(fileURLWithPath: directory).appending(path: "Data", directoryHint: .isDirectory)
+      if let storage = TestStorage.current {
+        return storage.directory.appending(path: "Data", directoryHint: .isDirectory)
       }
     #endif
     #if DEBUG
@@ -646,8 +646,8 @@ nonisolated extension URL {
 
   static var appCachesDirectory: URL {
     #if DEBUG
-      if let directory = ProcessInfo.processInfo.environment["IMAXE_UI_TEST_DIRECTORY"] {
-        return URL(fileURLWithPath: directory).appending(
+      if let storage = TestStorage.current {
+        return storage.directory.appending(
           path: "Caches",
           directoryHint: .isDirectory,
         )

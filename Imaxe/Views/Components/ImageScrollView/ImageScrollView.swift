@@ -21,19 +21,28 @@ struct ImageScrollView: NSViewRepresentable {
   @Binding var zoomScale: CGFloat
   @Binding var alwaysFitToWindow: Bool
 
-  @AppStorage(AppSettings.Keys.backgroundColor.rawValue)
+  @AppStorage(AppSettings.Keys.backgroundColor.rawValue, store: AppSettings.userDefaults)
   private var backgroundColor = AppSettings.Defaults.backgroundColor
 
-  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue)
+  @AppStorage(AppSettings.Keys.loadedImageWindowSizeMode.rawValue, store: AppSettings.userDefaults)
   private var loadedImageWindowSizeMode = AppSettings.Defaults.loadedImageWindowSizeMode
 
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue)
+  @AppStorage(
+    AppSettings.Keys.fixedLoadedImageWindowWidth.rawValue,
+    store: AppSettings.userDefaults,
+  )
   private var fixedLoadedImageWindowWidth = AppSettings.Defaults.fixedLoadedImageWindowWidth
 
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue)
+  @AppStorage(
+    AppSettings.Keys.fixedLoadedImageWindowHeight.rawValue,
+    store: AppSettings.userDefaults,
+  )
   private var fixedLoadedImageWindowHeight = AppSettings.Defaults.fixedLoadedImageWindowHeight
 
-  @AppStorage(AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue)
+  @AppStorage(
+    AppSettings.Keys.fixedLoadedImageWindowSizeUnit.rawValue,
+    store: AppSettings.userDefaults,
+  )
   private var fixedLoadedImageWindowSizeUnit = AppSettings.Defaults.fixedLoadedImageWindowSizeUnit
 
   private var fixedLoadedImageWindowSize: NSSize {

@@ -26,11 +26,11 @@ final class ImageCanvasView: NSView {
   private var accessibilityObserver: NSObjectProtocol?
 
   private var imageActualSizeStrategy: ImageActualSizeStrategy {
-    UserDefaults.standard.imageActualSizeStrategyValue
+    AppSettings.userDefaults.imageActualSizeStrategyValue
   }
 
   private var imageInterpolationStrategy: ImageInterpolationStrategy {
-    UserDefaults.standard.imageInterpolationStrategyValue
+    AppSettings.userDefaults.imageInterpolationStrategyValue
   }
 
   override var isFlipped: Bool {
@@ -52,7 +52,7 @@ final class ImageCanvasView: NSView {
   }
 
   private func setupObservation() {
-    let actualSizeObservation = UserDefaults.standard.observe(
+    let actualSizeObservation = AppSettings.userDefaults.observe(
       \.imageActualSizeStrategy,
       options: [.initial, .new],
     ) { [weak self] _, _ in
@@ -64,7 +64,7 @@ final class ImageCanvasView: NSView {
       }
     }
 
-    let interpolationObservation = UserDefaults.standard.observe(
+    let interpolationObservation = AppSettings.userDefaults.observe(
       \.imageInterpolationStrategy,
       options: [.initial, .new],
     ) { [weak self] _, _ in

@@ -156,7 +156,7 @@ struct ImagePerformanceTests {
     _ document: ImageDocument,
     zoom: CGFloat,
   ) -> (window: NSWindow, canvas: ImageCanvasView) {
-    let defaults = UserDefaults.standard
+    let defaults = AppSettings.userDefaults
     let key = AppSettings.Keys.imageActualSizeStrategy.rawValue
     let previous = defaults.object(forKey: key)
     defaults.set(ImageActualSizeStrategy.pixelSize.rawValue, forKey: key)

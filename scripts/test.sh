@@ -139,10 +139,27 @@ RESULTS_DIRECTORY="./build/TestResults"
 DERIVED_DATA_DIRECTORY="./build/DerivedData/Tests"
 mkdir -p "${RESULTS_DIRECTORY}"
 RESULT_BUNDLE="${RESULTS_DIRECTORY}/Imaxe-$(date '+%Y%m%d-%H%M%S').xcresult"
+TEST_RUN_ID="$(uuidgen)"
+export TEST_RUNNER_IMAXE_TEST_RUN_ID="${TEST_RUN_ID}"
 
 cleanup_result_bundles() {
-  if [[ $test_mode != "unit" ]]; then
-    rm -rf /private/tmp/com.imaxe.ImaxeUITests
+  local test_run_directory="/private/tmp/com.imaxe.ImaxeTests/${TEST_RUN_ID}"
+  local directory
+  local test_id
+  local defaults_name
+  if [[ -d ${test_run_directory} && ! -L ${test_run_directory} &&
+    ! -L /private/tmp/com.imaxe.ImaxeTests ]]; then
+    shopt -s nullglob
+    for directory in "${test_run_directory}/"*; do
+      test_id="${directory##*/}"
+      [[ ${test_id} =~ ^[[:xdigit:]]{8}-([[:xdigit:]]{4}-){3}[[:xdigit:]]{12}$ ]] || continue
+      defaults_name="com.imaxe.Imaxe.tests.${TEST_RUN_ID}.${test_id}"
+      if defaults read "${defaults_name}" >/dev/null 2>&1; then
+        defaults delete "${defaults_name}" >/dev/null
+      fi
+    done
+    shopt -u nullglob
+    rm -rf "${test_run_directory}"
   fi
 
   local result_bundles

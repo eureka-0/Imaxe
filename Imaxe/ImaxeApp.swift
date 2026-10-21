@@ -38,6 +38,12 @@ struct CheckForUpdatesView: View {
 // MARK: - AppDelegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+  func applicationWillTerminate(_: Notification) {
+    #if DEBUG
+      TestStorage.current?.remove()
+    #endif
+  }
+
   func applicationDidFinishLaunching(_: Notification) {
     NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
       Self.routeHorizontalArrowKey(event, in: event.window)
@@ -63,7 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 struct ImaxeApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
-  @AppStorage(AppSettings.Keys.appearance.rawValue)
+  @AppStorage(AppSettings.Keys.appearance.rawValue, store: AppSettings.userDefaults)
   private var appearance: Appearance = AppSettings.Defaults.appearance
 
   private let updaterController: SPUStandardUpdaterController
@@ -82,7 +88,7 @@ struct ImaxeApp: App {
       let container = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
 
       #if DEBUG
-        if ProcessInfo.processInfo.environment["IMAXE_UI_TEST_DIRECTORY"] != nil,
+        if TestStorage.current != nil,
            let pathsJSON = ProcessInfo.processInfo.environment["IMAXE_UI_TEST_RECENT_IMAGES"],
            let data = pathsJSON.data(using: .utf8)
         {

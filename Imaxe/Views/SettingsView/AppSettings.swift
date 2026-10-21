@@ -7,6 +7,15 @@ import SwiftUI
 // MARK: - AppSettings
 
 enum AppSettings {
+  static let userDefaults: UserDefaults = {
+    #if DEBUG
+      if let storage = TestStorage.current {
+        return storage.makeDefaults()
+      }
+    #endif
+    return .standard
+  }()
+
   enum Keys: String, CaseIterable, Identifiable {
     case appearance
     case backgroundColor
