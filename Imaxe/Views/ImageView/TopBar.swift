@@ -665,7 +665,7 @@ private struct ImageInfoPanel: View {
     .frame(width: 360, alignment: .leading)
   }
 
-  private func infoRow(title: String, value: String) -> some View {
+  private func infoRow(title: LocalizedStringResource, value: String) -> some View {
     HStack(alignment: .firstTextBaseline, spacing: 10) {
       Text(title)
         .font(.system(size: 12))

@@ -519,15 +519,17 @@ final class ImageSession {
     if let recentImagePathToRemoveOnFileNotFound, Self.isFileNotFound(error) {
       guard let removeRecentImage else {
         alertTitle = "Recent Image Missing"
-        alertMessage = "The file no longer exists:\n\(url.filePath)"
+        alertMessage = String(localized: "The file no longer exists:\n\(url.filePath)")
         return
       }
 
       do {
         try removeRecentImage(recentImagePathToRemoveOnFileNotFound)
         alertTitle = "Recent Image Removed"
-        alertMessage =
-          "The file no longer exists and was removed from Recent Images:\n\(url.filePath)"
+        alertMessage = String(localized: """
+        The file no longer exists and was removed from Recent Images:
+        \(url.filePath)
+        """)
       } catch {
         alertTitle = "Failed to Remove Recent Image"
         alertMessage = error.localizedDescription
@@ -675,9 +677,9 @@ final class ImageSession {
     var errorDescription: String? {
       switch self {
       case .invalidDirectory:
-        "The selected location is not a folder."
+        String(localized: "The selected location is not a folder.")
       case .invalidFileName:
-        "Enter a valid file name."
+        String(localized: "Enter a valid file name.")
       }
     }
   }

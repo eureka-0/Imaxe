@@ -17,22 +17,22 @@ enum ImageLoadingError: Error, LocalizedError {
   var errorDescription: String? {
     switch self {
     case let .unsupportedImageType(url):
-      """
+      String(localized: """
       Unsupported image type for: \(url.filePath).
       Supported types: \(ImageLoader.supportedImageExtensionsDescription).
-      """
+      """)
     case let .fileNotFound(url):
-      "The file no longer exists: \(url.filePath)"
+      String(localized: "The file no longer exists: \(url.filePath)")
     case let .permissionDenied(url):
-      "Imaxe does not have permission to read: \(url.filePath)"
+      String(localized: "Imaxe does not have permission to read: \(url.filePath)")
     case let .ioFailure(url, message):
-      "Could not read \(url.filePath): \(message)"
+      String(localized: "Could not read \(url.filePath): \(message)")
     case let .corruptImage(url):
-      "The image file is damaged or uses unsupported content: \(url.filePath)"
+      String(localized: "The image file is damaged or uses unsupported content: \(url.filePath)")
     case let .invalidDimensions(url):
-      "The image has invalid or missing dimensions: \(url.filePath)"
+      String(localized: "The image has invalid or missing dimensions: \(url.filePath)")
     case .cancelled:
-      "Image loading was cancelled."
+      String(localized: "Image loading was cancelled.")
     }
   }
 }

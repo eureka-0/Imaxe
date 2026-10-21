@@ -32,22 +32,22 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
   }
 
   var typeDescription: String {
-    containerType?.preferredFilenameExtension?.uppercased() ?? "Unknown"
+    containerType?.preferredFilenameExtension?.uppercased() ?? String(localized: "Unknown")
   }
 
   var DPIDescription: String {
     if DPI.width == DPI.height {
-      "\(DPI.width) Pixels/Inch"
+      String(localized: "\(DPI.width) Pixels/Inch")
     } else {
-      "\(DPI.width) x \(DPI.height) Pixels/Inch"
+      String(localized: "\(DPI.width) x \(DPI.height) Pixels/Inch")
     }
   }
 
   var bitDepthDescription: String {
     if let depth {
-      "\(depth) Bits/Channel"
+      String(localized: "\(depth) Bits/Channel")
     } else {
-      "Unknown"
+      String(localized: "Unknown")
     }
   }
 
@@ -57,7 +57,7 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
     } else if let colorModel {
       colorModel
     } else {
-      "Unknown"
+      String(localized: "Unknown")
     }
   }
 
@@ -71,7 +71,7 @@ nonisolated struct ImageMetadata: Hashable, Sendable {
   }
 
   var alphaDescription: String {
-    hasAlpha ? "Yes" : "No"
+    hasAlpha ? String(localized: "Yes") : String(localized: "No")
   }
 
   func relocated(to url: URL) -> ImageMetadata {

@@ -299,7 +299,7 @@ struct ImageFidelityTests {
     #expect(abs(canvas.frame.width - canvas.frame.height) < 0.001)
     #expect(abs(canvas.frame.width - 8.0 / 72 * Constants.fallbackScreenPPI.0) < 0.001)
     #expect(document.metadata.DPI == IntSize(width: 144, height: 72))
-    #expect(document.metadata.DPIDescription == "144 x 72 Pixels/Inch")
+    #expect(document.metadata.DPIDescription == String(localized: "\(144) x \(72) Pixels/Inch"))
   }
 
   @Test func `multi page TIFF always renders first page and retains page metadata`() async throws {
