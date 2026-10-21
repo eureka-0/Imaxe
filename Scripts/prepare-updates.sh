@@ -25,7 +25,8 @@ while IFS=$'\t' read -r tag version commit; do
   directory="${TEMP_DIR}/${tag}"
   mkdir -p "${directory}"
   for name in "Imaxe-${version}.zip" SHA256SUMS.txt; do
-    curl --fail --silent --show-error --location --retry 3 --connect-timeout 15 --max-time 180 \
+    curl --fail --silent --show-error --location --retry 3 --retry-all-errors --retry-delay 2 \
+      --retry-max-time 120 --connect-timeout 15 --max-time 120 \
       --proto '=https' --proto-redir '=https' \
       "https://github.com/${REPOSITORY}/releases/download/${tag}/${name}" -o "${directory}/${name}"
   done

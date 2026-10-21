@@ -23,6 +23,7 @@ concurrency:
 jobs:
   prepare:
     runs-on: macos-15
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
