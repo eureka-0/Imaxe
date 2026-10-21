@@ -30,6 +30,7 @@ Do not expand into RAW editing, professional color grading, layers, batch proces
 ## Rules
 
 - Unless explicitly specified otherwise, save agent-generated documents and helper files in ./docs/agents/ which are ignored by git and may be deleted at any time.
+- Do not modify the README.md file directly unless you are asked to do so or the changes are update to outdated original content.
 - Use SwiftUI for the app shell, settings, commands, overlays, alerts, and lightweight feature UI. Use AppKit through `NSViewRepresentable` for the image canvas.
 - AppKit owns rendering, zooming, scrolling, clamping, fitting, drag / mouse / trackpad behavior, and window-size-sensitive geometry.
 - Prefer non-destructive editing models and compose edits during export.
