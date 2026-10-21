@@ -11,6 +11,8 @@ on:
       - Scripts/validate-release.swift
   release:
     types: [published, edited, unpublished, deleted]
+  repository_dispatch:
+    types: [site-updated]
   workflow_dispatch:
 
 permissions:

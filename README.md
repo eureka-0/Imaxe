@@ -33,7 +33,9 @@ The publisher archives each appcast at `history/<tag>/appcast.xml` on `gh-pages`
 The Updates workflow verifies the public archives, retains the seven newest stable builds in the root `appcast.xml`, and explicitly deploys the complete `gh-pages` site with GitHub Actions.
 Draft, prerelease, and withdrawn releases do not appear in the active feed; historical files remain in the branch and its Git history.
 The production feed stays at `https://eureka-0.github.io/Imaxe/appcast.xml`.
-Site files such as `index.html` and `assets/` can be added to `gh-pages`; `.nojekyll` marks the site as plain static content.
+Site files such as `index.html` and `assets/` can be added to `gh-pages`; website pushes dispatch the same verified publisher on main.
+History-only staging commits do not deploy an unpublished update, and workflow-generated feed commits do not trigger a deployment loop.
+The `.nojekyll` marker identifies the site as plain static content.
 
 Use `just deploy-updates` to reconcile release state and deploy site changes or recover a deployment.
 The public feed check waits up to ten minutes for propagation and retains HTTP headers and response bodies in the workflow diagnostics artifact.
