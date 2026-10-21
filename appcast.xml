@@ -1,4 +1,19 @@
-<?xml version="1.0" encoding="UTF-8"?><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:imaxe="https://github.com/eureka-0/Imaxe/appcast" version="2.0"><channel><title>Imaxe Updates</title><link>https://github.com/eureka-0/Imaxe</link><description>Stable Imaxe updates</description><item><title>1.1.0</title><pubDate>Tue, 20 Oct 2026 23:44:54 +0800</pubDate><link>https://github.com/eureka-0/Imaxe</link><sparkle:fullReleaseNotesLink>https://github.com/eureka-0/Imaxe/releases/tag/v1.1.0</sparkle:fullReleaseNotesLink><sparkle:version>13</sparkle:version><sparkle:shortVersionString>1.1.0</sparkle:shortVersionString><sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion><sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements><description sparkle:format="markdown"># Imaxe 1.1.0
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:imaxe="https://github.com/eureka-0/Imaxe/appcast" version="2.0">
+    <channel>
+        <title>Imaxe Updates</title>
+        <link>https://github.com/eureka-0/Imaxe</link>
+        <description>Stable Imaxe updates</description>
+        <item>
+            <title>1.1.0</title>
+            <pubDate>Tue, 20 Oct 2026 23:44:54 +0800</pubDate>
+            <link>https://github.com/eureka-0/Imaxe</link>
+            <sparkle:fullReleaseNotesLink>https://github.com/eureka-0/Imaxe/releases/tag/v1.1.0</sparkle:fullReleaseNotesLink>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>1.1.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>15.6</sparkle:minimumSystemVersion>
+            <sparkle:hardwareRequirements>arm64</sparkle:hardwareRequirements>
+            <description sparkle:format="markdown"><![CDATA[# Imaxe 1.1.0
 
 Requires macOS 15.6 or later and an Apple Silicon Mac (arm64).
 
@@ -41,4 +56,9 @@ The release candidate passed the hosted unit and UI compatibility checks on macO
 The ZIP and release manifest have SHA-256 digests in `SHA256SUMS.txt`. The archive also passes EdDSA, nested code-signature, and library validation policy checks.
 
 [Full changelog](https://github.com/eureka-0/Imaxe/compare/v1.0.0...v1.1.0)
-</description><enclosure url="https://github.com/eureka-0/Imaxe/releases/download/v1.1.0/Imaxe-1.1.0.zip" length="3703730" type="application/octet-stream" sparkle:edSignature="Y6CHFGMPp4YrldIxPupZnYVb0BMU/7+nQA/qDBdbw+7YF8yZHZXuFauR7eMngCIJvBnYzv9n0zWjEReTAcZPAA=="></enclosure><imaxe:sourceCommit>2cdce9c05f36ea91e4d119cc4da35b15043c0440</imaxe:sourceCommit></item></channel></rss>
+]]></description>
+            <enclosure url="https://github.com/eureka-0/Imaxe/releases/download/v1.1.0/Imaxe-1.1.0.zip" length="3703730" type="application/octet-stream" sparkle:edSignature="Y6CHFGMPp4YrldIxPupZnYVb0BMU/7+nQA/qDBdbw+7YF8yZHZXuFauR7eMngCIJvBnYzv9n0zWjEReTAcZPAA=="></enclosure>
+            <imaxe:sourceCommit>2cdce9c05f36ea91e4d119cc4da35b15043c0440</imaxe:sourceCommit>
+        </item>
+    </channel>
+</rss>
