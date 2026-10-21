@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-  <channel>
-    <title>Imaxe Updates</title>
-    <link>https://github.com/eureka-0/Imaxe</link>
-    <description>Stable updates for Imaxe.</description>
-    <language>en</language>
-  </channel>
-</rss>

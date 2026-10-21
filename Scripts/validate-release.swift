@@ -65,10 +65,25 @@ func validate(directory: URL, expectedCommit: String) throws {
     from: Data(contentsOf: source),
     format: nil,
   ) as? [String: Any] ?? [:]
-  let manifestData = try Data(contentsOf: directory.appendingPathComponent("release.json"))
-  let manifest = try JSONDecoder().decode([String: String].self, from: manifestData)
-  let version = manifest["version"] ?? ""
-  let build = manifest["build"] ?? ""
+  let appcastXML = try String(
+    contentsOf: directory.appendingPathComponent("appcast.xml"),
+    encoding: .utf8,
+  )
+  let document = try XMLDocument(xmlString: appcastXML, options: .nodeLoadExternalEntitiesNever)
+  let items = try document.nodes(forXPath: "/rss/channel/item").compactMap { $0 as? XMLElement }
+  try require(items.count == 1, "Expected one stable full-package update")
+  guard let item = items.first else { throw ReleaseValidationError("Missing update item") }
+  let namespace = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+  func value(_ name: String) -> String? {
+    item.elements(forLocalName: name, uri: namespace).first?.stringValue
+  }
+  let version = value("shortVersionString") ?? ""
+  let build = value("version") ?? ""
+  let minimumSystem = value("minimumSystemVersion") ?? ""
+  let sourceCommit = item.elements(
+    forLocalName: "sourceCommit",
+    uri: "https://github.com/eureka-0/Imaxe/appcast",
+  ).first?.stringValue
   try require(
     version.range(of: #"^[0-9]+(\.[0-9]+)*$"#, options: .regularExpression) != nil,
     "Invalid release version",
@@ -78,26 +93,30 @@ func validate(directory: URL, expectedCommit: String) throws {
     "Invalid release build",
   )
   try require(
-    expectedCommit.count == 40 && manifest["commit"] == expectedCommit,
+    expectedCommit
+      .range(of: #"^[0-9a-f]{40}$"#, options: .regularExpression) != nil && sourceCommit ==
+      expectedCommit,
     "Release commit does not match the requested commit",
   )
-  try require(
-    manifest["publicEDKey"] == sourceInfo["SUPublicEDKey"] as? String,
-    "Release key does not match the source public key",
-  )
-  try require(
-    manifest["feedURL"] == sourceInfo["SUFeedURL"] as? String,
-    "Release feed does not match the source configuration",
-  )
+  try require(value("channel") == nil, "Expected a stable release without a channel")
+  try require(!minimumSystem.isEmpty, "Missing minimum system version")
 
   let zipName = "Imaxe-\(version).zip"
   let notesName = "Imaxe-\(version).md"
-  let names = [zipName, "release.json"]
+  let names = [zipName]
   let checksums = try String(
     contentsOf: directory.appendingPathComponent("SHA256SUMS.txt"),
     encoding: .utf8,
   ).split(separator: "\n")
-  try require(checksums.count == names.count, "Incomplete checksum manifest")
+  // Existing v1.1.0 downloads may still contain the retired manifest's checksum.
+  // It is not trusted metadata; archive bytes remain checked by SHA-256 and EdDSA.
+  let archiveChecksums = checksums.filter {
+    $0.range(of: #"^[a-f0-9]{64}  release\.json$"#, options: .regularExpression) == nil
+  }
+  try require(
+    archiveChecksums.count == names.count && checksums.count <= 2,
+    "Incomplete checksum manifest",
+  )
   for name in names {
     let data = try Data(contentsOf: directory.appendingPathComponent(name), options: .mappedIfSafe)
     let digest = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
@@ -107,30 +126,6 @@ func validate(directory: URL, expectedCommit: String) throws {
     )
   }
 
-  guard let appcastXML = manifest["appcastXML"] else {
-    throw ReleaseValidationError("Missing embedded appcast in release manifest")
-  }
-  let localAppcast = directory.appendingPathComponent("appcast.xml")
-  if FileManager.default.fileExists(atPath: localAppcast.path) {
-    let localXML = try String(contentsOf: localAppcast, encoding: .utf8)
-    try require(localXML == appcastXML, "Local appcast differs from release manifest")
-  }
-  let document = try XMLDocument(xmlString: appcastXML, options: .nodeLoadExternalEntitiesNever)
-  let items = try document.nodes(forXPath: "/rss/channel/item").compactMap { $0 as? XMLElement }
-  try require(items.count == 1, "Expected one stable full-package update")
-  guard let item = items.first else { throw ReleaseValidationError("Missing update item") }
-  let namespace = "http://www.andymatuschak.org/xml-namespaces/sparkle"
-  func value(_ name: String) -> String? {
-    item.elements(forLocalName: name, uri: namespace).first?.stringValue
-  }
-  try require(
-    value("version") == build && value("shortVersionString") == version,
-    "Appcast version does not match the release",
-  )
-  try require(
-    value("minimumSystemVersion") == manifest["minimumSystemVersion"],
-    "Appcast minimum system version does not match the app",
-  )
   guard let enclosure = item.elements(forName: "enclosure").first,
         let signatureText = enclosure.attribute(forLocalName: "edSignature", uri: namespace)?
           .stringValue,
@@ -191,8 +186,8 @@ func validate(directory: URL, expectedCommit: String) throws {
     "CFBundleShortVersionString": version,
     "CFBundleVersion": build,
     "CFBundleIdentifier": "com.imaxe.Imaxe",
-    "LSMinimumSystemVersion": manifest["minimumSystemVersion"] ?? "",
-    "SUFeedURL": manifest["feedURL"] ?? "",
+    "LSMinimumSystemVersion": minimumSystem,
+    "SUFeedURL": sourceInfo["SUFeedURL"] as? String ?? "",
     "SUPublicEDKey": keyText,
   ] {
     try require(info[property] as? String == expected, "Archive \(property) mismatch")
