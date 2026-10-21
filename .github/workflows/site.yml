@@ -1,0 +1,20 @@
+name: Publish site changes
+
+on:
+  push:
+    branches: [gh-pages]
+    paths-ignore:
+      - history/**
+
+permissions:
+  contents: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch the verified publisher on main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh api "repos/$GH_REPO/dispatches" -f event_type=site-updated
