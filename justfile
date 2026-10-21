@@ -20,9 +20,10 @@ test *args:
 test-file-update:
     ./Scripts/test-file-update.sh
 
-# Build the zip file for distribution.
-build notes="Build/release-notes.md":
-    RELEASE_NOTES_FILE={{ quote(notes) }} ./Scripts/build-zip.sh
+# Build using Imaxe-<version>.md in the matching Build/Releases directory.
+# If notes are missing, write them at the reported path and rerun.
+build:
+    ./Scripts/build-zip.sh
 
 # Create a GitHub release and upload the built zip file.
 publish:
