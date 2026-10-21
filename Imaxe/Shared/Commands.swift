@@ -2,7 +2,6 @@
 // Copyright (C) 2026 Xinlong Liu.
 
 import AppKit
-import SwiftData
 import SwiftUI
 
 private struct RecentImagesKey: FocusedValueKey {
@@ -22,9 +21,8 @@ struct FileOperationCommands: Commands {
   @FocusedValue(ImageSession.self) private var imageSession
   @FocusedValue(HomeViewModel.self) private var homeViewModel
   @FocusedValue(\.recentImages) private var recentImagesValue
+  @FocusedValue(\.clearRecentImagesConfirmation) private var clearRecentImagesConfirmation
   @Environment(\.openWindow) private var openWindow
-
-  let modelContainer: ModelContainer
 
   private var recentImages: [RecentImage] {
     if let recentImagesValue {
@@ -92,13 +90,9 @@ struct FileOperationCommands: Commands {
           Divider()
 
           Button("Clear Menu") {
-            do {
-              try RecentImagesStore.clear(in: modelContainer.mainContext)
-            } catch {
-              imageSession?.alertTitle = "Failed to Clear Recent Images"
-              imageSession?.alertMessage = error.localizedDescription
-            }
+            clearRecentImagesConfirmation?.wrappedValue = true
           }
+          .disabled(clearRecentImagesConfirmation == nil)
         }
       }
       .disabled(false)

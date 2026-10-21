@@ -184,35 +184,54 @@ enum RecentImagesStore {
     )
   }
 
-  @discardableResult
   static func removeMissingFiles(
     in modelContext: ModelContext,
-    limit: Int = recentImagesCountLimit,
     thumbnailDirectoryURL: URL = .thumbnailCachesDirectory,
-  ) throws -> Int {
+    scanAvailability: ([URL]) async throws -> [String: RecentImageAvailability] = { urls in
+      await Task.detached(priority: .utility) {
+        Dictionary(
+          urls.map { ($0.filePath, RecentImageAvailability.check($0)) },
+          uniquingKeysWith: { first, _ in first },
+        )
+      }.value
+    },
+  ) async throws -> MissingImagesCleanupResult {
     let descriptor = FetchDescriptor<RecentImage>()
+    let imagesToScan = try modelContext.fetch(descriptor)
+    let snapshots = Dictionary(uniqueKeysWithValues: imagesToScan.map {
+      ($0.persistentModelID, (path: $0.path, lastOpenedAt: $0.lastOpenedAt))
+    })
+    let availability = try await scanAvailability(imagesToScan.map(\.url))
     let recentImages = try modelContext.fetch(descriptor)
     var thumbnailKeysToCleanup = Set<String>()
-    var removedCount = 0
+    var result = MissingImagesCleanupResult()
 
-    for recentImage in recentImages where !recentImage.url.fileExists {
+    for recentImage in recentImages {
+      guard let snapshot = snapshots[recentImage.persistentModelID],
+            recentImage.path == snapshot.path,
+            recentImage.lastOpenedAt == snapshot.lastOpenedAt,
+            let status = availability[snapshot.path]
+      else { continue }
+      if status == .unavailable {
+        result.unavailableCount += 1
+      }
+      guard status == .missing else { continue }
       if let thumbnailCacheKey = recentImage.thumbnailCacheKey {
         thumbnailKeysToCleanup.insert(thumbnailCacheKey)
       }
       modelContext.delete(recentImage)
-      removedCount += 1
+      result.removedCount += 1
     }
 
-    guard removedCount > 0 else { return 0 }
+    guard result.removedCount > 0 else { return result }
 
-    try thumbnailKeysToCleanup.formUnion(trim(in: modelContext, limit: limit))
     try modelContext.save()
     try LibraryThumbnailReferences.removeThumbnailsIfUnused(
       thumbnailKeysToCleanup,
       in: modelContext,
       thumbnailDirectoryURL: thumbnailDirectoryURL,
     )
-    return removedCount
+    return result
   }
 
   static func fetchRecentImages(

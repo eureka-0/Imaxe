@@ -13,6 +13,7 @@ Run the Imaxe test suite.
 Options:
   --skip-ui                 Run only the unit-test target.
   --ui-only                 Run only the UI-test target.
+  --ui-test <name>           Run a UI-test method. Repeat to select multiple methods.
   --suite <name>            Run a unit-test suite. Repeat to select multiple suites.
                             Accepted names: ImageLoadingTests, ImageViewTests,
                             RecentImagesTests, SessionAndNavigationTests, SharedUITests,
@@ -46,6 +47,8 @@ suite_filters=()
 suite_count=0
 skipped_suites=()
 skipped_suite_count=0
+ui_test_filters=()
+ui_test_count=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,6 +70,17 @@ while [[ $# -gt 0 ]]; do
     require_value "$1" "${2:-}"
     suite_filters+=("$2")
     suite_count=$((suite_count + 1))
+    shift
+    ;;
+  --ui-test)
+    require_value "$1" "${2:-}"
+    if [[ $test_mode == "unit" ]]; then
+      echo "error: --ui-test cannot be used with --skip-ui" >&2
+      exit 2
+    fi
+    test_mode="ui"
+    ui_test_filters+=("$2")
+    ui_test_count=$((ui_test_count + 1))
     shift
     ;;
   --skip-suite)
@@ -126,15 +140,11 @@ DERIVED_DATA_DIRECTORY="./Build/DerivedData/Tests"
 mkdir -p "${RESULTS_DIRECTORY}"
 RESULT_BUNDLE="${RESULTS_DIRECTORY}/Imaxe-$(date '+%Y%m%d-%H%M%S').xcresult"
 
-if [[ $test_mode != "unit" ]]; then
-  # Keep UI fixtures outside the runner's private container so the app can select them.
-  mkdir -p ./Build/UITestFixtures
-  for name in a b c; do
-    cp './Images/sample_1280×853.png' "./Build/UITestFixtures/${name}.png"
-  done
-fi
-
 cleanup_result_bundles() {
+  if [[ $test_mode != "unit" ]]; then
+    rm -rf /private/tmp/com.imaxe.ImaxeUITests
+  fi
+
   local result_bundles
   local bundle
   local oldest_bundle
@@ -195,7 +205,13 @@ unit)
   xcodebuild_arguments+=("-skip-testing:ImaxeUITests")
   ;;
 ui)
-  xcodebuild_arguments+=("-only-testing:ImaxeUITests")
+  if ((ui_test_count > 0)); then
+    for ui_test in "${ui_test_filters[@]}"; do
+      xcodebuild_arguments+=("-only-testing:ImaxeUITests/ImaxeUITests/${ui_test}")
+    done
+  else
+    xcodebuild_arguments+=("-only-testing:ImaxeUITests")
+  fi
   ;;
 esac
 

@@ -14,6 +14,7 @@ struct ContentView: View {
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
   @State private var imageSession = ImageSession()
+  @State private var isClearRecentImagesPresented = false
   @State private var didFailInitialRequest = false
   @State private var didLoadInitialURL = false
   @State private var isTargetedForDrop = false
@@ -46,6 +47,7 @@ struct ContentView: View {
     .navigationTitle(imageSession.currentMetadata?.fileName ?? "Imaxe")
     .focusedSceneValue(imageSession)
     .focusedSceneValue(\.recentImages, recentImages)
+    .confirmClearRecentImages(isPresented: $isClearRecentImagesPresented)
     .dismissTextFocusOnClickOutside()
     .onAppear {
       configureImageSession()

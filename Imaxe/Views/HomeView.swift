@@ -19,6 +19,7 @@ struct HomeView: View {
   @Query(sort: \RecentImage.lastOpenedAt, order: .reverse) private var recentImages: [RecentImage]
 
   @State private var viewModel = HomeViewModel()
+  @State private var isClearRecentImagesPresented = false
 
   // UI layout constants
   private let heroHeightRatio: CGFloat = 0.45
@@ -55,6 +56,7 @@ struct HomeView: View {
       viewModel.dismissWindow = dismissWindow
     }
     .dismissTextFocusOnClickOutside()
+    .confirmClearRecentImages(isPresented: $isClearRecentImagesPresented)
     .sheet(item: $viewModel.renameTarget) { item in
       fileRenameSheet(for: item)
     }
@@ -74,7 +76,7 @@ struct HomeView: View {
       Text(viewModel.deleteTargetURL?.filePath ?? "")
     }
     .alert(viewModel.alertTitle, isPresented: viewModel.isAlertPresented) {
-      Button("OK") {}
+      Button("OK", action: viewModel.dismissAlert)
     } message: {
       Text(viewModel.alertMessage ?? "")
     }
@@ -179,7 +181,10 @@ struct HomeView: View {
     ]
     configuration.defaultSortOptionID = "lastOpenedAt"
     configuration.clearHelpText = "Clear Recent Images"
-    configuration.onClear = viewModel.clearRecentImages
+    configuration.onClear = { isClearRecentImagesPresented = true }
+    configuration.cleanupHelpText = "Clean Up Missing Images"
+    configuration.onCleanup = { Task { await viewModel.cleanUpMissingImages() } }
+    configuration.isCleaningUp = viewModel.isCleaningUp
     return configuration
   }
 
@@ -354,6 +359,7 @@ final class HomeViewModel {
   var isTargetedForDrop = false
   var renameTarget: RecentImage?
   var renameText = ""
+  var isCleaningUp = false
   var alertTitle: LocalizedStringResource = ""
   var alertMessage: String?
 
@@ -376,14 +382,18 @@ final class HomeViewModel {
       self.alertMessage != nil
     } set: { isPresented in
       if !isPresented {
-        self.alertTitle = ""
-        self.alertMessage = nil
+        self.dismissAlert()
       }
     }
   }
 
   var trimmedRenameText: String {
     renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+  }
+
+  func dismissAlert() {
+    alertMessage = nil
+    alertTitle = ""
   }
 
   func openRecentImage(_ item: RecentImage) {
@@ -490,13 +500,21 @@ final class HomeViewModel {
     renameTarget = nil
   }
 
-  func clearRecentImages() {
+  func cleanUpMissingImages() async {
+    guard !isCleaningUp, let modelContext else { return }
+    isCleaningUp = true
+    defer { isCleaningUp = false }
+
     do {
-      if let modelContext {
-        try RecentImagesStore.clear(in: modelContext)
-      }
+      let result = try await RecentImagesStore.removeMissingFiles(in: modelContext)
+      alertTitle = "Missing Images Cleanup Complete"
+      alertMessage = String(localized: """
+      Missing image records removed: \(result.removedCount). \
+      Records kept because their files could not be verified: \(result.unavailableCount). \
+      Original images are kept.
+      """)
     } catch {
-      alertTitle = "Failed to Clear Recent Images"
+      alertTitle = "Failed to Clean Up Missing Images"
       alertMessage = error.localizedDescription
     }
   }

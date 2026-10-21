@@ -628,6 +628,11 @@ nonisolated extension String {
 nonisolated extension URL {
   static var dataDirectory: URL {
     #if DEBUG
+      if let directory = ProcessInfo.processInfo.environment["IMAXE_UI_TEST_DIRECTORY"] {
+        return URL(fileURLWithPath: directory).appending(path: "Data", directoryHint: .isDirectory)
+      }
+    #endif
+    #if DEBUG
       let directoryName = "Imaxe Debug"
     #else
       let directoryName = "Imaxe"
@@ -640,7 +645,15 @@ nonisolated extension URL {
   }
 
   static var appCachesDirectory: URL {
-    cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
+    #if DEBUG
+      if let directory = ProcessInfo.processInfo.environment["IMAXE_UI_TEST_DIRECTORY"] {
+        return URL(fileURLWithPath: directory).appending(
+          path: "Caches",
+          directoryHint: .isDirectory,
+        )
+      }
+    #endif
+    return cachesDirectory.appendingPathComponent("com.imaxe.Imaxe", isDirectory: true)
   }
 
   static var thumbnailCachesDirectory: URL {

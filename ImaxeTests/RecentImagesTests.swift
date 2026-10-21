@@ -162,15 +162,125 @@ struct RecentImagesTests {
     )
     try FileManager.default.removeItem(at: missingURL)
 
-    let removedCount = try RecentImagesStore.removeMissingFiles(
+    let result = try await RecentImagesStore.removeMissingFiles(
       in: harness.context,
-      limit: harness.limit,
       thumbnailDirectoryURL: harness.thumbnailDirectoryURL,
     )
 
-    #expect(removedCount == 1)
+    #expect(result.removedCount == 1)
+    #expect(result.unavailableCount == 0)
     #expect(try harness.fetch().map(\.path) == [existingURL.filePath])
     #expect(!missingThumbnailURL.fileExists)
+  }
+
+  @Test func `cleanup preserves an image reopened during the scan and its thumbnail`() async throws {
+    let harness = try Harness()
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-recent-reopened")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let reopenedURL = directory.appending(path: "reopened.png")
+    let missingURL = directory.appending(path: "missing.png")
+    for url in [reopenedURL, missingURL] {
+      try TestSupport.pngData(width: 80, height: 40).write(to: url)
+      try await harness.record(url, openedAt: Date(timeIntervalSince1970: 1))
+      try FileManager.default.removeItem(at: url)
+    }
+    let original = try #require(harness.fetch().first { $0.path == reopenedURL.filePath })
+    let originalID = original.persistentModelID
+    let reopenedAt = Date(timeIntervalSince1970: 2)
+
+    let result = try await RecentImagesStore.removeMissingFiles(
+      in: harness.context,
+      thumbnailDirectoryURL: harness.thumbnailDirectoryURL,
+      scanAvailability: { urls in
+        let availability = Dictionary(uniqueKeysWithValues: urls.map {
+          ($0.filePath, RecentImageAvailability.check($0))
+        })
+        #expect(availability[reopenedURL.filePath] == .missing)
+        try TestSupport.pngData(width: 160, height: 80).write(to: reopenedURL)
+        try await harness.record(reopenedURL, openedAt: reopenedAt)
+        return availability
+      },
+    )
+
+    #expect(result.removedCount == 1)
+    #expect(result.unavailableCount == 0)
+    let remaining = try harness.fetch()
+    #expect(remaining.map(\.path) == [reopenedURL.filePath])
+    let reopened = try #require(remaining.first)
+    #expect(reopened.persistentModelID == originalID)
+    #expect(reopened.lastOpenedAt == reopenedAt)
+    let thumbnailKey = try #require(reopened.thumbnailCacheKey)
+    #expect(ImageThumbnailCache.thumbnailURL(
+      for: thumbnailKey,
+      directoryURL: harness.thumbnailDirectoryURL,
+    ).fileExists)
+    #expect(reopenedURL.fileExists)
+  }
+
+  @Test func `cleanup preserves offline and remote records without trimming valid records`(
+  ) async throws {
+    let harness = try Harness(limit: 1)
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-recent-safe-cleanup")
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let existing = directory.appending(path: "existing.png")
+    try TestSupport.pngData(width: 8, height: 8).write(to: existing)
+    let otherExisting = directory.appending(path: "other.png")
+    try TestSupport.pngData(width: 8, height: 8).write(to: otherExisting)
+    let offlineLink = directory.appending(path: "offline-link")
+    try FileManager.default.createSymbolicLink(
+      atPath: offlineLink.path,
+      withDestinationPath: "/Volumes/imaxe-offline-\(UUID().uuidString)",
+    )
+    let urls = [
+      existing,
+      otherExisting,
+      directory.appending(path: "deleted-folder/missing.png"),
+      URL(fileURLWithPath: "/Volumes/imaxe-offline-\(UUID().uuidString)/image.png"),
+      URL(fileURLWithPath: "/Network/imaxe-offline-\(UUID().uuidString)/image.png"),
+      URL(string: "https://example.invalid/image.png") ?? existing,
+      offlineLink.appending(path: "missing.png"),
+    ]
+    for url in urls {
+      harness.context.insert(RecentImage(url: url))
+    }
+    try harness.context.save()
+
+    let result = try await RecentImagesStore.removeMissingFiles(
+      in: harness.context,
+      thumbnailDirectoryURL: harness.thumbnailDirectoryURL,
+    )
+
+    #expect(result.removedCount == 1)
+    #expect(result.unavailableCount == 4)
+    #expect(try harness.context.fetchCount(FetchDescriptor<RecentImage>()) == 6)
+    #expect(existing.fileExists)
+    #expect(otherExisting.fileExists)
+  }
+
+  @Test func `cleanup preserves files behind inaccessible directories`() async throws {
+    let harness = try Harness()
+    let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-recent-permission")
+    let url = directory.appending(path: "image.png")
+    try TestSupport.pngData(width: 8, height: 8).write(to: url)
+    harness.context.insert(RecentImage(url: url))
+    try harness.context.save()
+    defer {
+      try? FileManager.default.setAttributes(
+        [.posixPermissions: 0o700],
+        ofItemAtPath: directory.path,
+      )
+      try? FileManager.default.removeItem(at: directory)
+    }
+    try FileManager.default.setAttributes([.posixPermissions: 0], ofItemAtPath: directory.path)
+
+    let result = try await RecentImagesStore.removeMissingFiles(
+      in: harness.context,
+      thumbnailDirectoryURL: harness.thumbnailDirectoryURL,
+    )
+
+    #expect(result.removedCount == 0)
+    #expect(result.unavailableCount == 1)
+    #expect(try harness.context.fetchCount(FetchDescriptor<RecentImage>()) == 1)
   }
 
   @Test func `opening missing recent image removes item and thumbnail cache`() async throws {

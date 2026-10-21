@@ -79,7 +79,21 @@ struct ImaxeApp: App {
     do {
       try FileManager.default.ensureExists(for: URL.dataDirectory)
       let modelConfiguration = ModelConfiguration(url: modelFileURL)
-      modelContainer = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
+      let container = try ModelContainer(for: RecentImage.self, configurations: modelConfiguration)
+
+      #if DEBUG
+        if ProcessInfo.processInfo.environment["IMAXE_UI_TEST_DIRECTORY"] != nil,
+           let pathsJSON = ProcessInfo.processInfo.environment["IMAXE_UI_TEST_RECENT_IMAGES"],
+           let data = pathsJSON.data(using: .utf8)
+        {
+          let paths = try JSONDecoder().decode([String].self, from: data)
+          for path in paths {
+            container.mainContext.insert(RecentImage(url: URL(fileURLWithPath: path)))
+          }
+          try container.mainContext.save()
+        }
+      #endif
+      modelContainer = container
 
       #if DEBUG
         AppLogger.shared.setDestination(to: .console)
@@ -155,7 +169,7 @@ struct ImaxeApp: App {
         CheckForUpdatesView(updater: updaterController.updater)
       }
       CommandGroup(replacing: .toolbar) {}
-      FileOperationCommands(modelContainer: modelContainer)
+      FileOperationCommands()
       ViewCommands()
     }
   }

@@ -55,6 +55,9 @@ struct ImageCollectionConfiguration<Item: Identifiable> where Item.ID: Hashable 
 
   var clearHelpText: LocalizedStringResource?
   var onClear: (() -> Void)?
+  var cleanupHelpText: LocalizedStringResource?
+  var onCleanup: (() -> Void)?
+  var isCleaningUp = false
 
   var defaultViewMode: ImageCollectionViewMode = .grid
   var defaultSortAscending: Bool = false
@@ -396,6 +399,7 @@ struct ImageCollectionView<
       || !configuration.sortOptions.isEmpty
       || fixedViewMode == nil
       || (configuration.clearHelpText != nil && configuration.onClear != nil)
+      || (configuration.cleanupHelpText != nil && configuration.onCleanup != nil)
   }
 
   private func collectionToolbar(visibleItemCount: Int) -> some View {
@@ -483,6 +487,8 @@ struct ImageCollectionView<
         .frame(height: collectionToolBarButtonHeight + 2)
       }
 
+      cleanupButton
+
       // Clear button (only if clearHelpText and onClear are provided)
       if let clearHelpText = configuration.clearHelpText, let onClear = configuration.onClear {
         Button {
@@ -504,6 +510,24 @@ struct ImageCollectionView<
     .padding(.horizontal, 12)
     .frame(height: collectionToolBarHeight, alignment: .center)
     .frostedBackground(style: .toolbar)
+  }
+
+  @ViewBuilder
+  private var cleanupButton: some View {
+    if let cleanupHelpText = configuration.cleanupHelpText,
+       let onCleanup = configuration.onCleanup
+    {
+      Button(action: onCleanup) {
+        Label(cleanupHelpText, systemImage: "paintbrush")
+          .labelStyle(.iconOnly)
+          .font(.system(size: 13, weight: .medium))
+          .foregroundStyle(.secondary)
+          .frame(width: collectionToolBarButtonHeight, height: collectionToolBarButtonHeight)
+      }
+      .buttonStyle(.borderedOnHover)
+      .disabled(items.isEmpty || configuration.isCleaningUp)
+      .help(Text(cleanupHelpText))
+    }
   }
 
   private func setSortOption(_ sortOption: ImageCollectionSortOption<Item>) {

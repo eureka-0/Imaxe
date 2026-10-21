@@ -7,16 +7,177 @@ import XCTest
 @MainActor
 final class ImaxeUITests: XCTestCase {
   var app: XCUIApplication!
+  private var testDirectory: URL?
+
+  private var clearRecentImagesButton: XCUIElement {
+    app.windows.buttons["Clear Recent Images"]
+  }
+
+  private var cleanUpMissingImagesButton: XCUIElement {
+    app.windows.buttons["Clean Up Missing Images"]
+  }
 
   override func setUp() async throws {
     try await super.setUp()
 
     continueAfterFailure = false
     app = XCUIApplication()
-    app.launchArguments = ["--disable-updates-for-testing"]
+    let directory = URL(fileURLWithPath: "/private/tmp/com.imaxe.ImaxeUITests", isDirectory: true)
+      .appending(path: "imaxe-ui-\(UUID().uuidString)", directoryHint: .isDirectory)
+    testDirectory = directory
+    app.launchEnvironment = ["IMAXE_UI_TEST_DIRECTORY": directory.path]
+    app.launchArguments = [
+      "--disable-updates-for-testing",
+      "-AppleLanguages",
+      "(en)",
+      "-AppleLocale",
+      "en_US",
+      "-recentImagesViewMode",
+      "grid",
+      "-recentImagesCountLimit",
+      "100",
+      "-enableLoopBrowsing",
+      "YES",
+    ]
     app.terminate()
     app.launch()
     app.activate()
+  }
+
+  override func tearDown() async throws {
+    app.terminate()
+    try await super.tearDown()
+  }
+
+  func testRecentImagesCleanupAndFilteredClearConfirmation() throws {
+    showHomeWindow()
+    XCTAssertTrue(clearRecentImagesButton.waitForExistence(timeout: 5), app.debugDescription)
+    XCTAssertFalse(clearRecentImagesButton.isEnabled)
+    XCTAssertFalse(cleanUpMissingImagesButton.isEnabled)
+    let originals = try launchWithRecentImages()
+    XCTAssertTrue(app.buttons["sample_1280×853.png"].waitForExistence(timeout: 5))
+    XCTAssertLessThan(cleanUpMissingImagesButton.frame.midX, clearRecentImagesButton.frame.midX)
+    keepScreenshot(clearRecentImagesButton, name: "Recent images actions in English")
+
+    cleanUpMissingImagesButton.click()
+    let cleanupMessage = """
+    Missing image records removed: 1. Records kept because their files could not be verified: 1. \
+    Original images are kept.
+    """
+    XCTAssertTrue(app.staticTexts[cleanupMessage].waitForExistence(timeout: 10))
+    app.sheets.buttons["OK"].firstMatch.click()
+    waitForDisappearance(app.sheets.firstMatch)
+
+    setRecentImagesSearch(to: "png")
+    waitForDisappearance(app.buttons["sample_1280×853.jpeg"])
+    clearRecentImagesButton.click()
+    let cancel = app.windows.buttons["Cancel"].firstMatch
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    keepScreenshot(cancel, name: "Clear confirmation includes filtered records")
+    cancel.click()
+    waitForDisappearance(app.sheets.firstMatch)
+    app.buttons["Clear Search"].click()
+    XCTAssertTrue(app.buttons["sample_1280×853.jpeg"].waitForExistence(timeout: 5))
+
+    setRecentImagesSearch(to: "png")
+    clearRecentImagesButton.click()
+    let confirm = app.sheets.buttons["Clear Recent Images"].firstMatch
+    XCTAssertTrue(confirm.waitForExistence(timeout: 5))
+    confirm.click()
+    XCTAssertTrue(app.staticTexts["No recent images yet"].waitForExistence(timeout: 5))
+    XCTAssertFalse(clearRecentImagesButton.isEnabled)
+    XCTAssertFalse(cleanUpMissingImagesButton.isEnabled)
+    for url in originals {
+      XCTAssertTrue(FileManager.default.fileExists(atPath: url.path))
+    }
+  }
+
+  private func setRecentImagesSearch(to text: String) {
+    if !app.textFields["Search"].isHittable {
+      app.windows.buttons["Search"].click()
+    }
+    let field = app.textFields["Search"]
+    XCTAssertTrue(field.waitForExistence(timeout: 5))
+    field.click()
+    field.typeKey("a", modifierFlags: .command)
+    pasteText(text, into: field)
+  }
+
+  private func waitForDisappearance(_ element: XCUIElement) {
+    let disappeared = XCTNSPredicateExpectation(
+      predicate: NSPredicate(format: "exists == false"),
+      object: element,
+    )
+    wait(for: [disappeared], timeout: 5)
+  }
+
+  func testFileMenuClearRequiresConfirmationInImageWindow() throws {
+    _ = try launchWithRecentImages()
+    let image = app.buttons["sample_1280×853.png"]
+    XCTAssertTrue(image.waitForExistence(timeout: 5))
+    image.click()
+    XCTAssertTrue(app.images["sample_1280×853.png"].waitForExistence(timeout: 10))
+    let fileMenu = app.menuBars.menuBarItems.element(boundBy: 2)
+    fileMenu.click()
+    fileMenu.menuItems["Open Recent"].hover()
+    let clearMenu = app.menuItems["Clear Menu"]
+    XCTAssertTrue(clearMenu.waitForExistence(timeout: 5))
+    clearMenu.click()
+    let cancel = app.windows.buttons["Cancel"].firstMatch
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    cancel.click()
+    XCTAssertTrue(app.images["sample_1280×853.png"].exists)
+  }
+
+  func testChineseRecentImagesAndSettings() throws {
+    if let languages = app.launchArguments.firstIndex(of: "-AppleLanguages") {
+      app.launchArguments[languages + 1] = "(zh-Hans)"
+    }
+    if let locale = app.launchArguments.firstIndex(of: "-AppleLocale") {
+      app.launchArguments[locale + 1] = "zh_CN"
+    }
+    _ = try launchWithRecentImages()
+    let clear = app.buttons["清空最近图片记录"]
+    XCTAssertTrue(clear.waitForExistence(timeout: 5), app.debugDescription)
+    XCTAssertTrue(app.buttons["清理失效图片"].exists)
+    keepScreenshot(clear, name: "Recent images actions in Simplified Chinese")
+    clear.click()
+    let cancel = app.windows.buttons["取消"].firstMatch
+    XCTAssertTrue(cancel.waitForExistence(timeout: 5))
+    keepScreenshot(cancel, name: "Clear confirmation in Simplified Chinese")
+    cancel.click()
+    app.windows.buttons["设置"].firstMatch.click()
+    XCTAssertTrue(app.staticTexts["外观："].waitForExistence(timeout: 5))
+    keepScreenshot(app.staticTexts["外观："], name: "General settings in Simplified Chinese")
+  }
+
+  private func launchWithRecentImages() throws -> [URL] {
+    let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent().appending(path: "Images")
+    let originals = [
+      directory.appending(path: "sample_1280×853.png"),
+      directory.appending(path: "sample_1280×853.jpeg"),
+    ]
+    let testDirectory = try XCTUnwrap(testDirectory)
+    let paths = originals.map(\.path) + [
+      testDirectory.appending(path: "missing.png").path,
+      "/Volumes/imaxe-offline-\(UUID().uuidString)/image.png",
+    ]
+    let data = try JSONEncoder().encode(paths)
+    app.terminate()
+    app.launchEnvironment["IMAXE_UI_TEST_RECENT_IMAGES"] = String(data: data, encoding: .utf8)
+    app.launch()
+    app.activate()
+    showHomeWindow()
+    return originals
+  }
+
+  private func showHomeWindow() {
+    if !app.windows.firstMatch.waitForExistence(timeout: 3) {
+      app.typeKey("n", modifierFlags: .command)
+    }
+    XCTAssertTrue(app.windows.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+    keepScreenshot(app.windows.firstMatch, name: "Home window after launch")
   }
 
   func testWindowAndFileMenuAreAvailable() {
@@ -68,7 +229,7 @@ final class ImaxeUITests: XCTestCase {
   func testVisibleImageZoomAndNavigation() throws {
     let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent().appending(
-        path: "Build/UITestFixtures",
+        path: "Images",
         directoryHint: .isDirectory,
       )
     if !app.windows.firstMatch.exists {
@@ -82,8 +243,8 @@ final class ImaxeUITests: XCTestCase {
     XCTAssertTrue(pathField.waitForExistence(timeout: 5))
     pathField.click()
     pathField.typeKey("a", modifierFlags: .command)
-    let path = directory.appending(path: "a.png").path
-    pastePath(path, into: pathField)
+    let path = directory.appending(path: "sample_1280×853.jpeg").path
+    pasteText(path, into: pathField)
     XCTAssertEqual(pathField.value as? String, path)
     let pathSuggestion = app.sheets["GoToWindow"].tables.cells
       .containing(.other, identifier: path).firstMatch
@@ -97,7 +258,7 @@ final class ImaxeUITests: XCTestCase {
     wait(for: [enabled], timeout: 5)
     let start = ContinuousClock.now
     openButton.click()
-    let canvas = app.images["a.png"]
+    let canvas = app.images["sample_1280×853.jpeg"]
     XCTAssertTrue(canvas.waitForExistence(timeout: 10))
     let openedAt = ContinuousClock.now
     app.typeKey("1", modifierFlags: .command)
@@ -111,17 +272,20 @@ final class ImaxeUITests: XCTestCase {
     keepScreenshot(canvas, name: "Image after six zoom increments")
     app.typeKey("0", modifierFlags: .command)
     app.typeKey(.rightArrow, modifierFlags: [])
-    XCTAssertTrue(app.images["b.png"].waitForExistence(timeout: 10))
+    XCTAssertTrue(app.images["sample_1280×853.jpg"].waitForExistence(timeout: 10))
     app.typeKey(.leftArrow, modifierFlags: [])
     XCTAssertTrue(canvas.waitForExistence(timeout: 10))
     let options = XCTMeasureOptions()
     options.iterationCount = 1
     measure(metrics: [XCTMemoryMetric(application: app), XCTClockMetric()], options: options) {
       for _ in 0 ..< 10 {
+        app.activate()
+        canvas.click()
         app.typeKey(.rightArrow, modifierFlags: [])
-      }
-      for _ in 0 ..< 10 {
+        XCTAssertTrue(app.images["sample_1280×853.jpg"].waitForExistence(timeout: 10))
+        app.images["sample_1280×853.jpg"].click()
         app.typeKey(.leftArrow, modifierFlags: [])
+        XCTAssertTrue(canvas.waitForExistence(timeout: 10))
       }
       XCTAssertTrue(canvas.waitForExistence(timeout: 10))
     }
@@ -139,7 +303,7 @@ final class ImaxeUITests: XCTestCase {
     print("IMAXE_VISIBLE_PERF \(line)")
   }
 
-  private func pastePath(_ path: String, into field: XCUIElement) {
+  private func pasteText(_ text: String, into field: XCUIElement) {
     let pasteboard = NSPasteboard.general
     let savedItems = (pasteboard.pasteboardItems ?? []).map { item in
       let copy = NSPasteboardItem()
@@ -151,7 +315,7 @@ final class ImaxeUITests: XCTestCase {
       return copy
     }
     pasteboard.clearContents()
-    let didWrite = pasteboard.setString(path, forType: .string)
+    let didWrite = pasteboard.setString(text, forType: .string)
     let changeCount = pasteboard.changeCount
     defer {
       if pasteboard.changeCount == changeCount {
@@ -164,7 +328,7 @@ final class ImaxeUITests: XCTestCase {
     XCTAssertTrue(didWrite)
     field.typeKey("v", modifierFlags: .command)
     let entered = XCTNSPredicateExpectation(
-      predicate: NSPredicate(format: "value == %@", path),
+      predicate: NSPredicate(format: "value == %@", text),
       object: field,
     )
     wait(for: [entered], timeout: 5)
