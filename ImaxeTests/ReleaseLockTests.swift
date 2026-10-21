@@ -84,7 +84,7 @@ struct ReleaseLockTests {
     #expect(try FileManager.default
       .contentsOfDirectory(atPath: fixture.releaseDirectory.path) == ["Imaxe-1.1.0.md"])
     #expect(!FileManager.default
-      .fileExists(atPath: fixture.root.appending(path: "Build/release-notes.md").path))
+      .fileExists(atPath: fixture.root.appending(path: "build/release-notes.md").path))
     #expect(!fixture.isLocked)
   }
 
@@ -111,8 +111,8 @@ struct ReleaseLockTests {
     defer { fixture.remove() }
     try fixture.writeNotes("# Imaxe 1.1.0\n\nChanges.\n")
     let existing = fixture.root.appending(path: archive
-      ? "Build/Archives/Imaxe-1.1.0-42-aaaaaaaaaaaa.xcarchive"
-      : "Build/Releases/Imaxe-1.1.0-42-bbbbbbbbbbbb")
+      ? "build/Archives/Imaxe-1.1.0-42-aaaaaaaaaaaa.xcarchive"
+      : "build/Releases/Imaxe-1.1.0-42-bbbbbbbbbbbb")
     try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
 
     let result = try await Task.detached { try fixture.run() }.value
@@ -127,7 +127,7 @@ private nonisolated struct ReleaseLockFixture: Sendable {
   let root: URL
 
   var lock: URL {
-    root.appending(path: "Build/.release.lock")
+    root.appending(path: "build/.release.lock")
   }
 
   var ready: URL {
@@ -148,7 +148,7 @@ private nonisolated struct ReleaseLockFixture: Sendable {
   }
 
   var releaseDirectory: URL {
-    root.appending(path: "Build/Releases/Imaxe-1.1.0-42-aaaaaaaaaaaa")
+    root.appending(path: "build/Releases/Imaxe-1.1.0-42-aaaaaaaaaaaa")
   }
 
   var notes: URL {
@@ -159,12 +159,12 @@ private nonisolated struct ReleaseLockFixture: Sendable {
     root = FileManager.default.temporaryDirectory
       .appending(path: "imaxe-release-lock-\(UUID().uuidString)", directoryHint: .isDirectory)
     let manager = FileManager.default
-    for path in ["Scripts", "Imaxe", "tools"] {
+    for path in ["scripts", "Imaxe", "tools"] {
       try manager.createDirectory(at: root.appending(path: path), withIntermediateDirectories: true)
     }
     let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent()
-    for path in ["Scripts/build-zip.sh", "Imaxe/Info.plist"] {
+    for path in ["scripts/build-zip.sh", "Imaxe/Info.plist"] {
       try manager.copyItem(at: project.appending(path: path), to: root.appending(path: path))
     }
     try writeTool("git", source: """
@@ -220,7 +220,7 @@ private nonisolated struct ReleaseLockFixture: Sendable {
     let process = Process()
     let pipe = Pipe()
     process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = [root.appending(path: "Scripts/build-zip.sh").path] + arguments
+    process.arguments = [root.appending(path: "scripts/build-zip.sh").path] + arguments
     process.currentDirectoryURL = root
     var environment = ProcessInfo.processInfo.environment
     environment["PATH"] = "\(root.appending(path: "tools").path):/usr/bin:/bin"

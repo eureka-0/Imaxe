@@ -5,33 +5,33 @@ default:
 # Format all Swift files in the project using SwiftFormat and shell scripts using shfmt.
 format:
     swiftformat Imaxe/ ImaxeTests/ ImaxeUITests/ --config .swiftformat
-    shfmt -w -i 2 -s -bn ./Scripts/
+    shfmt -w -i 2 -s -bn ./scripts/
 
 # Lint all Swift files in the project using SwiftLint and shell scripts using ShellCheck.
 lint:
     swiftlint lint --quiet --config .swiftlint.yml Imaxe/ ImaxeTests/ ImaxeUITests/
-    shellcheck ./Scripts/*.sh
+    shellcheck ./scripts/*.sh
 
 # Run tests. Use `--help` for usage information.
 test *args:
-    ./Scripts/test.sh {{ args }}
+    ./scripts/test.sh {{ args }}
 
 # Test file update functionality.
 test-file-update:
-    ./Scripts/test-file-update.sh
+    ./scripts/test-file-update.sh
 
-# Build using Imaxe-<version>.md in the matching Build/Releases directory.
+# Build using Imaxe-<version>.md in the matching build/Releases directory.
 # If notes are missing, write them at the reported path and rerun.
 build:
-    ./Scripts/build-zip.sh
+    ./scripts/build-zip.sh
 
 # Create a GitHub release and upload the built zip file.
 publish:
-    ./Scripts/build-zip.sh --publish
+    ./scripts/build-zip.sh --publish
 
 # Generate Sparkle keys for signing updates.
 generate-keys:
-    ./Build/DerivedData/Release/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
+    ./build/DerivedData/Release/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_keys
 
 # Reconcile stable releases with gh-pages and explicitly redeploy the complete site.
 deploy-updates:

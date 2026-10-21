@@ -153,7 +153,7 @@ final class ImaxeUITests: XCTestCase {
 
   private func launchWithRecentImages() throws -> [URL] {
     let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-      .deletingLastPathComponent().appending(path: "Images")
+      .deletingLastPathComponent().appending(path: "images")
     let originals = [
       directory.appending(path: "sample_1280×853.png"),
       directory.appending(path: "sample_1280×853.jpeg"),
@@ -229,7 +229,7 @@ final class ImaxeUITests: XCTestCase {
   func testVisibleImageZoomAndNavigation() throws {
     let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent().appending(
-        path: "Images",
+        path: "images",
         directoryHint: .isDirectory,
       )
     if !app.windows.firstMatch.exists {

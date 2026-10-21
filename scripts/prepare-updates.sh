@@ -13,8 +13,8 @@ TEMP_DIR="$(mktemp -d "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/imaxe-updates.XXXXXX")"
 trap 'rm -rf "${TEMP_DIR}"' EXIT
 REPOSITORY="eureka-0/Imaxe"
 gh api --paginate --slurp "repos/${REPOSITORY}/releases" >"${TEMP_DIR}/releases.json"
-swiftc Scripts/appcast.swift -o "${TEMP_DIR}/appcast"
-swiftc Scripts/validate-release.swift -o "${TEMP_DIR}/validate-release"
+swiftc scripts/appcast.swift -o "${TEMP_DIR}/appcast"
+swiftc scripts/validate-release.swift -o "${TEMP_DIR}/validate-release"
 "${TEMP_DIR}/appcast" catalog "${SITE}/history" "${TEMP_DIR}/releases.json" >"${TEMP_DIR}/catalog.json"
 jq -r '.[] | [.tag, .version, .commit] | @tsv' "${TEMP_DIR}/catalog.json" >"${TEMP_DIR}/selected"
 while IFS=$'\t' read -r tag version commit; do

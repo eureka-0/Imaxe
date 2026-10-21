@@ -205,7 +205,7 @@ do {
   let arguments = CommandLine.arguments
   try require(
     arguments.count == 3,
-    "usage: swift Scripts/validate-release.swift <directory> <commit>",
+    "usage: swift scripts/validate-release.swift <directory> <commit>",
   )
   try validate(directory: URL(fileURLWithPath: arguments[1]), expectedCommit: arguments[2])
   print(

@@ -11,7 +11,7 @@ enum TestSupport {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
       .deletingLastPathComponent()
-      .appending(path: "Images/\(fileName)")
+      .appending(path: "images/\(fileName)")
   }
 
   static func bitmapImage(width: Int = 10, height: Int = 20) -> NSImage {

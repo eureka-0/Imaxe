@@ -10,7 +10,7 @@ case "${1:-}" in
 --publish) PUBLISH=true ;;
 --help | -h)
   echo "usage: $0 [--publish]"
-  echo "Build using Build/Releases/Imaxe-<version>-<build>-<commit>/Imaxe-<version>.md."
+  echo "Build using build/Releases/Imaxe-<version>-<build>-<commit>/Imaxe-<version>.md."
   echo "If notes are missing, the script prints their path; write them and rerun."
   echo "Use --publish to publish the exact existing artifact from main."
   exit 0
@@ -31,7 +31,7 @@ plist() { /usr/libexec/PlistBuddy -c "Print :$2" "$1"; }
 REPOSITORY="eureka-0/Imaxe"
 REPOSITORY_URL="https://github.com/${REPOSITORY}"
 SCHEME="Imaxe"
-BUILD_ROOT="${PWD}/Build"
+BUILD_ROOT="${PWD}/build"
 DERIVED_DATA_DIR="${BUILD_ROOT}/DerivedData/Release"
 SPARKLE_BIN="${DERIVED_DATA_DIR}/SourcePackages/artifacts/sparkle/Sparkle/bin"
 FEED_URL="$(plist Imaxe/Info.plist SUFeedURL)"
@@ -109,7 +109,7 @@ TEMP_DIR="$(mktemp -d "${BUILD_ROOT}/.release-check.XXXXXX")"
 curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
   "${FEED_URL}" -o "${TEMP_DIR}/online.xml"
 xmllint --nonet --noout "${TEMP_DIR}/online.xml"
-ONLINE_BUILD="$(swift Scripts/appcast.swift newest "${TEMP_DIR}/online.xml")"
+ONLINE_BUILD="$(swift scripts/appcast.swift newest "${TEMP_DIR}/online.xml")"
 if [[ ${ONLINE_BUILD} -gt 0 ]]; then
   [[ ${BUILD_NUMBER} -ge ${ONLINE_BUILD} ]] || fail "build number is lower than the public feed"
   if [[ ${BUILD_NUMBER} -eq ${ONLINE_BUILD} ]]; then
@@ -121,7 +121,7 @@ fi
 [[ "$(gh api "repos/${REPOSITORY}" --jq .visibility)" == public ]] || fail "repository must be public"
 git clone --quiet --depth 1 --single-branch --branch gh-pages "$(git remote get-url origin)" "${TEMP_DIR}/site"
 gh api --paginate --slurp "repos/${REPOSITORY}/releases" >"${TEMP_DIR}/releases.json"
-swift Scripts/appcast.swift catalog "${TEMP_DIR}/site/history" "${TEMP_DIR}/releases.json" >"${TEMP_DIR}/catalog.json"
+swift scripts/appcast.swift catalog "${TEMP_DIR}/site/history" "${TEMP_DIR}/releases.json" >"${TEMP_DIR}/catalog.json"
 while IFS=$'\t' read -r PUBLISHED_BUILD PUBLISHED_COMMIT PUBLISHED_VERSION; do
   [[ ${BUILD_NUMBER} -ge ${PUBLISHED_BUILD} ]] || fail "build number is lower than a published release"
   if [[ ${BUILD_NUMBER} -eq ${PUBLISHED_BUILD} ]]; then
@@ -131,7 +131,7 @@ while IFS=$'\t' read -r PUBLISHED_BUILD PUBLISHED_COMMIT PUBLISHED_VERSION; do
 done < <(jq -r '.[] | [.build, .commit, .version] | @tsv' "${TEMP_DIR}/catalog.json")
 
 if [[ ${PUBLISH} == true ]]; then
-  swift Scripts/validate-release.swift "${OUTPUT_DIR}" "${COMMIT}"
+  swift scripts/validate-release.swift "${OUTPUT_DIR}" "${COMMIT}"
   REMOTE_MAIN="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
   [[ ${REMOTE_MAIN} == "${COMMIT}" ]] || fail "origin/main must point to this exact commit"
 
@@ -170,7 +170,7 @@ if [[ ${PUBLISH} == true ]]; then
     fi
   done
   cp "${OUTPUT_DIR}/appcast.xml" "${TEMP_DIR}/download/appcast.xml"
-  swift Scripts/validate-release.swift "${TEMP_DIR}/download" "${COMMIT}"
+  swift scripts/validate-release.swift "${TEMP_DIR}/download" "${COMMIT}"
   HISTORY_FILE="${TEMP_DIR}/site/history/${TAG}/appcast.xml"
   if [[ -e ${HISTORY_FILE} ]]; then
     cmp -s "${OUTPUT_DIR}/appcast.xml" "${HISTORY_FILE}" || fail "history already contains a different artifact for ${TAG}"
@@ -207,9 +207,9 @@ ditto -c -k --sequesterRsrc --keepParent "${APP}" "${ARTIFACTS}/${ZIP_NAME}"
   --download-url-prefix "${REPOSITORY_URL}/releases/download/${TAG}/" \
   --embed-release-notes --full-release-notes-url "${REPOSITORY_URL}/releases/tag/${TAG}" \
   --link "${REPOSITORY_URL}" "${ARTIFACTS}"
-swift Scripts/appcast.swift stamp "${ARTIFACTS}/appcast.xml" "${COMMIT}"
+swift scripts/appcast.swift stamp "${ARTIFACTS}/appcast.xml" "${COMMIT}"
 (cd "${ARTIFACTS}" && shasum -a 256 "${ZIP_NAME}" >SHA256SUMS.txt)
-swift Scripts/validate-release.swift "${ARTIFACTS}" "${COMMIT}"
+swift scripts/validate-release.swift "${ARTIFACTS}" "${COMMIT}"
 cmp -s "${NOTES_FILE}" "${ARTIFACTS}/${NOTES_NAME}" || fail "release notes changed during the build; rerun with the final notes"
 mv "${ARTIFACTS}/${ZIP_NAME}" "${ARTIFACTS}/appcast.xml" "${ARTIFACTS}/SHA256SUMS.txt" "${OUTPUT_DIR}/"
 CREATED_ARCHIVE=false

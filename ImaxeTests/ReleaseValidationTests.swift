@@ -107,7 +107,7 @@ private nonisolated struct ReleaseFixture: Sendable {
     artifacts = root.appending(path: "artifacts")
     verifier = root.appending(path: "validate-release")
     let manager = FileManager.default
-    for name in ["artifacts", "Scripts", "Imaxe", "Imaxe.app/Contents/MacOS"] {
+    for name in ["artifacts", "scripts", "Imaxe", "Imaxe.app/Contents/MacOS"] {
       try manager.createDirectory(at: root.appending(path: name), withIntermediateDirectories: true)
     }
     let key = Curve25519.Signing.PrivateKey()
@@ -130,8 +130,8 @@ private nonisolated struct ReleaseFixture: Sendable {
     let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
       .deletingLastPathComponent()
     try manager.copyItem(
-      at: project.appending(path: "Scripts/validate-release.swift"),
-      to: root.appending(path: "Scripts/validate-release.swift"),
+      at: project.appending(path: "scripts/validate-release.swift"),
+      to: root.appending(path: "scripts/validate-release.swift"),
     )
     try "int main(void) { return 0; }".write(
       to: root.appending(path: "main.c"),
@@ -183,7 +183,7 @@ private nonisolated struct ReleaseFixture: Sendable {
     try checksums()
     try Self.succeed(
       "/usr/bin/xcrun",
-      ["swiftc", root.appending(path: "Scripts/validate-release.swift").path, "-o", verifier.path],
+      ["swiftc", root.appending(path: "scripts/validate-release.swift").path, "-o", verifier.path],
     )
   }
 

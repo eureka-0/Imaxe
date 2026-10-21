@@ -9,12 +9,6 @@ build/
 *.xcuserdatad
 *.xcuserstate
 
-## Affinity files
-*.af*
-
-## Built applications
-Build/
-
 ## SwiftPad generated files
 buildServer.json
 

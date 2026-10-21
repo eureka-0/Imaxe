@@ -6,7 +6,7 @@
 # the displayed graph accordingly.
 set -o pipefail
 
-OUTPUT_FILE="./Images/sample_updating.png"
+OUTPUT_FILE="./images/sample_updating.png"
 WAITING_SECONDS=20
 
 echo "==== Stage 1: Drawing Sine Function ===="

@@ -49,18 +49,18 @@ jobs:
           DEVELOPMENT_TEAM =
           XCCONFIG
           echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/ci-signing.xcconfig" >> "$GITHUB_ENV"
-          mkdir -p Build/CI
-          git rev-parse HEAD > Build/CI/test-products-commit.txt
-          pwd > Build/CI/test-products-source-root.txt
-          xcodebuild -version > Build/CI/test-products-xcode.txt
-          sw_vers > Build/CI/test-products-build-os.txt
+          mkdir -p build/CI
+          git rev-parse HEAD > build/CI/test-products-commit.txt
+          pwd > build/CI/test-products-source-root.txt
+          xcodebuild -version > build/CI/test-products-xcode.txt
+          sw_vers > build/CI/test-products-build-os.txt
 
       - name: Build test products
-        run: just test --build-only 2>&1 | tee Build/CI/build-for-testing.log
+        run: just test --build-only 2>&1 | tee build/CI/build-for-testing.log
 
       - name: Package test products
         # tar preserves executable modes, framework symlinks and bundle signatures.
-        run: tar -czf Build/CI/macos15-test-products.tar.gz -C Build/DerivedData/Tests/Build Products
+        run: tar -czf build/CI/macos15-test-products.tar.gz -C build/DerivedData/Tests/Build Products
 
       - name: Upload build evidence and test products
         if: ${{ !cancelled() }}
@@ -68,8 +68,8 @@ jobs:
         with:
           name: macos15-test-products
           path: |
-            Build/CI/
-            Build/TestResults/
+            build/CI/
+            build/TestResults/
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
@@ -129,7 +129,7 @@ jobs:
           XCCONFIG
           echo "XCODE_XCCONFIG_FILE=$RUNNER_TEMP/ci-signing.xcconfig" >> "$GITHUB_ENV"
 
-          mkdir -p Build/CI
+          mkdir -p build/CI
           {
             echo "Commit: $GITHUB_SHA"
             echo "Runner image: ${ImageOS:-unknown} ${ImageVersion:-unknown}"
@@ -141,11 +141,11 @@ jobs:
             xcrun --show-sdk-version
             just --version
             xcbeautify --version
-          } | tee Build/CI/environment.txt
+          } | tee build/CI/environment.txt
           {
             echo '### Test environment'
             echo '```text'
-            cat Build/CI/environment.txt
+            cat build/CI/environment.txt
             echo '```'
             echo 'The runner OS patch version can change; this is not an exact macOS 15.6 test.'
             echo 'Slow-volume testing is intentionally skipped. VM timings are observations, not release performance gates.'
@@ -156,57 +156,57 @@ jobs:
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: macos15-test-products
-          path: Build/ImportedTests
+          path: build/ImportedTests
 
       - name: Restore macOS 15 test products
         id: restore_products
         if: ${{ matrix.runner == 'macos-15' }}
         run: |
-          evidence=Build/ImportedTests/CI
+          evidence=build/ImportedTests/CI
           test "$(cat "$evidence/test-products-commit.txt")" = "$GITHUB_SHA"
           # Tests use #filePath for repository fixtures; require the same checkout path.
           test "$(cat "$evidence/test-products-source-root.txt")" = "$GITHUB_WORKSPACE"
-          xcodebuild -version > Build/CI/test-products-consumer-xcode.txt
-          cmp "$evidence/test-products-xcode.txt" Build/CI/test-products-consumer-xcode.txt
-          mkdir -p Build/DerivedData/Tests/Build
-          tar -xzf "$evidence/macos15-test-products.tar.gz" -C Build/DerivedData/Tests/Build
-          cp "$evidence"/test-products-*.txt Build/CI/
+          xcodebuild -version > build/CI/test-products-consumer-xcode.txt
+          cmp "$evidence/test-products-xcode.txt" build/CI/test-products-consumer-xcode.txt
+          mkdir -p build/DerivedData/Tests/Build
+          tar -xzf "$evidence/macos15-test-products.tar.gz" -C build/DerivedData/Tests/Build
+          cp "$evidence"/test-products-*.txt build/CI/
           echo 'TEST_EXECUTION_ARGS=--test-without-building' >> "$GITHUB_ENV"
           echo 'macOS 15 executes full test products built on macOS 26 with Xcode 26.3; native asset compilation on 15 remains unverified.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Unit tests and coverage
-        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/unit-tests.log
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee build/CI/unit-tests.log
 
       - name: AppKit window tests and coverage
         # Window animations share the main run loop. Keep pixel decoding and
         # fixture compilation out of this test host so animation states are observable.
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
-        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee Build/CI/window-tests.log
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee build/CI/window-tests.log
 
       - name: UI tests
         # Still collect UI evidence when a unit assertion fails; do not hide failures.
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
-        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --ui-only --no-coverage 2>&1 | tee Build/CI/ui-tests.log
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --ui-only --no-coverage 2>&1 | tee build/CI/ui-tests.log
 
       - name: Collect test results
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           shopt -s nullglob
-          results=(Build/TestResults/*.xcresult)
+          results=(build/TestResults/*.xcresult)
           validation_status=0
           if ((${#results[@]} > 0)); then
             # Preserve evidence even if extracting a result summary fails.
-            tar -czf Build/CI/xcresults.tar.gz -C Build/TestResults .
+            tar -czf build/CI/xcresults.tar.gz -C build/TestResults .
           fi
           for result in "${results[@]}"; do
             name="$(basename "$result" .xcresult)"
-            xcrun xcresulttool get test-results summary --path "$result" > "Build/CI/$name.json"
+            xcrun xcresulttool get test-results summary --path "$result" > "build/CI/$name.json"
             jq -r '"### " + .title, "Result: \(.result); total: \(.totalTestCount); passed: \(.passedTests); failed: \(.failedTests); skipped: \(.skippedTests)"' \
-              "Build/CI/$name.json" >> "$GITHUB_STEP_SUMMARY"
+              "build/CI/$name.json" >> "$GITHUB_STEP_SUMMARY"
             # An empty or entirely skipped suite is not executed coverage.
-            if ! jq -e '.passedTests > 0' "Build/CI/$name.json" >/dev/null; then
+            if ! jq -e '.passedTests > 0' "build/CI/$name.json" >/dev/null; then
               validation_status=1
-              xcrun xcresulttool get log --type build --path "$result" > "Build/CI/$name-build.json"
+              xcrun xcresulttool get log --type build --path "$result" > "build/CI/$name-build.json"
             fi
           done
           exit "$validation_status"
@@ -216,7 +216,7 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-results-${{ matrix.runner }}-xcode-${{ matrix.xcode }}-arm64
-          path: Build/CI/
+          path: build/CI/
           if-no-files-found: warn
           retention-days: 14
           compression-level: 0

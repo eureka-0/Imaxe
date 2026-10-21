@@ -96,7 +96,7 @@ struct UpdatesPipelineTests {
       environment["FEED_VERIFY_ATTEMPTS"] = "3"
       environment["FEED_VERIFY_DELAY"] = "0"
       environment["FEED_VERIFY_TIMEOUT"] = "10"
-      let script = UpdatesFixture.project.appending(path: "Scripts/verify-feed.sh").path
+      let script = UpdatesFixture.project.appending(path: "scripts/verify-feed.sh").path
       let args = [
         script,
         expected.path,
@@ -141,7 +141,7 @@ private nonisolated struct UpdatesFixture {
     tool = root.appending(path: "appcast")
     let result = try updatesRun(
       "/usr/bin/xcrun",
-      ["swiftc", Self.project.appending(path: "Scripts/appcast.swift").path, "-o", tool.path],
+      ["swiftc", Self.project.appending(path: "scripts/appcast.swift").path, "-o", tool.path],
     )
     guard result.status == 0 else { throw UpdatesTestError(result.output) }
   }

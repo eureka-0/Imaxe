@@ -25,7 +25,7 @@ Do not expand into RAW editing, professional color grading, layers, batch proces
 - `Imaxe/Shared/`: commands, constants, and shared AppKit / SwiftUI utilities.
 - `Imaxe/Components/`: reusable SwiftUI components and AppKit bridges.
 - `ImaxeTests/`: Swift Testing unit tests.
-- `Scripts/`: scripts for testing and building the project.
+- `scripts/`: scripts for testing and building the project.
 
 ## Rules
 

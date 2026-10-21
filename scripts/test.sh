@@ -6,7 +6,7 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: Scripts/test.sh [options]
+Usage: scripts/test.sh [options]
 
 Run the Imaxe test suite.
 
@@ -22,7 +22,7 @@ Options:
                             UpdateSettingsTests, ReleaseValidationTests, ReleaseLockTests.
   --skip-suite <name>       Exclude a unit-test suite. Repeat to exclude multiple suites.
   --build-only              Build all test products without running tests.
-  --test-without-building   Run existing test products from Build/DerivedData/Tests.
+  --test-without-building   Run existing test products from build/DerivedData/Tests.
   --no-coverage             Disable code coverage collection.
   --coverage-report         Print the detailed code coverage report after testing.
   -h, --help                Show this help message.
@@ -135,8 +135,8 @@ if [[ $build_action == "build-for-testing" &&
   exit 2
 fi
 
-RESULTS_DIRECTORY="./Build/TestResults"
-DERIVED_DATA_DIRECTORY="./Build/DerivedData/Tests"
+RESULTS_DIRECTORY="./build/TestResults"
+DERIVED_DATA_DIRECTORY="./build/DerivedData/Tests"
 mkdir -p "${RESULTS_DIRECTORY}"
 RESULT_BUNDLE="${RESULTS_DIRECTORY}/Imaxe-$(date '+%Y%m%d-%H%M%S').xcresult"
 
