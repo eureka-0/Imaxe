@@ -4,10 +4,10 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 
 ## 当前发布范围与合并约定
 
-- 本次正式候选 B 为 `1.1.0 (12)`，高于内部升级基线 A 的 `1.1.0 (11)`；发布准备 PR 合入 main 后，从干净、与远端一致的 main 构建 B，保留 macOS 15.6+、arm64、ad-hoc 分发与现有更新签名密钥。
+- 当前正式版为 `1.1.0`，内部构建 B 为 13，高于已确认安装并启动成功的 A 12；原 A 11/B 12 因启动故障撤回。本轮从干净、与远端一致的 main `2cdce9c0` 构建 B，保留 macOS 15.6+、arm64、ad-hoc 分发与现有更新签名密钥。
 - 范围包括已有图片保真、加载预算与导航修复、Sparkle 设置同步、发布资产校验及 Pages feed；本轮补兼容样本和发布前验证，不引入分块渲染、按需恢复高分辨率或 HDR 显示承诺。
 - develop 已通过 PR #1 合入 main，并由 GitHub 自动删除；之后从最新 main 创建具体功能分支，通过 PR 合并后删除，不再保留长期 develop。
-- PR #1 使用 merge commit 保留已有开发历史；后续较小功能 PR 默认 squash merge。发布准备按用户要求分步提交并创建 PR；合并、打标签和正式发布仍由用户安排。
+- PR #1 使用 merge commit 保留已有开发历史；后续较小功能 PR 默认 squash merge。发布准备按用户要求分步提交并创建 PR；本轮 PR #2/#3 在 CI 全绿后按用户授权使用管理员权限合并，正式发布也已获明确授权。
 - 不申请 Apple Developer 账号，不配置 Apple Development、Developer ID、公证或 stapling；这是分发约束，不是待实现任务。
 - 用户已明确将真实慢卷测试降为低优先级待验收，本轮不下载新图片，使用仓库现有图片和本地生成样本。
 
@@ -48,8 +48,15 @@ A long-term issue tracker. Work through items by priority; check them off or rem
 - [x] 精简正式附件：Release 只上传 ZIP、`release.json` 和 `SHA256SUMS.txt`；appcast 与 Markdown 仅作为本地构建产物，说明以内嵌 Markdown 写入 feed，完整 feed 数据保存在 manifest 中，经部署校验后发布到 Pages。Release 标题和说明只使用营销版本号，构建号留作更新比较与机器元数据。三个发布验证用例和发布锁用例通过，真实 A ZIP 的三附件副本也通过完整验证；结果为 `Build/TestResults/Imaxe-20261020-232844.xcresult`，Swift/格式/shell/Updates workflow 静态检查通过。
 - [x] 故障发布已按用户授权撤回：`v1.1.0` 转回 draft，标签和五个资产保留；Updates run `39442929884` 成功恢复空 feed，匿名 HTTP 200、0 条更新且与源文件一致，故障 ZIP 的匿名 URL 返回 404。用户要求直接删除旧故障包及 Build 过时产物，已清理旧 Build（约 4.4 GiB），诊断结论保存在忽略目录 `Docs/agents/SPARKLE_LAUNCH_FAILURE_2026-10-20.md`。
 - [x] 公开空 feed 验收：2026-10-20 匿名请求 `https://eureka-0.github.io/Imaxe/appcast.xml` 返回 HTTP 200，`application/xml`，XML 解析为 1 个 RSS channel、0 个更新条目，与 `Distribution/appcast.xml` 字节一致；SHA-256 为 `91ad5658dd8d8dfa61e843b3d2445fee3997346d5854d67114060ecf676bf1bb`。本项只确认 feed 部署与可访问性。
-- [ ] 发布事件部署限制：`v1.1.0` 的 Updates run `39438881020` 在执行步骤前被 github-pages 环境规则拒绝，原因是仅允许 main branch、未允许 release tag。本次已通过现有 workflow_dispatch 从 main 指定 `release_tag=v1.1.0` 完成部署，但环境规则未改；后续发布前需确认标签部署策略或固定采用 main 手动入口，不将首次自动运行记为成功。
-- [ ] 真实升级验收：原 A/B 因启动阻断失效且本地产物已删除；按用户最新决定，修复后重新构建 `1.1.0 (12)` 作为内部 A，由用户安装测试，通过后才构建 `1.1.0 (13)` 作为 B 并重新发布。仍需验证下载、验签、替换、重启和用户数据保留；旧 `v1.1.0` 标签和草稿资产的来源一致性须在重新发布前单独处理，不能复用旧包的验收结论。
+- [x] 发布标签环境许可：首次自动部署因只允许 main branch 而被拒绝；用户随后明确授权新增 `v*` tag 许可，github-pages 环境现保留 main branch 与 `v*` tag 两项规则，新增规则 ID 为 `63728054`。该许可只解决环境入口限制，不代表后续部署与公开 feed 校验必然成功。
+- [x] 修复后的正式 B 已发布：PR #3 的 CI run `39449750682` 五个任务全部通过，按授权合并为 `2cdce9c05f36ea91e4d119cc4da35b15043c0440`；从干净且与远端一致的 main 构建 `1.1.0 (13)`，目录为 `Build/Releases/Imaxe-1.1.0-13-2cdce9c05f36/`，ZIP SHA-256 为 `485cf0f098cc0d1343252424950eeb47a8054cec360b1acfed2b88f2ae3fa24e`。签名、EdDSA、元数据和来源校验通过；最终 ZIP 独立启动后加载 Sparkle 并进入 AppKit 主循环，采样为 `Build/LaunchChecks/B-13/launch.sample.txt`。安全更新撤回版本的标签后，于北京时间 `2026-10-20 23:52:43` 重新公开 `v1.1.0`，仅保留 ZIP、manifest、校验和三个附件，公开下载均与本地字节一致并再次通过完整发布验证。
+- [x] B 13 的生产 feed 已验收：release 事件 run `39452440735` 上传的 appcast 与本地签名数据一致，但部署后公开地址持续返回旧空 feed，12 次字节校验失败；从 main 指定 `release_tag=v1.1.0` 手动运行 `39453494899` 后全部通过。北京时间 `2026-10-21 00:02` 再次匿名读取无查询参数和带部署参数的 URL，均为 HTTP 200、4330 字节、1 条更新，`sparkle:version=13`、`sparkle:shortVersionString=1.1.0`，与 manifest 内 appcast 逐字节一致；SHA-256 为 `541a9ffd7e1d31740321ac8459de451dfd0b1b206186c31482a31eb19b07590b`。用户在 feed 恢复前于 A 12 内检查更新显示最新，不能据此判定构建号比较失效。
+- [ ] 发布事件部署的可重复性：上述 release 运行的准备、上传和部署步骤成功，但公开字节检查失败，手动部署恢复；尚未确认旧 feed 持续返回的原因。下次发布继续保留公开字节校验，分别核对上传 artifact、Pages 部署状态和生产 URL；自动部署可靠性暂不记为已验收。
+- [ ] 2026-10-21 发布流程迁移：按最新要求，总 feed 保留全局最新 7 个有效稳定构建；`gh-pages/history/<tag>/appcast.xml` 保存每次发布信息与来源提交，总 feed 位于分支根目录，生产 URL 保持不变。Release 改为仅 ZIP 与校验和，移除 JSON 附件和 main 的 Distribution 目录，说明使用未跟踪文件。准备、验签、分支迁移和自动部署的实际结果完成后补记；公开校验改为最多 10 分钟，保留响应头/内容/摘要并同时核对正式与唯一探测 URL。
+- [x] 迁移本机验证：`ReleaseValidationTests` 与 `UpdatesPipelineTests` 各 3 项通过、0 失败；分别为 `Build/TestResults/Imaxe-20261021-094516.xcresult` 与 `Imaxe-20261021-094558.xcresult`。覆盖实际归档签名/来源/元数据、最新 7 项数值排序、过滤草稿/预发布/撤回、重复构建与历史缺失拒绝，以及旧 feed 随后收敛、持续旧内容和网络失败；正式 B13 的公开 ZIP 与新历史 appcast 再次通过完整验证。Swift 类型/格式、SwiftLint、ShellCheck、shfmt、actionlint 及 diff 检查通过。
+- [x] A 发现 B：生产 feed 恢复后，用户已于 2026-10-21 确认在本地 A `1.1.0 (12)` 内检查到 B 更新；相同显示版本 `1.1.0` 下，构建号 12 → 13 的更新发现通过。
+- [x] 本机 A → B 自动更新：用户于 2026-10-21 明确确认本地自动更新功能可用；这一结论为用户实测反馈，未扩展为第二台普通 Mac 的安装或所有用户数据类型均已逐项验证。
+- [ ] 用户数据保留的逐项证据、普通 Mac 安装及旧版手动迁移继续补齐；旧故障 A/B 的结论不复用。
 - [x] 2026-10-19：确认公开仓库、匿名下载历史 ZIP，并启用 Pages 的 Actions 发布来源；`SUFeedURL`、初始空 feed 和部署工作流已准备，次日完成首次线上部署。
 - [x] 现有 Keychain 公钥匹配 SUPublicEDKey，实际签名通过，修改内容与错误公钥被拒绝；没有导出或更换私钥。
 - [x] 发布流程已加入产物摘要/EdDSA/包内元数据校验、固定提交、线上 feed 与已发布 manifest 构建号比较、draft 资产回读及一致产物恢复逻辑；不再自动切分支或覆盖不匹配资产。

@@ -5,16 +5,15 @@ on:
     branches: [main]
     paths:
       - .github/workflows/updates.yml
-      - Distribution/**
+      - Scripts/appcast.swift
+      - Scripts/prepare-updates.sh
+      - Scripts/verify-feed.sh
       - Scripts/validate-release.swift
   release:
-    types: [published]
+    types: [published, edited, unpublished, deleted]
+  repository_dispatch:
+    types: [site-updated]
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Stable release to deploy; leave empty to select the latest signed release'
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -24,9 +23,46 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    if: github.event_name != 'release' || !github.event.release.prerelease
+  prepare:
     runs-on: macos-15
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Check out the site without mixing application history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: gh-pages
+          path: site
+      - name: Verify public stable releases and generate the latest seven updates
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash Scripts/prepare-updates.sh site
+      - name: Commit the feed and export the complete site snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          git -C site config user.name 'github-actions[bot]'
+          git -C site config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git -C site add appcast.xml
+          if ! git -C site diff --cached --quiet; then
+            git -C site commit -m 'chore(updates): refresh stable appcast'
+            git -C site push origin HEAD:refs/heads/gh-pages
+          fi
+          mkdir -p _site
+          git -C site rev-parse HEAD
+          git -C site archive HEAD | tar -x -C _site
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: _site
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: write
@@ -39,65 +75,23 @@ jobs:
         with:
           ref: main
           persist-credentials: false
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
-      - name: Prepare verified stable feed
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          REQUESTED_TAG: ${{ inputs.release_tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p _site
-          tag="$REQUESTED_TAG"
-          if [[ -z "$tag" ]]; then
-            tag="$(gh api --paginate --slurp "repos/$GH_REPO/releases" |
-              jq -r '[.[][] | select(.draft == false and .prerelease == false) |
-                select(any(.assets[]; .name == "release.json"))][0].tag_name // empty')"
-          fi
-          if [[ -z "$tag" ]]; then
-            cp Distribution/appcast.xml _site/appcast.xml
-          else
-            [[ "$tag" =~ ^v[0-9]+(\.[0-9]+)*$ ]]
-            [[ "$(gh release view "$tag" --json isDraft,isPrerelease --jq '.isDraft or .isPrerelease')" == false ]]
-            directory="$RUNNER_TEMP/imaxe-update"
-            mkdir -p "$directory"
-            gh release download "$tag" --dir "$directory" \
-              --pattern 'Imaxe-*.zip' --pattern release.json --pattern SHA256SUMS.txt
-            commit="$(gh api "repos/$GH_REPO/commits/$tag" --jq .sha)"
-            swift Scripts/validate-release.swift "$directory" "$commit"
-            version="$(jq -r .version "$directory/release.json")"
-            [[ "$tag" == "v$version" ]]
-            for name in "Imaxe-$version.zip" release.json SHA256SUMS.txt; do
-              curl --fail --silent --show-error --location \
-                --proto '=https' --proto-redir '=https' \
-                "https://github.com/$GH_REPO/releases/download/$tag/$name" \
-                -o "$RUNNER_TEMP/public-asset"
-              cmp -s "$directory/$name" "$RUNNER_TEMP/public-asset"
-            done
-            jq -jr .appcastXML "$directory/release.json" > _site/appcast.xml
-          fi
-          touch _site/.nojekyll
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          path: _site
+          name: github-pages
+          path: pages-artifact
+      - name: Extract the exact feed uploaded by the prepare job
+        run: tar -xOf pages-artifact/artifact.tar ./appcast.xml > expected-appcast.xml
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
       - name: Verify public feed bytes
-        shell: bash
-        run: |
-          set -euo pipefail
-          for attempt in {1..12}; do
-            echo "Checking public Pages deployment ($attempt/12)..."
-            if curl --fail --silent --show-error --location \
-              --proto '=https' --proto-redir '=https' \
-              "https://eureka-0.github.io/Imaxe/appcast.xml?deployment=$GITHUB_RUN_ID" \
-              -o "$RUNNER_TEMP/public-appcast.xml" &&
-              cmp -s _site/appcast.xml "$RUNNER_TEMP/public-appcast.xml"; then
-              exit 0
-            fi
-            sleep 10
-          done
-          echo 'Public appcast did not match the verified deployment' >&2
-          exit 1
+        run: bash Scripts/verify-feed.sh expected-appcast.xml https://eureka-0.github.io/Imaxe/appcast.xml feed-diagnostics
+      - name: Preserve public feed diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: feed-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: feed-diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14

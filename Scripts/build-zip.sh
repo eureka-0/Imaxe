@@ -10,7 +10,7 @@ case "${1:-}" in
 --publish) PUBLISH=true ;;
 --help | -h)
   echo "usage: $0 [--publish]"
-  echo "Build a signed update archive, or publish the exact existing artifact from main."
+  echo "Build with RELEASE_NOTES_FILE=<untracked Markdown path>, or publish the exact existing artifact from main."
   exit 0
   ;;
 "") ;;
@@ -82,7 +82,7 @@ OUTPUT_DIR="${BUILD_ROOT}/Releases/${RELEASE_ID}"
 ARCHIVE_PATH="${BUILD_ROOT}/Archives/${RELEASE_ID}.xcarchive"
 ZIP_NAME="Imaxe-${VERSION}.zip"
 NOTES_NAME="Imaxe-${VERSION}.md"
-ASSETS=("${ZIP_NAME}" release.json SHA256SUMS.txt)
+ASSETS=("${ZIP_NAME}" SHA256SUMS.txt)
 
 TEMP_DIR="$(mktemp -d "${BUILD_ROOT}/.release-check.XXXXXX")"
 
@@ -90,36 +90,26 @@ TEMP_DIR="$(mktemp -d "${BUILD_ROOT}/.release-check.XXXXXX")"
 curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
   "${FEED_URL}" -o "${TEMP_DIR}/online.xml"
 xmllint --nonet --noout "${TEMP_DIR}/online.xml"
-[[ "$(xmllint --nonet --xpath 'count(/rss/channel)' "${TEMP_DIR}/online.xml")" == 1 ]] || fail "feed is not an RSS appcast"
-[[ "$(xmllint --nonet --xpath 'count(/rss/channel/item)' "${TEMP_DIR}/online.xml")" -le 1 ]] || fail "review multi-item feed version policy before publishing"
-ONLINE_BUILD="$(xmllint --nonet --xpath 'string(/rss/channel/item/*[local-name()="version"])' "${TEMP_DIR}/online.xml")"
-if [[ -n ${ONLINE_BUILD} ]]; then
-  [[ ${ONLINE_BUILD} =~ ^[0-9]+$ ]] || fail "online feed has an invalid build number"
+ONLINE_BUILD="$(swift Scripts/appcast.swift newest "${TEMP_DIR}/online.xml")"
+if [[ ${ONLINE_BUILD} -gt 0 ]]; then
   [[ ${BUILD_NUMBER} -ge ${ONLINE_BUILD} ]] || fail "build number is lower than the public feed"
   if [[ ${BUILD_NUMBER} -eq ${ONLINE_BUILD} ]]; then
     [[ ${PUBLISH} == true ]] || fail "increase the public build number before building"
-    cmp -s "${TEMP_DIR}/online.xml" "${OUTPUT_DIR}/appcast.xml" || fail "same online build has a different appcast"
   fi
 fi
 
-# A withdrawn/stale feed must not hide a higher build already published on GitHub.
+# Check the complete public release catalog, including items pruned from the root feed.
 [[ "$(gh api "repos/${REPOSITORY}" --jq .visibility)" == public ]] || fail "repository must be public"
-gh api --paginate "repos/${REPOSITORY}/releases" \
-  --jq '.[] | select(.draft == false and .prerelease == false) | .assets[] | select(.name == "release.json") | .browser_download_url' \
-  >"${TEMP_DIR}/published-manifests"
-while IFS= read -r manifest_url; do
-  [[ -n ${manifest_url} ]] || continue
-  curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
-    "${manifest_url}" -o "${TEMP_DIR}/published.json"
-  PUBLISHED_BUILD="$(jq -r .build "${TEMP_DIR}/published.json")"
-  [[ ${PUBLISHED_BUILD} =~ ^[0-9]+$ ]] || fail "published release has an invalid build number"
+git clone --quiet --depth 1 --single-branch --branch gh-pages "$(git remote get-url origin)" "${TEMP_DIR}/site"
+gh api --paginate --slurp "repos/${REPOSITORY}/releases" >"${TEMP_DIR}/releases.json"
+swift Scripts/appcast.swift catalog "${TEMP_DIR}/site/history" "${TEMP_DIR}/releases.json" >"${TEMP_DIR}/catalog.json"
+while IFS=$'\t' read -r PUBLISHED_BUILD PUBLISHED_COMMIT PUBLISHED_VERSION; do
   [[ ${BUILD_NUMBER} -ge ${PUBLISHED_BUILD} ]] || fail "build number is lower than a published release"
   if [[ ${BUILD_NUMBER} -eq ${PUBLISHED_BUILD} ]]; then
     [[ ${PUBLISH} == true ]] || fail "increase the build number beyond all published releases"
-    [[ "$(jq -r .commit "${TEMP_DIR}/published.json")" == "${COMMIT}" &&
-    "$(jq -r .version "${TEMP_DIR}/published.json")" == "${VERSION}" ]] || fail "published build identifies a different artifact"
+    [[ ${PUBLISHED_COMMIT} == "${COMMIT}" && ${PUBLISHED_VERSION} == "${VERSION}" ]] || fail "published build identifies a different artifact"
   fi
-done <"${TEMP_DIR}/published-manifests"
+done < <(jq -r '.[] | [.build, .commit, .version] | @tsv' "${TEMP_DIR}/catalog.json")
 
 if [[ ${PUBLISH} == true ]]; then
   swift Scripts/validate-release.swift "${OUTPUT_DIR}" "${COMMIT}"
@@ -143,7 +133,7 @@ if [[ ${PUBLISH} == true ]]; then
     gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${TEMP_DIR}/release.json"
   fi
   jq -e --arg zip "${ZIP_NAME}" \
-    'all(.assets[]; .name == $zip or .name == "release.json" or .name == "SHA256SUMS.txt")' \
+    'all(.assets[]; .name == $zip or .name == "SHA256SUMS.txt")' \
     "${TEMP_DIR}/release.json" >/dev/null || fail "release contains unexpected assets"
   jq -e --rawfile notes "${OUTPUT_DIR}/${NOTES_NAME}" '.body == $notes' \
     "${TEMP_DIR}/release.json" >/dev/null || fail "release notes differ from the verified artifact"
@@ -159,7 +149,18 @@ if [[ ${PUBLISH} == true ]]; then
       cmp -s "${TEMP_DIR}/download/${asset}" "${OUTPUT_DIR}/${asset}" || fail "uploaded asset differs: ${asset}"
     fi
   done
+  cp "${OUTPUT_DIR}/appcast.xml" "${TEMP_DIR}/download/appcast.xml"
   swift Scripts/validate-release.swift "${TEMP_DIR}/download" "${COMMIT}"
+  HISTORY_FILE="${TEMP_DIR}/site/history/${TAG}/appcast.xml"
+  if [[ -e ${HISTORY_FILE} ]]; then
+    cmp -s "${OUTPUT_DIR}/appcast.xml" "${HISTORY_FILE}" || fail "history already contains a different artifact for ${TAG}"
+  else
+    mkdir -p "$(dirname "${HISTORY_FILE}")"
+    cp "${OUTPUT_DIR}/appcast.xml" "${HISTORY_FILE}"
+    git -C "${TEMP_DIR}/site" add "history/${TAG}/appcast.xml"
+    git -C "${TEMP_DIR}/site" commit -m "chore(updates): archive appcast for ${TAG}"
+    git -C "${TEMP_DIR}/site" push origin HEAD:refs/heads/gh-pages
+  fi
   if [[ "$(jq -r .isDraft "${TEMP_DIR}/release.json")" == true ]]; then
     gh release edit "${TAG}" --repo "${REPOSITORY}" --draft=false --latest
   fi
@@ -174,6 +175,9 @@ EXISTING=("${BUILD_ROOT}/Releases/${SCHEME}-${VERSION}-${BUILD_NUMBER}-"*)
 shopt -u nullglob
 mkdir -p "${BUILD_ROOT}/Archives" "${TEMP_DIR}/artifacts" "${BUILD_ROOT}/Releases"
 CREATED_ARCHIVE=true
+NOTES_FILE="${RELEASE_NOTES_FILE:-Build/release-notes.md}"
+[[ -f ${NOTES_FILE} ]] || fail "provide untracked release notes using RELEASE_NOTES_FILE (default: Build/release-notes.md)"
+[[ "$(head -n 1 "${NOTES_FILE}")" == "# Imaxe ${VERSION}" ]] || fail "release notes must start with # Imaxe ${VERSION}"
 xcodebuild archive -project Imaxe.xcodeproj -scheme "${SCHEME}" -configuration Release \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath "${DERIVED_DATA_DIR}" \
   -archivePath "${ARCHIVE_PATH}" ARCHS=arm64 CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Manual -quiet
@@ -183,22 +187,16 @@ INFO="${APP}/Contents/Info.plist"
 [[ "$(plist "${INFO}" CFBundleShortVersionString)" == "${VERSION}" && "$(plist "${INFO}" CFBundleVersion)" == "${BUILD_NUMBER}" ]] || fail "archive version mismatch"
 [[ -x ${SPARKLE_BIN}/generate_appcast ]] || fail "Sparkle tool missing from this archive's resolved artifacts"
 [[ "$("${SPARKLE_BIN}/generate_keys" -p)" == "${PUBLIC_KEY}" ]] || fail "Keychain signing key does not match SUPublicEDKey"
-MINIMUM_SYSTEM="$(plist "${INFO}" LSMinimumSystemVersion)"
 ARTIFACTS="${TEMP_DIR}/artifacts"
 ditto -c -k --sequesterRsrc --keepParent "${APP}" "${ARTIFACTS}/${ZIP_NAME}"
-[[ "$(head -n 1 Distribution/release-notes.md)" == "# Imaxe ${VERSION}" ]] || fail "update release notes for this version"
-cp Distribution/release-notes.md "${ARTIFACTS}/${NOTES_NAME}"
+cp "${NOTES_FILE}" "${ARTIFACTS}/${NOTES_NAME}"
 
 "${SPARKLE_BIN}/generate_appcast" --maximum-deltas 0 \
   --download-url-prefix "${REPOSITORY_URL}/releases/download/${TAG}/" \
   --embed-release-notes --full-release-notes-url "${REPOSITORY_URL}/releases/tag/${TAG}" \
   --link "${REPOSITORY_URL}" "${ARTIFACTS}"
-jq -n --arg version "${VERSION}" --arg build "${BUILD_NUMBER}" --arg commit "${COMMIT}" \
-  --arg minimumSystemVersion "${MINIMUM_SYSTEM}" --arg feedURL "${FEED_URL}" --arg publicEDKey "${PUBLIC_KEY}" \
-  --rawfile appcastXML "${ARTIFACTS}/appcast.xml" \
-  '{version:$version,build:$build,commit:$commit,minimumSystemVersion:$minimumSystemVersion,feedURL:$feedURL,publicEDKey:$publicEDKey,appcastXML:$appcastXML}' \
-  >"${ARTIFACTS}/release.json"
-(cd "${ARTIFACTS}" && shasum -a 256 "${ZIP_NAME}" release.json >SHA256SUMS.txt)
+swift Scripts/appcast.swift stamp "${ARTIFACTS}/appcast.xml" "${COMMIT}"
+(cd "${ARTIFACTS}" && shasum -a 256 "${ZIP_NAME}" >SHA256SUMS.txt)
 swift Scripts/validate-release.swift "${ARTIFACTS}" "${COMMIT}"
 mv "${ARTIFACTS}" "${OUTPUT_DIR}"
 CREATED_ARCHIVE=false
