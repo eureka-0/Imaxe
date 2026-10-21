@@ -98,6 +98,7 @@ struct SearchField: View {
         .contentShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
     .buttonStyle(.borderedOnHover(cornerRadius: cornerRadius))
+    .accessibilityLabel(Text(placeholder))
     .help("Search")
     .onHover { isHoveringFoldedButton = $0 }
   }
@@ -139,6 +140,7 @@ struct SearchField: View {
         }
         .buttonStyle(.plain)
         .help("Clear Search")
+        .accessibilityLabel(Text("Clear Search"))
       }
     }
     .padding(.horizontal, 8)

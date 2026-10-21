@@ -280,8 +280,7 @@ struct HomeView: View {
               .truncationMode(.middle)
               .padding(.horizontal, 4)
               .padding(.vertical, 1)
-              .background(.regularMaterial)
-              .clipShape(RoundedRectangle(cornerRadius: 3))
+              .frostedBackground(in: RoundedRectangle(cornerRadius: 3))
               .padding(.bottom, 2)
           }
         }

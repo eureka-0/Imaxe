@@ -475,7 +475,6 @@ struct ImageCollectionView<
         MaterialSegmentedPicker(
           effectiveViewModeBinding,
           items: ImageCollectionViewMode.allCases,
-          background: .controlBackground,
         ) { mode in
           Label(mode.title, systemImage: mode.systemImage)
             .labelStyle(.iconOnly)
@@ -504,9 +503,7 @@ struct ImageCollectionView<
     }
     .padding(.horizontal, 12)
     .frame(height: collectionToolBarHeight, alignment: .center)
-    .background(
-      .regularMaterial.opacity(0.9),
-    )
+    .frostedBackground(style: .toolbar)
   }
 
   private func setSortOption(_ sortOption: ImageCollectionSortOption<Item>) {

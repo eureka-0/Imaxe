@@ -97,8 +97,7 @@ struct ImageView: View {
         .foregroundStyle(.secondary)
     }
     .padding(24)
-    .background(.regularMaterial)
-    .clipShape(RoundedRectangle(cornerRadius: 12))
+    .frostedBackground(in: RoundedRectangle(cornerRadius: 12), style: .floating)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
     .accessibilityElement(children: .combine)
     .accessibilityLabel(Text("Loading..."))

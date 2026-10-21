@@ -3,11 +3,10 @@
 
 import SwiftUI
 
-struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeStyle>: View {
+struct MaterialSegmentedPicker<Item: Hashable, Content: View>: View {
   @Binding var selection: Item
   let items: [Item]
   let content: (Item) -> Content
-  var background: Background
 
   @Environment(\.appearsActive) private var appearsActive
   @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
@@ -15,13 +14,11 @@ struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeS
   init(
     _ selection: Binding<Item>,
     items: [Item],
-    background: Background = .regularMaterial,
     @ViewBuilder content: @escaping (Item) -> Content,
   ) {
     _selection = selection
     self.items = items
     self.content = content
-    self.background = background
   }
 
   var body: some View {
@@ -68,7 +65,7 @@ struct MaterialSegmentedPicker<Item: Hashable, Content: View, Background: ShapeS
       .allowsHitTesting(false)
     }
     .padding(2)
-    .background(background, in: .capsule)
+    .background(.primary.opacity(0.04), in: .capsule)
   }
 
   private var selectionAnimation: Animation? {

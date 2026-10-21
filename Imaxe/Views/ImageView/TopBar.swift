@@ -59,15 +59,7 @@ struct TopBar: View {
     .padding(.trailing, 12)
     .frame(maxWidth: .infinity, alignment: .center)
     .frame(height: topBarHeight)
-    .background {
-      Rectangle()
-        .fill(.ultraThinMaterial)
-    }
-    .overlay(alignment: .bottom) {
-      Rectangle()
-        .fill(.separator.opacity(0.28))
-        .frame(height: 1)
-    }
+    .frostedBackground(style: .toolbar)
     .onChange(of: popoverState) { _, newValue in
       isPopoverPresented = newValue.isAnyPopoverPresented
     }
@@ -693,7 +685,7 @@ private extension View {
       .frame(height: buttonHeight + padding * 2)
       .background {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
-          .fill(.controlBackground.opacity(0.8))
+          .fill(.primary.opacity(0.04))
       }
       .overlay {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
