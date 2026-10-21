@@ -10,7 +10,9 @@ case "${1:-}" in
 --publish) PUBLISH=true ;;
 --help | -h)
   echo "usage: $0 [--publish]"
-  echo "Build with RELEASE_NOTES_FILE=<untracked Markdown path>, or publish the exact existing artifact from main."
+  echo "Build using Build/Releases/Imaxe-<version>-<build>-<commit>/Imaxe-<version>.md."
+  echo "If notes are missing, the script prints their path; write them and rerun."
+  echo "Use --publish to publish the exact existing artifact from main."
   exit 0
   ;;
 "") ;;
@@ -82,7 +84,24 @@ OUTPUT_DIR="${BUILD_ROOT}/Releases/${RELEASE_ID}"
 ARCHIVE_PATH="${BUILD_ROOT}/Archives/${RELEASE_ID}.xcarchive"
 ZIP_NAME="Imaxe-${VERSION}.zip"
 NOTES_NAME="Imaxe-${VERSION}.md"
+NOTES_FILE="${OUTPUT_DIR}/${NOTES_NAME}"
 ASSETS=("${ZIP_NAME}" SHA256SUMS.txt)
+
+if [[ ${PUBLISH} == false ]]; then
+  [[ ! -e ${ARCHIVE_PATH} ]] || fail "release identity already exists; refusing to overwrite"
+  [[ ! -L ${OUTPUT_DIR} ]] || fail "release directory must not be a symbolic link"
+  shopt -s nullglob dotglob
+  for path in "${BUILD_ROOT}/Releases/${SCHEME}-${VERSION}-${BUILD_NUMBER}-"*; do
+    [[ ${path} == "${OUTPUT_DIR}" && -d ${path} ]] || fail "this version/build already identifies another artifact"
+  done
+  for path in "${OUTPUT_DIR}/"*; do
+    [[ ${path} == "${NOTES_FILE}" && -f ${path} && ! -L ${path} ]] || fail "release identity already exists; refusing to overwrite"
+  done
+  shopt -u nullglob dotglob
+  mkdir -p "${OUTPUT_DIR}"
+  [[ -f ${NOTES_FILE} ]] || fail "write release notes to ${NOTES_FILE}, then rerun the build"
+  [[ "$(head -n 1 "${NOTES_FILE}")" == "# Imaxe ${VERSION}" ]] || fail "release notes must start with # Imaxe ${VERSION}"
+fi
 
 TEMP_DIR="$(mktemp -d "${BUILD_ROOT}/.release-check.XXXXXX")"
 
@@ -127,23 +146,24 @@ if [[ ${PUBLISH} == true ]]; then
   fi
   if [[ -z ${REMOTE_TAG_COMMIT} ]]; then git push origin "refs/tags/${TAG}"; fi
 
-  if ! gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${TEMP_DIR}/release.json"; then
+  RELEASE_STATE="${TEMP_DIR}/github-release-state.json"
+  if ! gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${RELEASE_STATE}"; then
     gh release create "${TAG}" --repo "${REPOSITORY}" --verify-tag --draft \
       --title "Imaxe ${VERSION}" --notes-file "${OUTPUT_DIR}/${NOTES_NAME}"
-    gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${TEMP_DIR}/release.json"
+    gh release view "${TAG}" --repo "${REPOSITORY}" --json isDraft,assets,body >"${RELEASE_STATE}"
   fi
   jq -e --arg zip "${ZIP_NAME}" \
     'all(.assets[]; .name == $zip or .name == "SHA256SUMS.txt")' \
-    "${TEMP_DIR}/release.json" >/dev/null || fail "release contains unexpected assets"
+    "${RELEASE_STATE}" >/dev/null || fail "release contains unexpected assets"
   jq -e --rawfile notes "${OUTPUT_DIR}/${NOTES_NAME}" '.body == $notes' \
-    "${TEMP_DIR}/release.json" >/dev/null || fail "release notes differ from the verified artifact"
+    "${RELEASE_STATE}" >/dev/null || fail "release notes differ from the verified artifact"
   mkdir -p "${TEMP_DIR}/download"
   for asset in "${ASSETS[@]}"; do
-    if jq -e --arg name "${asset}" '.assets[] | select(.name == $name)' "${TEMP_DIR}/release.json" >/dev/null; then
+    if jq -e --arg name "${asset}" '.assets[] | select(.name == $name)' "${RELEASE_STATE}" >/dev/null; then
       gh release download "${TAG}" --repo "${REPOSITORY}" --pattern "${asset}" --dir "${TEMP_DIR}/download"
       cmp -s "${TEMP_DIR}/download/${asset}" "${OUTPUT_DIR}/${asset}" || fail "published asset differs: ${asset}"
     else
-      [[ "$(jq -r .isDraft "${TEMP_DIR}/release.json")" == true ]] || fail "published release is missing ${asset}"
+      [[ "$(jq -r .isDraft "${RELEASE_STATE}")" == true ]] || fail "published release is missing ${asset}"
       gh release upload "${TAG}" "${OUTPUT_DIR}/${asset}" --repo "${REPOSITORY}"
       gh release download "${TAG}" --repo "${REPOSITORY}" --pattern "${asset}" --dir "${TEMP_DIR}/download"
       cmp -s "${TEMP_DIR}/download/${asset}" "${OUTPUT_DIR}/${asset}" || fail "uploaded asset differs: ${asset}"
@@ -161,23 +181,16 @@ if [[ ${PUBLISH} == true ]]; then
     git -C "${TEMP_DIR}/site" commit -m "chore(updates): archive appcast for ${TAG}"
     git -C "${TEMP_DIR}/site" push origin HEAD:refs/heads/gh-pages
   fi
-  if [[ "$(jq -r .isDraft "${TEMP_DIR}/release.json")" == true ]]; then
+  if [[ "$(jq -r .isDraft "${RELEASE_STATE}")" == true ]]; then
     gh release edit "${TAG}" --repo "${REPOSITORY}" --draft=false --latest
   fi
   echo "Verified GitHub Release ${TAG}; the Updates workflow deploys its appcast."
   exit 0
 fi
 
-[[ ! -e ${OUTPUT_DIR} && ! -e ${ARCHIVE_PATH} ]] || fail "release identity already exists; refusing to overwrite"
-shopt -s nullglob
-EXISTING=("${BUILD_ROOT}/Releases/${SCHEME}-${VERSION}-${BUILD_NUMBER}-"*)
-[[ ${#EXISTING[@]} -eq 0 ]] || fail "this version/build already identifies another artifact"
-shopt -u nullglob
 mkdir -p "${BUILD_ROOT}/Archives" "${TEMP_DIR}/artifacts" "${BUILD_ROOT}/Releases"
 CREATED_ARCHIVE=true
-NOTES_FILE="${RELEASE_NOTES_FILE:-Build/release-notes.md}"
-[[ -f ${NOTES_FILE} ]] || fail "provide untracked release notes using RELEASE_NOTES_FILE (default: Build/release-notes.md)"
-[[ "$(head -n 1 "${NOTES_FILE}")" == "# Imaxe ${VERSION}" ]] || fail "release notes must start with # Imaxe ${VERSION}"
+cp "${NOTES_FILE}" "${TEMP_DIR}/artifacts/${NOTES_NAME}"
 xcodebuild archive -project Imaxe.xcodeproj -scheme "${SCHEME}" -configuration Release \
   -destination 'platform=macOS,arch=arm64' -derivedDataPath "${DERIVED_DATA_DIR}" \
   -archivePath "${ARCHIVE_PATH}" ARCHS=arm64 CODE_SIGN_IDENTITY=- DEVELOPMENT_TEAM= CODE_SIGN_STYLE=Manual -quiet
@@ -189,7 +202,6 @@ INFO="${APP}/Contents/Info.plist"
 [[ "$("${SPARKLE_BIN}/generate_keys" -p)" == "${PUBLIC_KEY}" ]] || fail "Keychain signing key does not match SUPublicEDKey"
 ARTIFACTS="${TEMP_DIR}/artifacts"
 ditto -c -k --sequesterRsrc --keepParent "${APP}" "${ARTIFACTS}/${ZIP_NAME}"
-cp "${NOTES_FILE}" "${ARTIFACTS}/${NOTES_NAME}"
 
 "${SPARKLE_BIN}/generate_appcast" --maximum-deltas 0 \
   --download-url-prefix "${REPOSITORY_URL}/releases/download/${TAG}/" \
@@ -198,6 +210,7 @@ cp "${NOTES_FILE}" "${ARTIFACTS}/${NOTES_NAME}"
 swift Scripts/appcast.swift stamp "${ARTIFACTS}/appcast.xml" "${COMMIT}"
 (cd "${ARTIFACTS}" && shasum -a 256 "${ZIP_NAME}" >SHA256SUMS.txt)
 swift Scripts/validate-release.swift "${ARTIFACTS}" "${COMMIT}"
-mv "${ARTIFACTS}" "${OUTPUT_DIR}"
+cmp -s "${NOTES_FILE}" "${ARTIFACTS}/${NOTES_NAME}" || fail "release notes changed during the build; rerun with the final notes"
+mv "${ARTIFACTS}/${ZIP_NAME}" "${ARTIFACTS}/appcast.xml" "${ARTIFACTS}/SHA256SUMS.txt" "${OUTPUT_DIR}/"
 CREATED_ARCHIVE=false
 echo "Created and verified ${OUTPUT_DIR}"
