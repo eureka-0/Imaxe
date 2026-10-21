@@ -6,6 +6,7 @@ import Foundation
 let sparkleNamespace = "http://www.andymatuschak.org/xml-namespaces/sparkle"
 let sourceNamespace = "https://github.com/eureka-0/Imaxe/appcast"
 let retainedVersionCount = 7
+let xmlReadOptions: XMLNode.Options = [.nodeLoadExternalEntitiesNever, .nodePreserveCDATA]
 
 struct AppcastError: LocalizedError {
   let errorDescription: String?
@@ -27,6 +28,14 @@ func namespace(_ name: String, _ uri: String) throws -> XMLNode {
   return node
 }
 
+func writeXML(_ document: XMLDocument, to url: URL) throws {
+  var data = document.xmlData(options: .nodePrettyPrint)
+  if data.last != 0x0A {
+    data.append(0x0A)
+  }
+  try data.write(to: url, options: .atomic)
+}
+
 struct Record: Encodable {
   let tag: String
   let version: String
@@ -37,7 +46,7 @@ struct Record: Encodable {
   init(_ path: String) throws {
     let document = try XMLDocument(
       contentsOf: URL(fileURLWithPath: path),
-      options: .nodeLoadExternalEntitiesNever,
+      options: xmlReadOptions,
     )
     let items = try document.nodes(forXPath: "/rss/channel/item")
     try check(items.count == 1, "History appcast must contain exactly one update: \(path)")
@@ -114,7 +123,7 @@ do {
       "Invalid source commit",
     )
     let url = URL(fileURLWithPath: args[1])
-    let document = try XMLDocument(contentsOf: url, options: .nodeLoadExternalEntitiesNever)
+    let document = try XMLDocument(contentsOf: url, options: xmlReadOptions)
     let items = try document.nodes(forXPath: "/rss/channel/item")
     try check(items.count == 1, "Stamp one release at a time")
     guard let root = document.rootElement(),
@@ -126,7 +135,7 @@ do {
     let commit = XMLElement(name: "imaxe:sourceCommit", uri: sourceNamespace)
     commit.stringValue = args[2]
     item.addChild(commit)
-    try document.xmlData.write(to: url, options: .atomic)
+    try writeXML(document, to: url)
   case "catalog", "merge":
     try check(
       args.count == (command == "catalog" ? 3 : 4),
@@ -153,7 +162,7 @@ do {
       for record in records.prefix(retainedVersionCount) {
         let source = try XMLDocument(
           contentsOf: URL(fileURLWithPath: record.path),
-          options: .nodeLoadExternalEntitiesNever,
+          options: xmlReadOptions,
         )
         guard let item = try source.nodes(forXPath: "/rss/channel/item").first
         else { throw AppcastError("Missing update") }
@@ -162,13 +171,13 @@ do {
       }
       let document = XMLDocument(rootElement: root)
       document.characterEncoding = "UTF-8"
-      try document.xmlData.write(to: URL(fileURLWithPath: args[3]), options: .atomic)
+      try writeXML(document, to: URL(fileURLWithPath: args[3]))
     }
   case "newest":
     try check(args.count == 2, "newest <appcast.xml>")
     let document = try XMLDocument(
       contentsOf: URL(fileURLWithPath: args[1]),
-      options: .nodeLoadExternalEntitiesNever,
+      options: xmlReadOptions,
     )
     try check(document.nodes(forXPath: "/rss/channel").count == 1, "Invalid RSS channel")
     let items = try document.nodes(forXPath: "/rss/channel/item").compactMap { $0 as? XMLElement }
