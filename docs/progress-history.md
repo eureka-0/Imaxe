@@ -3,8 +3,206 @@
 Reviewed and migrated: 2026-10-22.
 Open work is tracked in [progress.md](progress.md).
 Test results below apply to their recorded source, environment and acceptance scope.
-The failed develop run [39722137150](https://github.com/eureka-0/Imaxe/actions/runs/39722137150) is an active CI issue; earlier passing runs remain historical evidence.
-Release Lock readiness and the UI Clear Menu lookup must be fixed next, while incomplete Release performance and device acceptance remain open.
+The CI repairs and test-execution optimization passed [CI 39794872986](https://github.com/eureka-0/Imaxe/actions/runs/39794872986) at `6cb84116a4b065b1d857631289e798353442c905`.
+Earlier failures and passing runs remain historical evidence; supplementary validation and maintenance are deferred under the planning decision below.
+
+## Deferred validation and maintenance: 2026-10-22
+
+The user requested faster feature delivery and challenged the validation-heavy roadmap.
+The previous next-step ordering was withdrawn: additional evidence collection does not take priority over the next user-facing feature.
+The items retained below are deferred, not completed, and are not release or feature-development prerequisites.
+
+| Previous work | Decision and trigger |
+| --- | --- |
+| Dedicated UI launch / cleanup integration assertions | Defer. Existing storage tests cover isolated paths, separate preferences, unchanged production preferences, cleanup ownership and symlink protection. Add a focused integration regression if startup / storage / cleanup changes or cross-run leakage is observed. |
+| Visible-first-frame calibration, the full format / interaction matrix, System Trace / Allocations and formal performance tables | Defer the campaign. Use a relevant before / after comparison for a selected optimization; collect deeper evidence when investigating a specific stall, memory problem or an explicitly requested performance claim. |
+| Cross-system materials and Reduce Transparency acceptance | Attach a brief relevant check to UI changes or a reported visual defect; no independent acceptance campaign is scheduled. |
+| Long-session, multiwindow, GIF and memory-pressure campaigns | Investigate a reproducible problem or a change to those paths; no standalone stress-test project is scheduled. |
+| High-zoom proxy / detail question | Keep as an optional user-facing feature candidate. Start with a visible limitation in a representative image if selected; advanced rendering work requires that concrete need. |
+| Broader HDR | Keep outside the current feature scope; remove it from the active task checklist. |
+| Unrelated formatting findings | Address when touching those files or when they block an actual check; no separate cleanup project is scheduled. |
+| Native macOS 15 asset compilation and historical test-host stalls | Retain the working prebuild path. Revisit when the workaround stops working, a relevant toolchain change is made or the failure recurs. |
+| Routine release checks and interrupted-upload drills | Keep ordinary artifact / signature / update-feed verification with the next real release. Extended publication, retention, withdrawal and upload-recovery exercises are deferred until those workflows change, fail or are explicitly requested. |
+
+Existing tests and the required CI gate remain in place.
+No implementation, CI configuration or test coverage was removed by this planning decision.
+The archived performance observations retain their original limits; this reprioritization makes no new performance claim.
+
+### Previous plan retained for reference
+
+The unchecked tasks below record the superseded plan; their original acceptance details apply only if the relevant work is reactivated.
+
+### P1: stability and core experience
+
+#### P1-1: UI test isolation
+
+Startup, window reactivation and PNG → SVG navigation were accepted by the user on 2026-10-22 and are archived.
+The remaining scope is integration evidence for test storage and cleanup:
+
+- [ ] Add UI integration checks proving that separate test launches use separate preferences and recent records, and that cleanup affects only the current run.
+  Change settings and open an image in test A, then launch B with a different test identifier and verify its independent state.
+  Check production-storage sentinels only in a disposable CI account; preserve another run's data during cleanup.
+  Storage-layer unit tests already pass; the current seven UI tests do not contain these dedicated integration assertions.
+  A missing assertion is an evidence gap, not a confirmed isolation defect.
+- [ ] Run those assertions in hosted CI and retain source SHA, environment, logs and xcresult.
+  The main app creates test storage, fixtures are read directly from `images/`, and the UI runner must not assume it can create shared temporary directories.
+  Acceptance requires both independent-launch state and cleanup preservation to pass on macOS 15 / 26 / 27, with the existing UI assertions retained.
+
+#### P1-2: Release performance baseline
+
+The original B13 ZIP, environment manifest, seven formats × three untraced opens, JPEG recording and Time Profiler attachment are archived as preliminary evidence.
+Use the current account as authorized, retain existing preferences / caches, and allow test images to enter recent records.
+Keep different observer binaries, recordings and traces in separate statistical groups.
+
+- [ ] Calibrate visible first-frame capture across the Home-to-image window transition and align input, video and frame clocks.
+  The recorded JPEG window was rebound about 296 ms after input, so `first_visible_frame_ms` remains null; binding delay is not image display latency.
+  Start with the archived JPEG and paired recorded / unrecorded runs to measure recording overhead.
+  Retain annotated first-visible frames, clock mappings and timing uncertainty before populating the metric.
+- [ ] Complete the basic scenario matrix: JPEG, PNG, TIFF, HEIF, WebP, GIF and SVG, ten first opens per format, 100% / 4× zoom and pan, five rounds of 30 rapid switches, and fixed short-GIF playback.
+  The existing 21 observations cover a fresh process entering Home for one second before its first file event; Finder launch with a document and disk-cold caching are separate conditions.
+  Fix window size, ordering, input intervals and cache conditions; verify final image, orientation, alpha edges, color and interaction.
+- [ ] Analyze first frame, main-thread activity and memory separately.
+  The existing Time Profiler export has 421 CPU samples but no stage-aligned conclusion or waiting-thread coverage; add System Trace / Allocations evidence without resigning B13 or weakening system security.
+  Report RSS and physical footprint separately, with actual sampling intervals; the current 2–12-second observation window is not proof of steady state.
+- [ ] Publish correctness and performance tables, raw-data locations, rerun commands and one evidence-backed optimization target with an acceptance threshold.
+  Keep individual observations, medians and ranges; distinguish displayed, cancelled and failed switches before reporting p95.
+  Three runs per differently sized input do not establish format rankings, memory limits or optimization gains.
+
+### P2: performance, compatibility and experience
+
+#### Visual and device acceptance
+
+- [ ] Check Home, the recent-images bar, image TopBar and floating loading card on macOS 15/26, including Reduce Transparency.
+  Implementation and historical regressions are archived; window / navigation acceptance does not establish final material appearance.
+- [ ] Test long sessions with multiple windows, complex long GIFs and memory pressure.
+  Record correctness, memory trends and stalls, including ImageIO conversion and AppKit frame representations; retained-pixel budgets and explicit cache eviction do not bound process RSS.
+- [ ] Use high-zoom clarity and performance evidence to decide whether fixed proxies need higher-resolution recovery.
+  If tiling is justified, verify bounded caching, stale-generation rejection and measured benefit; slicing an already decoded full image does not resolve its peak memory.
+- [ ] Defer broader HDR support until it has its own scope.
+  HEIF gain maps, other floating-point containers and HDR display brightness are untested; current evidence covers the existing floating-point TIFF sample and SDR AppKit rendering.
+
+#### Tooling reliability
+
+- [ ] Resolve existing SwiftFormat findings in `ImageFileWatcher.swift`, `ImageDocument.swift`, `Coordinator.swift` and `AdaptiveToolbar.swift` separately from functional changes.
+- [ ] Track macOS 15 native asset compilation independently of runtime compatibility.
+  `CompileAssetCatalogVariant` failed in run `39416951796`; building on macOS 26 and executing on 15 is the supported workaround, not a toolchain fix.
+- [ ] Preserve diagnostics if the Xcode 27 / macOS 27 test-host startup hang recurs.
+  `Imaxe-20261021-223044.xcresult` executed no tests; its dyld file-open stall was stopped and a later targeted run passed.
+  Do not count a run with no executed tests as successful coverage.
+
+#### Routine release verification
+
+Automatic-update development is complete; retain these checks for later releases or recovery exercises.
+
+- [ ] On the next real release, build from version-local notes, verify source and downloads, confirm ZIP / checksum-only public assets, and exercise `release.published`, public-feed convergence, seven-build retention and withdrawal recomputation.
+  Verified automatic deployment evidence currently covers main push and gh-pages dispatch, not the next new release event.
+- [ ] Exercise interrupted uploads, missing assets and retries with identical artifacts in a draft or test repository.
+  Script tests do not replace a hosted recovery exercise; do not modify the current release for this task.
+
+### References retained with the deferred plan
+
+- [CGImageSourceCreateThumbnailAtIndex](<https://developer.apple.com/documentation/imageio/cgimagesourcecreatethumbnailatindex(_:_:_:)>)
+- [kCGImageSourceShouldCacheImmediately](https://developer.apple.com/documentation/imageio/kcgimagesourceshouldcacheimmediately)
+- [CATiledLayer](https://developer.apple.com/documentation/quartzcore/catiledlayer)
+
+
+## CI repairs and test execution optimization: 2026-10-22
+
+Accepted on source `6cb84116a4b065b1d857631289e798353442c905` (`perf(ci): prebuild test tools and await processes`), branch `develop`, manual [CI 39794872986](https://github.com/eureka-0/Imaxe/actions/runs/39794872986), attempt 1.
+The run completed successfully on 2026-10-22; the prebuild and required `macOS compatibility (unit + UI)` gate both passed.
+
+| Observed runner OS / Xcode | Execution mode | Hosted result |
+| --- | --- | --- |
+| macOS 15.7.9 / 26.3 (17C529) | Restored macOS 26-built products and verified tools | All seven test groups and coverage exports passed; UI 7/7 |
+| macOS 26.6.2 / 26.3 (17C529) | Native build once, then execution-only groups | All seven test groups and coverage exports passed; UI 7/7 |
+| macOS 27.0.1 / 27.0 (27A266a) | Native build once, then execution-only groups | All seven test groups and coverage exports passed; UI 7/7 |
+
+The seven groups are main units, release tooling, image performance smoke tests, Session And Navigation, strict-pool Release Lock, AppKit windows and UI.
+Coverage exports apply to the five instrumented groups; strict-pool Release Lock and UI use the existing no-coverage mode.
+All runners were arm64; the observed patch versions do not establish exact macOS 15.6 acceptance or native macOS 15 asset compilation.
+
+Hosted log observations from this run, in seconds:
+
+| Suite | macOS 15 | macOS 26 | macOS 27 |
+| --- | ---: | ---: | ---: |
+| Release Profiling | 0.198 | 0.432 | 0.419 |
+| Updates Pipeline | 2.136 | 4.016 | 2.192 |
+| Release Validation | 2.732 | 4.813 | 3.617 |
+| Test Tools | 2.992 | 5.256 | 2.996 |
+| Image Performance | 4.182 | 5.717 | 4.871 |
+| Session And Navigation | 1.313 | 1.316 | 1.363 |
+
+These are suite elapsed times after product preparation, including scheduling and fixture work; compilation moved to the build phase and was not eliminated.
+The earlier 39-43-second observations were individual cases in a different shared-host grouping, so the figures do not establish a controlled speedup ratio or a timeout guarantee.
+This single hosted run accepts the CI execution change; it does not measure visible Release first frame, steady memory or application performance.
+
+### Test execution cost
+
+[CI 39750187203](https://github.com/eureka-0/Imaxe/actions/runs/39750187203) passed the complete matrix and required gate at `2d4e769f4109b61563661d507b18a9ed61c166b4`.
+Before the test-tool optimization, its macOS 15 tool tests took roughly 39-43 seconds while the isolated Session suite took 1.27 seconds.
+
+- [x] Prepare appcast, release validation, release profiling and the minimal signed-app fixture executable once before testing.
+  Verify source hashes, Xcode / compiler / SDK identities and every binary digest before reuse; package the tools with macOS 15 test products.
+  Normalize the host-dependent target printed by Swift's version command; keep the explicit macOS 15.6 compiler target and verify the resulting Mach-O deployment target.
+  Relative source paths and a per-fixture working directory preserve the verifier's independent source Info.plist without changing its production CLI.
+- [x] Run release tooling and image performance smoke tests in separate CI hosts, retaining coverage, logs and the required gate.
+  Build test products once on each native runner, then execute all groups without rebuilding so coverage-mode changes do not replace their instrumentation.
+- [x] Replace blocking test subprocess reads with termination callbacks, file-backed output and cancellation that waits for the owned child to exit.
+  Include the test-runner cleanup fixture and preserve cleanup when release-fixture initialization fails.
+- [x] Complete local group / transport checks and retain their result bundles.
+  Main unit tests passed 87 definitions / 155 runs; tooling passed 11 / 11; image performance passed 4 / 4 with one skipped; Session And Navigation passed 24 / 24.
+  The total is 126 passed definitions / 194 passed runs, including five new regressions; the new regressions also passed with a strict cooperative pool.
+  Archive restoration, tool digests and arm64 / macOS 15.6 deployment targets were verified; coverage export passed after a strict no-coverage run using the same prebuilt products.
+- [x] Verify the optimization on fresh hosted runners in CI 39794872986 at `6cb84116a4b065b1d857631289e798353442c905`.
+  All seven execution groups, coverage exports, product / tool verification and the required gate passed on every matrix runner.
+  Native runners built products once; macOS 15 restored the macOS 26 / Xcode 26.3 products and verified the prepared tools before executing them.
+
+Implementation, validation commands and retained xcresults are documented in [test optimization evidence](agents/CI_TEST_OPTIMIZATION_2026-10-22.md).
+
+### Earlier CI repairs
+
+Follow-up [CI 39746108043](https://github.com/eureka-0/Imaxe/actions/runs/39746108043) tested `f187a15f6f0b77800017a5a6ca753688d464cda1`.
+The macOS 15 unit step reported 113 passed definitions, eight failed definitions and one skipped; all failures were Session And Navigation wait timeouts around 39 seconds.
+Release Lock, its strict-pool regression, window tests and UI tests passed on macOS 15; the macOS 26 / 27 jobs passed completely.
+The clustered timeouts are consistent with shared-host scheduling pressure; the old result does not contain a thread sample identifying the exact blocking operation.
+
+- [x] Move Session And Navigation into its own CI test host, separate from unrelated image fixtures and release-tool compilation.
+  Preserve every test, its current assertions and the 30-second wait deadline; retain a separate coverage log and xcresult.
+  Keep the same verified prebuilt execution mode on macOS 15 and require this step to pass with the rest of the matrix.
+- [x] Validate the new grouping on the hosted macOS 15 runner and the complete matrix in CI 39750187203.
+
+Local follow-up validation reused build-for-testing products: the main unit group passed 97 definitions with one skipped (165 passed parameterized runs), and the isolated Session And Navigation group passed all 24 definitions / runs in about 1.3 seconds.
+Together they preserve the previous 121 passed definitions / 189 passed runs; workflow YAML, shell syntax, ShellCheck and `git diff --check` passed.
+See [follow-up analysis and validation](agents/CI_FAILURE_FIX_39746108043_2026-10-22.md) for the downloaded evidence and remaining diagnostic uncertainty.
+
+[CI 39722137150](https://github.com/eureka-0/Imaxe/actions/runs/39722137150) failed on develop at `a362e5d92b6dfb7441bceb9299c04ac89e8f754c`.
+The macOS 26 prebuild passed, and AppKit window tests passed on all three systems.
+
+| Runner / Xcode | Unit tests | Window tests | UI tests |
+| --- | --- | --- | --- |
+| macOS 15 / 26.3 | Failed: two Release Lock test definitions, three failing runs | Passed: 17 | Failed: ambiguous Clear Menu lookup |
+| macOS 26 / 26.3 | Passed | Passed | Failed: the same lookup |
+| macOS 27 / 27.0 | Passed | Passed | Failed: the same lookup |
+
+- [x] Repair the Release Lock fixture's cooperative-executor dependency locally.
+  The original fixture stalled with `TEST_RUNNER_LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`; a process sample showed its sole cooperative worker blocked in the holder's pipe read.
+  Start subprocesses directly, capture timestamped shell traces in separate files, and suspend while waiting for readiness or exit.
+  Early exit and timeout errors retain PID, status, elapsed time, directory state and output; cleanup releases, terminates and reaps owned processes before deleting their fixture.
+  Keep the original 30-second readiness deadline and all lock contention, retry, exit-code 23 / 143 and lock-removal assertions.
+  New regressions cover early-exit diagnostics and timeout cleanup.
+  The original failure's exact scheduling sequence remains unproven; the repaired suite and strict-pool regression passed on all three systems in CI 39746108043.
+- [x] Restrict `testFileMenuClearRequiresConfirmationInImageWindow` to File → Open Recent and require one Clear Menu match.
+  Locate File by its English label under the test's English launch configuration and preserve confirmation, cancellation and displayed-image checks.
+- [x] Add a strict cooperative-pool Release Lock regression to every CI matrix job.
+  Preserve each runner's existing execution mode, including verified prebuilt products on macOS 15, and retain a separate log / xcresult.
+- [x] Rerun the full hosted matrix on the repaired source in CI 39750187203.
+  macOS 15 must keep using the verified prebuilt test products; all unit, window, UI and required-gate jobs must pass on the new source.
+  The grouping repair passed at `2d4e769f`; the later test-tool optimization passed CI 39794872986 at `6cb84116`.
+
+Local validation on macOS 27.0.1 / Xcode 27.1 / arm64: the CI unit-test scope passed 121 test definitions with one skipped (189 passed parameterized runs); strict-pool Release Lock passed 8 definitions / 14 runs; the affected UI test passed 1/1.
+SwiftFormat, SwiftLint, Xcode file diagnostics and `git diff --check` passed; workflow YAML and its runner-mode selection were checked locally.
+The CI repairs and the later test-tool optimization passed their recorded hosted verification.
+See [local repair evidence](agents/CI_FAILURE_FIX_2026-10-22.md) for commands, result bundles and the limits of the diagnosis.
 
 ## User acceptance: windows, navigation and installation
 
@@ -228,7 +426,7 @@ Extra screenshot-test code was withdrawn under the local-testing rule: small UI 
   actionlint 1.7.12 lacked the official `xcode-27` label; a temporary configuration allowed only that label, with other checks retained, and validated CI / Updates.
 - [x] PR #1's fifth matrix run exercised native file panels, UI automation and the test host, and made the workflow available on the default branch.
   Required-check and administrator-bypass behavior were recorded as above.
-  Manual dispatch was not part of that original acceptance; the later develop dispatch `39722137150` ran and failed, and is tracked in the active roadmap.
+  Manual dispatch was not part of that original acceptance; the later develop dispatch `39722137150` ran and failed, and its subsequent repair is recorded above.
 - [x] Replaced timing-dependent metadata-preload coverage with an explicit document-load gate for deterministic parallel session tests.
 - [x] Repeated image loads verify equivalent results without requiring `NSCache` to preserve document identity under memory pressure.
 - [x] Retained reload-equivalence tests and added explicit-cache-clear checks for metadata, dimensions and rendered pixels, without object-identity or eviction-timing assumptions.
