@@ -17,7 +17,28 @@ Completed work and its evidence are in [Progress history](progress-history.md).
 - Write tracked documents in English and documents under `docs/agents/` in Chinese.
   Keep generated diagnostics and raw measurements in ignored directories.
 
-## CI repair: hosted verification pending
+## Test execution cost: hosted verification pending
+
+[CI 39750187203](https://github.com/eureka-0/Imaxe/actions/runs/39750187203) passed the complete matrix and required gate at `2d4e769f4109b61563661d507b18a9ed61c166b4`.
+Its macOS 15 tool tests still took roughly 39-43 seconds while the isolated Session suite took 1.27 seconds.
+
+- [x] Prepare appcast, release validation, release profiling and the minimal signed-app fixture executable once before testing.
+  Verify source hashes, Xcode / compiler / SDK identities and every binary digest before reuse; package the tools with macOS 15 test products.
+  Normalize the host-dependent target printed by Swift's version command; keep the explicit macOS 15.6 compiler target and verify the resulting Mach-O deployment target.
+  Relative source paths and a per-fixture working directory preserve the verifier's independent source Info.plist without changing its production CLI.
+- [x] Run release tooling and image performance smoke tests in separate CI hosts, retaining coverage, logs and the required gate.
+  Build test products once on each native runner, then execute all groups without rebuilding so coverage-mode changes do not replace their instrumentation.
+- [x] Replace blocking test subprocess reads with termination callbacks, file-backed output and cancellation that waits for the owned child to exit.
+  Include the test-runner cleanup fixture and preserve cleanup when release-fixture initialization fails.
+- [x] Complete local group / transport checks and retain their result bundles.
+  Main unit tests passed 87 definitions / 155 runs; tooling passed 11 / 11; image performance passed 4 / 4 with one skipped; Session And Navigation passed 24 / 24.
+  The total is 126 passed definitions / 194 passed runs, including five new regressions; the new regressions also passed with a strict cooperative pool.
+  Archive restoration, tool digests and arm64 / macOS 15.6 deployment targets were verified; coverage export passed after a strict no-coverage run using the same prebuilt products.
+- [ ] Verify the optimization on fresh hosted runners; local warm timings do not establish a cloud speedup.
+
+Implementation, validation commands and retained xcresults are documented in [test optimization evidence](agents/CI_TEST_OPTIMIZATION_2026-10-22.md).
+
+## Previous CI repairs
 
 Follow-up [CI 39746108043](https://github.com/eureka-0/Imaxe/actions/runs/39746108043) tested `f187a15f6f0b77800017a5a6ca753688d464cda1`.
 The macOS 15 unit step reported 113 passed definitions, eight failed definitions and one skipped; all failures were Session And Navigation wait timeouts around 39 seconds.
@@ -27,7 +48,7 @@ The clustered timeouts indicate shared-host scheduling pressure; the old result 
 - [x] Move Session And Navigation into its own CI test host, separate from unrelated image fixtures and release-tool compilation.
   Preserve every test, its current assertions and the 30-second wait deadline; retain a separate coverage log and xcresult.
   Keep the same verified prebuilt execution mode on macOS 15 and require this step to pass with the rest of the matrix.
-- [ ] Validate the new grouping on the hosted macOS 15 runner and the complete matrix.
+- [x] Validate the new grouping on the hosted macOS 15 runner and the complete matrix in CI 39750187203.
 
 Local follow-up validation reused build-for-testing products: the main unit group passed 97 definitions with one skipped (165 passed parameterized runs), and the isolated Session And Navigation group passed all 24 definitions / runs in about 1.3 seconds.
 Together they preserve the previous 121 passed definitions / 189 passed runs; workflow YAML, shell syntax, ShellCheck and `git diff --check` passed.
@@ -53,13 +74,13 @@ The macOS 26 prebuild passed, and AppKit window tests passed on all three system
   Locate File by its English label under the test's English launch configuration and preserve confirmation, cancellation and displayed-image checks.
 - [x] Add a strict cooperative-pool Release Lock regression to every CI matrix job.
   Preserve each runner's existing execution mode, including verified prebuilt products on macOS 15, and retain a separate log / xcresult.
-- [ ] Rerun the full hosted matrix on the repaired source.
+- [x] Rerun the full hosted matrix on the repaired source in CI 39750187203.
   macOS 15 must keep using the verified prebuilt test products; all unit, window, UI and required-gate jobs must pass on the new source.
-  The first repair was committed and exercised in CI 39746108043; the follow-up grouping change still needs a new hosted run.
+  The grouping repair passed at `2d4e769f`; the newer test-tool optimization remains pending hosted verification.
 
 Local validation on macOS 27.0.1 / Xcode 27.1 / arm64: the CI unit-test scope passed 121 test definitions with one skipped (189 passed parameterized runs); strict-pool Release Lock passed 8 definitions / 14 runs; the affected UI test passed 1/1.
 SwiftFormat, SwiftLint, Xcode file diagnostics and `git diff --check` passed; workflow YAML and its runner-mode selection were checked locally.
-Full hosted verification remains ahead of new isolation assertions and further performance collection.
+The CI repairs passed hosted verification; the newer test-tool optimization remains pending above.
 See [local repair evidence](agents/CI_FAILURE_FIX_2026-10-22.md) for commands, result bundles and the limits of the diagnosis.
 
 ## P0: critical issues

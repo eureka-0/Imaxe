@@ -7,6 +7,19 @@ import Testing
 
 @MainActor
 enum TestSupport {
+  nonisolated static func preparedTool(_ name: String) throws -> URL {
+    let tool = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent().appending(path: "build/Tools/Tests/\(name)")
+    guard FileManager.default.isExecutableFile(atPath: tool.path) else {
+      throw NSError(
+        domain: "TestTools",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "Missing \(name); run just test --build-only"],
+      )
+    }
+    return tool
+  }
+
   static func sampleImageURL(_ fileName: String) -> URL {
     URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

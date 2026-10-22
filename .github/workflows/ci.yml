@@ -60,7 +60,7 @@ jobs:
 
       - name: Package test products
         # tar preserves executable modes, framework symlinks and bundle signatures.
-        run: tar -czf build/CI/macos15-test-products.tar.gz -C build/DerivedData/Tests/Build Products
+        run: tar -czf build/CI/macos15-test-products.tar.gz -C build DerivedData/Tests/Build/Products Tools/Tests
 
       - name: Upload build evidence and test products
         if: ${{ !cancelled() }}
@@ -168,24 +168,44 @@ jobs:
           test "$(cat "$evidence/test-products-source-root.txt")" = "$GITHUB_WORKSPACE"
           xcodebuild -version > build/CI/test-products-consumer-xcode.txt
           cmp "$evidence/test-products-xcode.txt" build/CI/test-products-consumer-xcode.txt
-          mkdir -p build/DerivedData/Tests/Build
-          tar -xzf "$evidence/macos15-test-products.tar.gz" -C build/DerivedData/Tests/Build
+          tar -xzf "$evidence/macos15-test-products.tar.gz" -C build
+          bash scripts/prepare-test-tools.sh --verify
+          cp build/Tools/Tests/inputs.txt build/CI/test-tools-inputs.txt
+          cp build/Tools/Tests/SHA256SUMS.txt build/CI/test-tools-SHA256SUMS.txt
           cp "$evidence"/test-products-*.txt build/CI/
           echo 'TEST_EXECUTION_ARGS=--test-without-building' >> "$GITHUB_ENV"
           echo 'macOS 15 executes full test products built on macOS 26 with Xcode 26.3; native asset compilation on 15 remains unverified.' >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Build native test products
+        id: native_products
+        if: ${{ matrix.runner != 'macos-15' }}
+        run: |
+          just test --build-only 2>&1 | tee build/CI/native-build-for-testing.log
+          cp build/Tools/Tests/inputs.txt build/CI/test-tools-inputs.txt
+          cp build/Tools/Tests/SHA256SUMS.txt build/CI/test-tools-SHA256SUMS.txt
+          echo 'TEST_EXECUTION_ARGS=--test-without-building' >> "$GITHUB_ENV"
+
       - name: Unit tests and coverage
-        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --skip-suite SessionAndNavigationTests --coverage-report 2>&1 | tee build/CI/unit-tests.log
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --skip-suite SessionAndNavigationTests --skip-suite ReleaseValidationTests --skip-suite ReleaseProfilingTests --skip-suite UpdatesPipelineTests --skip-suite TestToolsTests --skip-suite ImagePerformanceTests --coverage-report 2>&1 | tee build/CI/unit-tests.log
+
+      - name: Release tooling tests and coverage
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (steps.native_products.outcome == 'success' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ReleaseValidationTests --suite ReleaseProfilingTests --suite UpdatesPipelineTests --suite TestToolsTests --coverage-report 2>&1 | tee build/CI/tooling-tests.log
+
+      - name: Image performance smoke tests and coverage
+        # Keep decoding, drawing and process-memory observations in their own host.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (steps.native_products.outcome == 'success' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ImagePerformanceTests --coverage-report 2>&1 | tee build/CI/image-performance-tests.log
 
       - name: Session and navigation tests and coverage
         # Async commits, timers and file watchers need a responsive shared actor.
         # Run in a fresh host without unrelated image fixtures or tool compilation.
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (steps.native_products.outcome == 'success' || steps.restore_products.outcome == 'success') }}
         run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite SessionAndNavigationTests --coverage-report 2>&1 | tee build/CI/session-tests.log
 
       - name: Release lock cooperative-pool regression
         # A held subprocess must leave the cooperative executor free to release it.
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (steps.native_products.outcome == 'success' || steps.restore_products.outcome == 'success') }}
         env:
           TEST_RUNNER_LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
         run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ReleaseLockTests --no-coverage 2>&1 | tee build/CI/release-lock-tests.log
@@ -193,12 +213,12 @@ jobs:
       - name: AppKit window tests and coverage
         # Window animations share the main run loop. Keep pixel decoding and
         # fixture compilation out of this test host so animation states are observable.
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (steps.native_products.outcome == 'success' || steps.restore_products.outcome == 'success') }}
         run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ImageViewTests --coverage-report 2>&1 | tee build/CI/window-tests.log
 
       - name: UI tests
         # Still collect UI evidence when a unit assertion fails; do not hide failures.
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (steps.native_products.outcome == 'success' || steps.restore_products.outcome == 'success') }}
         run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --ui-only --no-coverage 2>&1 | tee build/CI/ui-tests.log
 
       - name: Collect test results

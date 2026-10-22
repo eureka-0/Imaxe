@@ -151,6 +151,11 @@ struct TestStorageTests {
       at: project.appending(path: "scripts/test.sh"),
       to: fixture.appending(path: "scripts/test.sh"),
     )
+    try "#!/bin/bash\nexit 0\n".write(
+      to: fixture.appending(path: "scripts/prepare-test-tools.sh"),
+      atomically: true,
+      encoding: .utf8,
+    )
     let testID = UUID().uuidString
     let tool = """
     #!/bin/bash
@@ -166,25 +171,19 @@ struct TestStorageTests {
       try source.write(to: url, atomically: true, encoding: .utf8)
       try manager.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
     }
-    let status = try await Task.detached {
-      let process = Process()
-      process.executableURL = URL(fileURLWithPath: "/bin/bash")
-      process.arguments = [
+    var environment = ProcessInfo.processInfo.environment
+    environment["PATH"] = fixture.appending(path: "tools").path + ":/usr/bin:/bin:/usr/sbin:/sbin"
+    let result = try await TestProcess.run(
+      "/bin/bash",
+      [
         fixture.appending(path: "scripts/test.sh").path,
         "--skip-ui",
         "--no-coverage",
-      ]
-      process.currentDirectoryURL = fixture
-      var environment = ProcessInfo.processInfo.environment
-      environment["PATH"] = fixture.appending(path: "tools").path + ":/usr/bin:/bin:/usr/sbin:/sbin"
-      process.environment = environment
-      process.standardOutput = FileHandle.nullDevice
-      process.standardError = FileHandle.nullDevice
-      try process.run()
-      process.waitUntilExit()
-      return process.terminationStatus
-    }.value
-    #expect(status == 23)
+      ],
+      environment: environment,
+      directory: fixture,
+    )
+    #expect(result.status == 23)
     let runID = try String(contentsOf: fixture.appending(path: "interrupted-run"), encoding: .utf8)
       .trimmingCharacters(in: .whitespacesAndNewlines)
     let interrupted = try #require(TestStorage.Context(runID: runID, testID: testID))

@@ -192,6 +192,35 @@ cleanup_result_bundles() {
 }
 trap cleanup_result_bundles EXIT
 
+prepare_tools=false
+if [[ ${build_action} == build-for-testing ]]; then
+  prepare_tools=true
+elif [[ ${test_mode} != ui ]]; then
+  for tool_suite in ReleaseValidationTests ReleaseProfilingTests UpdatesPipelineTests; do
+    selected=false
+    if ((suite_count == 0)); then
+      selected=true
+    else
+      for suite in "${suite_filters[@]}"; do
+        [[ ${suite} != "${tool_suite}" ]] || selected=true
+      done
+    fi
+    if ((skipped_suite_count > 0)); then
+      for suite in "${skipped_suites[@]}"; do
+        [[ ${suite} != "${tool_suite}" ]] || selected=false
+      done
+    fi
+    [[ ${selected} != true ]] || prepare_tools=true
+  done
+fi
+if [[ ${prepare_tools} == true ]]; then
+  if [[ ${build_action} == test-without-building ]]; then
+    bash "$(dirname "$0")/prepare-test-tools.sh" --verify
+  else
+    bash "$(dirname "$0")/prepare-test-tools.sh"
+  fi
+fi
+
 xcodebuild_arguments=(
   "${build_action}"
   -destination 'platform=macOS,arch=arm64'

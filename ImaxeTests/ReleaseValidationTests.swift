@@ -10,7 +10,7 @@ import Testing
 struct ReleaseValidationTests {
   @Test func `release verifier rejects changed bytes signatures metadata and provenance`(
   ) async throws {
-    let fixture = try await Task.detached { try ReleaseFixture() }.value
+    let fixture = try await ReleaseFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let valid = try await fixture.verify()
     #expect(valid.status == 0, "\(valid.output)")
@@ -75,9 +75,7 @@ struct ReleaseValidationTests {
   }
 
   @Test func `ad hoc hardened release rejects missing library validation exception`() async throws {
-    let fixture = try await Task.detached {
-      try ReleaseFixture(disableLibraryValidation: false)
-    }.value
+    let fixture = try await ReleaseFixture(disableLibraryValidation: false)
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let result = try await fixture.verify()
     #expect(result.status != 0 && result.output.contains("library validation exception"))
@@ -85,7 +83,7 @@ struct ReleaseValidationTests {
 
   @Test func `release verifies using history XML without JSON or Markdown attachments`(
   ) async throws {
-    let fixture = try await Task.detached { try ReleaseFixture() }.value
+    let fixture = try await ReleaseFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     try FileManager.default.removeItem(at: fixture.artifacts.appending(path: "Imaxe-1.2.3.md"))
     #expect(!FileManager.default
@@ -101,13 +99,19 @@ private nonisolated struct ReleaseFixture: Sendable {
   let verifier: URL
   let commit = String(repeating: "a", count: 40)
 
-  init(disableLibraryValidation: Bool = true) throws {
+  init(disableLibraryValidation: Bool = true) async throws {
     root = FileManager.default.temporaryDirectory
       .appending(path: "imaxe-release-validation-\(UUID().uuidString)")
     artifacts = root.appending(path: "artifacts")
-    verifier = root.appending(path: "validate-release")
+    verifier = try TestSupport.preparedTool("validate-release")
     let manager = FileManager.default
-    for name in ["artifacts", "scripts", "Imaxe", "Imaxe.app/Contents/MacOS"] {
+    var completed = false
+    defer {
+      if !completed {
+        try? manager.removeItem(at: root)
+      }
+    }
+    for name in ["artifacts", "Imaxe", "Imaxe.app/Contents/MacOS"] {
       try manager.createDirectory(at: root.appending(path: name), withIntermediateDirectories: true)
     }
     let key = Curve25519.Signing.PrivateKey()
@@ -127,29 +131,13 @@ private nonisolated struct ReleaseFixture: Sendable {
     let plist = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
     try plist.write(to: root.appending(path: "Imaxe/Info.plist"))
     try plist.write(to: root.appending(path: "Imaxe.app/Contents/Info.plist"))
-    let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-      .deletingLastPathComponent()
     try manager.copyItem(
-      at: project.appending(path: "scripts/validate-release.swift"),
-      to: root.appending(path: "scripts/validate-release.swift"),
+      at: TestSupport.preparedTool("fixture-app"),
+      to: root.appending(path: "Imaxe.app/Contents/MacOS/Imaxe"),
     )
-    try "int main(void) { return 0; }".write(
-      to: root.appending(path: "main.c"),
-      atomically: true,
-      encoding: .utf8,
-    )
-    let compileArguments = [
-      "clang",
-      "-target",
-      "arm64-apple-macos15.6",
-      root.appending(path: "main.c").path,
-      "-o",
-      root.appending(path: "Imaxe.app/Contents/MacOS/Imaxe").path,
-    ]
-    try Self.succeed("/usr/bin/xcrun", compileArguments)
-    try signApplication(disableLibraryValidation: disableLibraryValidation)
+    try await signApplication(disableLibraryValidation: disableLibraryValidation)
     let zip = artifacts.appending(path: "Imaxe-1.2.3.zip")
-    try Self.succeed(
+    try await Self.succeed(
       "/usr/bin/ditto",
       ["-c", "-k", "--keepParent", root.appending(path: "Imaxe.app").path, zip.path],
     )
@@ -181,13 +169,10 @@ private nonisolated struct ReleaseFixture: Sendable {
       encoding: .utf8,
     )
     try checksums()
-    try Self.succeed(
-      "/usr/bin/xcrun",
-      ["swiftc", root.appending(path: "scripts/validate-release.swift").path, "-o", verifier.path],
-    )
+    completed = true
   }
 
-  private func signApplication(disableLibraryValidation: Bool) throws {
+  private func signApplication(disableLibraryValidation: Bool) async throws {
     var arguments = ["--sign", "-", "--options", "runtime"]
     if disableLibraryValidation {
       let entitlements = ["com.apple.security.cs.disable-library-validation": true]
@@ -201,7 +186,7 @@ private nonisolated struct ReleaseFixture: Sendable {
       arguments += ["--entitlements", entitlementURL.path]
     }
     arguments.append(root.appending(path: "Imaxe.app").path)
-    try Self.succeed("/usr/bin/codesign", arguments)
+    try await Self.succeed("/usr/bin/codesign", arguments)
   }
 
   func checksums() throws {
@@ -222,13 +207,15 @@ private nonisolated struct ReleaseFixture: Sendable {
 
   func verify(commit: String? = nil) async throws -> (status: Int32, output: String) {
     let expectedCommit = commit ?? self.commit
-    return try await Task.detached {
-      try Self.run(verifier.path, [artifacts.path, expectedCommit])
-    }.value
+    return try await TestProcess.run(
+      verifier.path,
+      [artifacts.path, expectedCommit],
+      directory: root,
+    )
   }
 
-  static func succeed(_ executable: String, _ arguments: [String]) throws {
-    let result = try run(executable, arguments)
+  static func succeed(_ executable: String, _ arguments: [String]) async throws {
+    let result = try await TestProcess.run(executable, arguments)
     if result.status != 0 {
       throw NSError(
         domain: "ReleaseFixture",
@@ -236,24 +223,5 @@ private nonisolated struct ReleaseFixture: Sendable {
         userInfo: [NSLocalizedDescriptionKey: result.output],
       )
     }
-  }
-
-  static func run(
-    _ executable: String,
-    _ arguments: [String],
-  ) throws -> (status: Int32, output: String) {
-    let process = Process()
-    let pipe = Pipe()
-    process.executableURL = URL(fileURLWithPath: executable)
-    process.arguments = arguments
-    process.standardOutput = pipe
-    process.standardError = pipe
-    try process.run()
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    return (
-      process.terminationStatus,
-      String(data: data, encoding: .utf8) ?? "Non-UTF8 process output",
-    )
   }
 }

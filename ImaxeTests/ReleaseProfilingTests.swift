@@ -8,7 +8,7 @@ import Testing
 @Suite("Release Profiling")
 struct ReleaseProfilingTests {
   @Test func `sampler reads real process memory and validates measurement input`() async throws {
-    let result = try await Task.detached { try Self.invoke(["self-test"]) }.value
+    let result = try await Self.invoke(["self-test"])
     #expect(result.status == 0, "\(result.output)")
     #expect(result.output.contains("Release profiling self-check passed"))
   }
@@ -17,15 +17,13 @@ struct ReleaseProfilingTests {
     let directory = try TestSupport.temporaryDirectory(prefix: "imaxe-profile-source")
     defer { try? FileManager.default.removeItem(at: directory) }
     let output = directory.appending(path: "output")
-    let result = try await Task.detached {
-      try Self.invoke([
-        "prepare",
-        directory.path,
-        directory.path,
-        output.path,
-        String(repeating: "a", count: 40),
-      ])
-    }.value
+    let result = try await Self.invoke([
+      "prepare",
+      directory.path,
+      directory.path,
+      output.path,
+      String(repeating: "a", count: 40),
+    ])
     #expect(result.status == 1)
     #expect(result.output.contains("Release/source mismatch"))
     #expect(!FileManager.default.fileExists(atPath: output.path))
@@ -45,9 +43,7 @@ struct ReleaseProfilingTests {
       output.path,
       String(repeating: "a", count: 40),
     ]
-    let result = try await Task.detached {
-      try Self.invoke(arguments)
-    }.value
+    let result = try await Self.invoke(arguments)
     #expect(result.status == 1)
     #expect(result.output.contains("Refusing to overwrite"))
     #expect(try Data(contentsOf: sentinel) == Data([42]))
@@ -81,8 +77,7 @@ struct ReleaseProfilingTests {
       try JSONSerialization.data(withJSONObject: result)
         .write(to: run.appending(path: "result.json"))
     }
-    let response = try await Task.detached { try Self.invoke(["summarize", directory.path, tool]) }
-      .value
+    let response = try await Self.invoke(["summarize", directory.path, tool])
     #expect(response.status == 0, "\(response.output)")
     let data = try Data(contentsOf: directory.appending(path: "summary-aaaaaaaaaaaa.json"))
     let summary = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
@@ -94,23 +89,9 @@ struct ReleaseProfilingTests {
     #expect(rows.first?["first_visible_frame_ms"] is NSNull)
   }
 
-  private nonisolated static func invoke(_ arguments: [String]) throws
+  private static func invoke(_ arguments: [String]) async throws
     -> (status: Int32, output: String)
   {
-    let project = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let process = Process()
-    let pipe = Pipe()
-    process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = [project.appending(path: "scripts/profile-release.sh").path] + arguments
-    process.standardOutput = pipe
-    process.standardError = pipe
-    try process.run()
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    return (
-      process.terminationStatus,
-      String(data: data, encoding: .utf8) ?? "Non-UTF8 process output",
-    )
+    try await TestProcess.run(TestSupport.preparedTool("profile-release").path, arguments)
   }
 }
