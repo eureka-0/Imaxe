@@ -19,6 +19,20 @@ Completed work and its evidence are in [Progress history](progress-history.md).
 
 ## CI repair: hosted verification pending
 
+Follow-up [CI 39746108043](https://github.com/eureka-0/Imaxe/actions/runs/39746108043) tested `f187a15f6f0b77800017a5a6ca753688d464cda1`.
+The macOS 15 unit step reported 113 passed definitions, eight failed definitions and one skipped; all failures were Session And Navigation wait timeouts around 39 seconds.
+Release Lock, its strict-pool regression, window tests and UI tests passed on macOS 15; the macOS 26 / 27 jobs passed completely.
+The clustered timeouts indicate shared-host scheduling pressure; the old result does not contain a thread sample identifying the exact blocking operation.
+
+- [x] Move Session And Navigation into its own CI test host, separate from unrelated image fixtures and release-tool compilation.
+  Preserve every test, its current assertions and the 30-second wait deadline; retain a separate coverage log and xcresult.
+  Keep the same verified prebuilt execution mode on macOS 15 and require this step to pass with the rest of the matrix.
+- [ ] Validate the new grouping on the hosted macOS 15 runner and the complete matrix.
+
+Local follow-up validation reused build-for-testing products: the main unit group passed 97 definitions with one skipped (165 passed parameterized runs), and the isolated Session And Navigation group passed all 24 definitions / runs in about 1.3 seconds.
+Together they preserve the previous 121 passed definitions / 189 passed runs; workflow YAML, shell syntax, ShellCheck and `git diff --check` passed.
+See [follow-up analysis and validation](agents/CI_FAILURE_FIX_39746108043_2026-10-22.md) for the downloaded evidence and remaining diagnostic uncertainty.
+
 [CI 39722137150](https://github.com/eureka-0/Imaxe/actions/runs/39722137150) failed on develop at `a362e5d92b6dfb7441bceb9299c04ac89e8f754c`.
 The macOS 26 prebuild passed, and AppKit window tests passed on all three systems.
 
@@ -34,14 +48,14 @@ The macOS 26 prebuild passed, and AppKit window tests passed on all three system
   Early exit and timeout errors retain PID, status, elapsed time, directory state and output; cleanup releases, terminates and reaps owned processes before deleting their fixture.
   Keep the original 30-second readiness deadline and all lock contention, retry, exit-code 23 / 143 and lock-removal assertions.
   New regressions cover early-exit diagnostics and timeout cleanup.
-  The old macOS 15 run did not retain a child timeline, so its exact scheduling sequence remains unproven until hosted validation.
+  The original failure's exact scheduling sequence remains unproven; the repaired suite and strict-pool regression passed on all three systems in CI 39746108043.
 - [x] Restrict `testFileMenuClearRequiresConfirmationInImageWindow` to File → Open Recent and require one Clear Menu match.
   Locate File by its English label under the test's English launch configuration and preserve confirmation, cancellation and displayed-image checks.
 - [x] Add a strict cooperative-pool Release Lock regression to every CI matrix job.
   Preserve each runner's existing execution mode, including verified prebuilt products on macOS 15, and retain a separate log / xcresult.
 - [ ] Rerun the full hosted matrix on the repaired source.
   macOS 15 must keep using the verified prebuilt test products; all unit, window, UI and required-gate jobs must pass on the new source.
-  Local changes have not been committed or pushed, and no new hosted run has been dispatched.
+  The first repair was committed and exercised in CI 39746108043; the follow-up grouping change still needs a new hosted run.
 
 Local validation on macOS 27.0.1 / Xcode 27.1 / arm64: the CI unit-test scope passed 121 test definitions with one skipped (189 passed parameterized runs); strict-pool Release Lock passed 8 definitions / 14 runs; the affected UI test passed 1/1.
 SwiftFormat, SwiftLint, Xcode file diagnostics and `git diff --check` passed; workflow YAML and its runner-mode selection were checked locally.

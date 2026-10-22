@@ -175,7 +175,13 @@ jobs:
           echo 'macOS 15 executes full test products built on macOS 26 with Xcode 26.3; native asset compilation on 15 remains unverified.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Unit tests and coverage
-        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee build/CI/unit-tests.log
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --skip-suite SessionAndNavigationTests --coverage-report 2>&1 | tee build/CI/unit-tests.log
+
+      - name: Session and navigation tests and coverage
+        # Async commits, timers and file watchers need a responsive shared actor.
+        # Run in a fresh host without unrelated image fixtures or tool compilation.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite SessionAndNavigationTests --coverage-report 2>&1 | tee build/CI/session-tests.log
 
       - name: Release lock cooperative-pool regression
         # A held subprocess must leave the cooperative executor free to release it.
