@@ -1,275 +1,128 @@
-# Imaxe Progress
+# Imaxe progress
 
-检查更新功能已于 2026-10-21 完成，用户确认本机 A `1.1.0 (12)` → B `1.1.0 (13)` 的更新发现与安装可用。
-当前正式版为 `1.1.0`；发布流程调整已通过 PR #5、#6 合入 main，后续工作转向图片浏览体验、性能和分发验收。
+Updated: 2026-10-22.
+Release baseline: Imaxe 1.1.0, internal build 13.
+Automatic updating, installation and migration have been accepted within the recorded scope.
+Completed work and its evidence are in [Progress history](progress-history.md).
 
-## 当前约定与验收边界
+## Working agreements
 
-- 保留 macOS 15.6+、Apple Silicon / arm64、ad-hoc 分发和现有 Sparkle 签名密钥；不申请开发者账号，不配置 Developer ID 或公证。
-- 从 main 创建具体工作分支，经 PR 和必需的 `macOS compatibility (unit + UI)` 检查后合并；较小功能 PR 默认 squash merge。
-- 云端系统标签只证明对应 runner 的运行结果，尚无恰好 macOS 15.6 的独立实测证据；Intel 不在当前分发范围。
-- 正确性与性能分别验收；测试宿主、AX 可见墙钟计时和离屏首绘不能代替正式应用的实际首帧、主线程停顿或稳定 RSS。
-- 真实慢卷维持低优先级，未配置 `IMAXE_SLOW_VOLUME_IMAGE` 时记为未验收；本轮不下载新图片。
-- 已完成条目及对应的提交、CI 和本机证据位于文末 Completed；旧签名包和旧发布架构只作历史记录。
+- Support macOS 15.6+ on Apple Silicon / arm64 with ad-hoc signing and the existing Sparkle key; Developer ID and notarization remain outside the current scope.
+- Use specific feature branches and PRs targeting main, with `macOS compatibility (unit + UI)` required before merging; small feature PRs normally use squash merge.
+- CI runs on main-targeted PRs or manual dispatch, without push triggers.
+  Manual dispatch can select a remote branch before it is merged; local changes must be committed and pushed to enter that run.
+- Treat correctness and performance as separate acceptance tracks.
+  Debug tests, AX visibility, launch-call wall time and offscreen drawing do not establish visible Release first frame, main-thread stalls or steady memory.
+- Runner labels describe the tested image, not an exact macOS 15.6 installation; Intel is outside the distribution scope.
+- Keep real slow-volume testing at low priority.
+  An unset `IMAXE_SLOW_VOLUME_IMAGE` is pending acceptance, and an image downloaded to the internal SSD is not a slow-volume substitute.
+- Write tracked documents in English and documents under `docs/agents/` in Chinese.
+  Keep generated diagnostics and raw measurements in ignored directories.
 
-## 下一阶段工作顺序
+## Next session: restore CI first
 
-| 顺序 | 优先级 | 任务 | 完成条件 |
+[CI 39722137150](https://github.com/eureka-0/Imaxe/actions/runs/39722137150) failed on develop at `a362e5d92b6dfb7441bceb9299c04ac89e8f754c`.
+The macOS 26 prebuild passed, and AppKit window tests passed on all three systems.
+
+| Runner / Xcode | Unit tests | Window tests | UI tests |
 | --- | --- | --- | --- |
-| 1 | P1 | 复核测试隔离的 UI 集成与启动窗口行为 | 存储隔离已通过单元验证；后续在云端验收 UI 启动链路，明确空启动、恢复窗口及 Finder 打开图片的预期和证据 |
-| 2 | P1 | 建立正式 Release 包性能基线 | 同一产物、样本和环境下记录可见首帧、主线程停顿、稳定/峰值内存，定位瓶颈后确定优化目标 |
-| 3 | P2 | 补充 Home 最近记录操作的现场验收 | 已有确认和保守失效清理的回归证据；补充 macOS 15/26 视觉及真实离线卷、NAS 场景 |
+| macOS 15 / 26.3 | Failed: two Release Lock test definitions, three failing runs | Passed: 17 | Failed: ambiguous Clear Menu lookup |
+| macOS 26 / 26.3 | Passed | Passed | Failed: the same lookup |
+| macOS 27 / 27.0 | Passed | Passed | Failed: the same lookup |
 
-下一步补齐 P1-1 的专用 UI 集成断言，并完成 P1-2 首帧录制的时间对齐，再扩展缩放与快速切换采集。
-P1-3 已于 2026-10-21 由用户确认完成，记录移至文末 Completed。
-性能优化按测量结果选择具体热点，优化前后使用同一组输入比较。
+- [ ] Diagnose and fix the Release Lock fixture readiness failure on macOS 15.
+  Both arguments of `build and publish cannot enter an active release or remove its lock` and `terminated release frees its lock after the active tool exits` exceeded the 30-second wait for readiness.
+  The lock behavior assertions had not been reached; retain child exit status and output on timeout, then determine whether the fixture exited early, stalled or was delayed by parallel tool startup.
+  Do not treat concurrent compiler load as a confirmed cause or solve this only by increasing the timeout.
+- [ ] Restrict `testFileMenuClearRequiresConfirmationInImageWindow` to the application's File → Open Recent submenu.
+  `app.menuItems["Clear Menu"]` also matches Apple → Recent Items → Clear Menu on all three runners.
+  Require a unique match within the intended submenu and preserve confirmation / cancellation checks.
+- [ ] Rerun the affected checks and the full hosted matrix after the fixes.
+  macOS 15 must keep using the verified prebuilt test products; all unit, window, UI and required-gate jobs must pass on the new source.
+  The macOS 15 xcresult contains 117 passed test definitions, two failed definitions and one skipped slow-volume test; its device-level parameterized totals contain three failing runs.
+  The complete UI result is six passed and one failed; the final four-test restart summary does not override the earlier failure.
 
-## P0 — Critical Issues
+These CI failures are the first work for the next session, ahead of new isolation assertions and further performance collection.
+This analysis did not change application code, tests or workflows.
 
-当前清单没有已确认且未处理的 P0 阻断项。
+## P0: critical issues
 
-## P1 — Stability and Core Experience
+No confirmed unresolved product P0 blocker is recorded.
 
-### P1-1 测试数据隔离与启动行为
+## P1: stability and core experience
 
-- [ ] 在云端 CI 验证 UI runner → 主应用的完整隔离链路，确认每个用例使用独立目录与偏好，并在退出后清理本次运行的数据。
-  UI 启动器已传入运行与用例标识；本轮按小范围改动约定未运行 UI 测试，因此不把单元测试结果扩展为 UI 集成验收。
-  图片样本继续直接读取 `images/`，主应用负责创建测试存储，runner 不直接写共享临时目录。
-  先补充两个上下文的偏好 / 最近记录互不影响、一次性 CI 用户的日常存储哨兵及退出回收检查，再通过 PR 运行现有三系统矩阵；单纯重跑原有 UI 用例不能补齐这些证据。
-- [ ] 既有 Images 导航验证中，PNG → SVG 后一次左箭头未回到 PNG；先保留为 UI 焦点/自动化与 SVG 场景待定位，不能据此归因为渲染回归。相邻 JPEG/JPG 导航单独验收。
-  使用只含两个固定样本的目录，分别确认排序、按键焦点和目标实际显示；至少重复三轮，另测文本框编辑时箭头移动光标、退出编辑后恢复图片导航。
-- [ ] 复核空启动、恢复已有窗口、无窗口时再次激活应用，以及 Finder 打开图片的窗口行为，明确各场景应显示 Home 还是图片窗口。
-  每种场景至少重复三轮独立启动，验证预期窗口和画布，而不只检查进程、菜单或手动打开 New 窗口。
-  当前 Home / Image 均禁用窗口恢复；空启动和退出再启动应显示 Home，Finder 打开应显示目标图片，关闭全部窗口后通过 Dock 激活应重新显示 Home。
-  启动专用用例不得使用现有 Command-N 兜底；失败时同时保留截图、AX 树、CGWindow、PID 和动作时间，区分实际无窗口与自动化不可见。
-  既有 `Imaxe-20261020-202447.xcresult` 中曾出现进程前台但无窗口 AX 元素的情况；先区分实际行为、窗口恢复和自动化可见性，再决定是否修复。
+### P1-1: UI test isolation
 
-### P1-2 正式包性能基线
+Startup, window reactivation and PNG → SVG navigation were accepted by the user on 2026-10-22 and are archived.
+After restoring CI:
 
-2026-10-21 已完成原始 B13 的产物 / 环境清单、七格式各 3 次无录制内存预采样、JPEG 录像和有效的 Time Profiler 附加。
-工具与阶段证据移至 Completed；精确首帧、完整交互场景和瓶颈分析尚未完成，P1-2 继续保留待验收。
-本轮按用户选择使用当前账户，接受新增近期记录并沿用现有设置；没有清空缓存、偏好或数据库，也没有重建或改签发布包。
+- [ ] Add UI integration checks proving that separate test launches use separate preferences and recent records, and that cleanup affects only the current run.
+  Change settings and open an image in test A, then launch B with a different test identifier and verify its independent state.
+  Check production-storage sentinels only in a disposable CI account; preserve another run's data during cleanup.
+  Storage-layer unit tests already pass; the current seven UI tests do not contain these dedicated integration assertions.
+  A missing assertion is an evidence gap, not a confirmed isolation defect.
+- [ ] Run those assertions in hosted CI and retain source SHA, environment, logs and xcresult.
+  The main app creates test storage, fixtures are read directly from `images/`, and the UI runner must not assume it can create shared temporary directories.
 
-- [ ] 完成首帧校准：JPEG 实际窗口内容已录到，但新图片窗口绑定晚于输入约 296 ms，当前 `first_visible_frame_ms` 保持 null。
-  先解决打开前后的目标窗口覆盖及输入 / 帧时间对齐，再比较有无录制的开销，不将绑定延迟当成图片显示耗时。
-  首帧以窗口录制中首次出现目标图像的帧为准，报告帧间隔及时间对齐误差；AX 可见、进程启动和 draw 回调分别记录，不能替代可见首帧。
-- [ ] 扩展基础场景：覆盖现有 JPEG、PNG、TIFF、HEIF、WebP、GIF、SVG，进程重启后首次打开每格式 10 次，100% / 4× 缩放与平移、5 轮各 30 次快速切换，以及短 GIF 播放。
-  现有 21 次只覆盖新进程先进入 Home、再打开首张图片；不代表 Finder 带文件冷启动，也未达到每格式 10 次的完整采样计划。
-  固定窗口、顺序、输入间隔及缓存条件；重启进程不等同于清空磁盘缓存。
-  我负责自动化、逐次数据和异常整理；用户确认实际方向、透明边缘、色彩及交互中是否出现肉眼可见异常。
-- [ ] 分开分析无分析器基线与 Instruments 诊断：前者补齐可见首帧并验证 RSS / physical footprint 的稳定区间；后者定位主线程忙碌或阻塞、解码、首绘、切换和 GIF 临时内存。
-  已导出 Time Profiler 的 421 条 CPU 样本，但尚未与输入 / 显示阶段对齐，且该模板未记录等待线程，不能据此推导主线程停顿。
-  继续补录 System Trace / Allocations 并分析具体时间区间，不通过改签或修改系统安全设置绕过限制。
-- [ ] 输出正确性表、性能表、原始数据与可重跑命令，并选定一个有证据的优化点及验收阈值。
-  首次打开保留逐次数据、中位数和范围；快速切换按实际显示、取消和失败分别统计，样本足够时报告 p95。
-  采样峰值注明频率，不宣称捕获所有瞬时峰值；无法获取的指标保留未验收，不以 Debug、离屏或 CI 数据补齐。
-  当前每格式仅 3 次，输入像素数和 Home 近期缩略图状态也不同；不按格式排名，不把 2–12 秒观测区间直接称为稳定内存。
-  多窗口、长 GIF、内存压力与真实慢卷仍为 P2，不阻塞本轮基础基线。
+### P1-2: Release performance baseline
 
-## P2 — Performance, Compatibility, and Experience
+The original B13 ZIP, environment manifest, seven formats × three untraced opens, JPEG recording and Time Profiler attachment are archived as preliminary evidence.
+Use the current account as authorized, retain existing preferences / caches, and allow test images to enter recent records.
+Keep different observer binaries, recordings and traces in separate statistical groups.
 
-### Home and Recent Images
+- [ ] Calibrate visible first-frame capture across the Home-to-image window transition and align input, video and frame clocks.
+  The recorded JPEG window was rebound about 296 ms after input, so `first_visible_frame_ms` remains null; binding delay is not image display latency.
+  Measure recording overhead against unrecorded runs.
+- [ ] Complete the basic scenario matrix: JPEG, PNG, TIFF, HEIF, WebP, GIF and SVG, ten first opens per format, 100% / 4× zoom and pan, five rounds of 30 rapid switches, and fixed short-GIF playback.
+  The existing 21 observations cover a fresh process entering Home for one second before its first file event; Finder launch with a document and disk-cold caching are separate conditions.
+  Fix window size, ordering, input intervals and cache conditions; verify final image, orientation, alpha edges, color and interaction.
+- [ ] Analyze first frame, main-thread activity and memory separately.
+  The existing Time Profiler export has 421 CPU samples but no stage-aligned conclusion or waiting-thread coverage; add System Trace / Allocations evidence without resigning B13 or weakening system security.
+  Report RSS and physical footprint separately, with actual sampling intervals; the current 2–12-second observation window is not proof of steady state.
+- [ ] Publish correctness and performance tables, raw-data locations, rerun commands and one evidence-backed optimization target with an acceptance threshold.
+  Keep individual observations, medians and ranges; distinguish displayed, cancelled and failed switches before reporting p95.
+  Three runs per differently sized input do not establish format rankings, memory limits or optimization gains.
 
-- [x] 2026-10-21：修复失效清理误删扫描期间重新打开的记录；扫描前保存记录 ID、路径和 `lastOpenedAt`，应用结果时跳过已变化的记录。确定性回归先复现误删，修复后验证重新打开的记录及缩略图保留、真正缺失的记录正常删除；`rtk proxy just test --skip-ui --suite RecentImagesTests --no-coverage` 的 `Imaxe-20261021-144613.xcresult` 共 10 项全部通过，未运行 UI 测试。
+## P2: performance, compatibility and experience
 
-- 2026-10-21 最终本机 Debug 验证：`rtk just test --no-coverage` 的 `Imaxe-20261021-122914.xcresult` 共 132 项，131 通过、0 失败、1 项真实慢卷样本跳过；7 项 UI 用例全部通过。最终 Xcode MCP 构建、SwiftLint、ShellCheck 与格式占位符校验通过；macOS 15/26 的现场视觉验收仍未执行。
+### Visual and device acceptance
 
-- [x] 2026-10-21：修复旧清理结果弹窗偶尔在后续清空操作中重新出现；“好”按钮显式清除提示状态，`Imaxe-20261021-122751.xcresult` 的完整清理、取消与确认 UI 流程通过。
+- [ ] Check Home, the recent-images bar, image TopBar and floating loading card on macOS 15/26, including Reduce Transparency.
+  Implementation and historical regressions are archived; window / navigation acceptance does not establish final material appearance.
+- [ ] Test long sessions with multiple windows, complex long GIFs and memory pressure.
+  Record correctness, memory trends and stalls, including ImageIO conversion and AppKit frame representations; retained-pixel budgets and explicit cache eviction do not bound process RSS.
+- [ ] Use high-zoom clarity and performance evidence to decide whether fixed proxies need higher-resolution recovery.
+  If tiling is justified, verify bounded caching, stale-generation rejection and measured benefit; slicing an already decoded full image does not resolve its peak memory.
+- [ ] Validate reads, first display and disconnect / reconnect on a real external disk or NAS.
+  Keep this low priority; do not substitute internal-SSD fixtures or a scan gate for a slow mounted volume.
+- [ ] Defer broader HDR support until it has its own scope.
+  HEIF gain maps, other floating-point containers and HDR display brightness are untested; current evidence covers the existing floating-point TIFF sample and SDR AppKit rendering.
 
-- [x] 2026-10-21：`removeMissingFiles` 改为后台保守判断，仅移除可确认缺失的本地文件记录；离线卷、网络、符号链接和权限不足状态保留，9 项 Recent Images 回归通过。
-- [x] 2026-10-21：简体中文从 14 条扩展到当前目录全部 183 条，补齐信息面板与自定义错误的运行时本地化，格式占位符检查通过；修正设置中 100% 被格式化为 10,000% 的问题，中文首页、确认框与设置 UI 用例通过。
+### Tooling reliability
 
-- [x] 为首页 Clear Recent Images 与文件菜单 Clear Menu 增加确认，明确操作会清空全部最近记录，并提示范围不受搜索筛选影响。
-  2026-10-21：`Imaxe-20261021-121932.xcresult` 的完整清理 UI 流程通过，覆盖空列表、清理反馈、搜索筛选、取消、确认与原图保留；图片窗口菜单确认用例也已通过。
-- [x] 接入“清理失效图片”，按钮位于清空之前，使用 `paintbrush`；后台检查后反馈移除数量与无法核实而保留的数量。
-  仅移除能够确认不存在的本地文件记录；权限不足、离线卷、网络路径、符号链接及未知状态保留，不按数量上限额外裁剪有效记录；真实 NAS / 外置盘场景仍可补充设备验收。
+- [ ] Resolve existing SwiftFormat findings in `ImageFileWatcher.swift`, `ImageDocument.swift`, `Coordinator.swift` and `AdaptiveToolbar.swift` separately from functional changes.
+- [ ] Track macOS 15 native asset compilation independently of runtime compatibility.
+  `CompileAssetCatalogVariant` failed in run `39416951796`; building on macOS 26 and executing on 15 is the supported workaround, not a toolchain fix.
+- [ ] Preserve diagnostics if the Xcode 27 / macOS 27 test-host startup hang recurs.
+  `Imaxe-20261021-223044.xcresult` executed no tests; its dyld file-open stall was stopped and a later targeted run passed.
+  Do not count a run with no executed tests as successful coverage.
 
-### Rendering and Performance
+### Routine release verification
 
-- 2026-10-21：按用户给出的 Finder 栏头参考，最近图片栏与图片 TopBar 改用系统工具栏 `.bar` 材质与细分隔线；不设置固定 alpha，由系统材质控制模糊与透光。AppKit `.titlebar` 在当前承载层的截图中偏实色，因此没有用于最终实现；两条横栏不再使用带隆起亮边的 Liquid Glass，悬浮加载卡保留原生玻璃，“减少透明度”模式仍用实色。
-- 本轮中间版本的 `Imaxe-20261021-135002.xcresult`、`Imaxe-20261021-135222.xcresult` 中，最近图片/设置通过，图片窗口 UI 用例出现主应用快照连接中断，未归因为材质渲染回归；原生栏材质最终版本只做构建与静态检查，视觉仍待用户确认。按用户新约定，小范围 UI 调整不运行 UI 测试；重大 UI 改动也只运行受影响用例，本轮额外截图测试代码已撤回。
+Automatic-update development is complete; retain these checks for later releases or recovery exercises.
 
-- [ ] 长时间压力：在真实前台应用中覆盖多窗口、复杂长 GIF 和系统内存压力，分别记录结果正确性、内存趋势及卡顿。
-  同时测量 ImageIO 转码和 AppKit GIF 帧表示的临时内存；现有保留像素预算、主动清空 NSCache 和离屏测试不代表进程内存上限。
-- [ ] 根据高倍缩放下的清晰度与性能基线，评估固定分辨率代理是否需要按需恢复高分辨率。
-  若测量确认需要分块渲染，再验证缓存上限、旧图片代次结果丢弃和实际收益；保留整张解码图后再切块不视为已解决内存问题。
-- [ ] 真实慢卷：取得外置盘或 NAS / 网络挂载样本后，再验证读取、首绘及断开/恢复。
-  下载到内置 SSD 的图片和扫描 gate 不替代真实慢卷；保持低优先级。
-- [ ] HDR 兼容范围扩展暂缓排期：HEIF 增益图、其他浮点容器和 HDR 屏幕亮度输出尚未覆盖。
-  当前只承诺已有 32 位浮点 TIFF 样本保留、SDR AppKit 参考渲染和保守内存估算。
+- [ ] On the next real release, build from version-local notes, verify source and downloads, confirm ZIP / checksum-only public assets, and exercise `release.published`, public-feed convergence, seven-build retention and withdrawal recomputation.
+  Verified automatic deployment evidence currently covers main push and gh-pages dispatch, not the next new release event.
+- [ ] Exercise interrupted uploads, missing assets and retries with identical artifacts in a draft or test repository.
+  Script tests do not replace a hosted recovery exercise; do not modify the current release for this task.
 
-### Test Reliability
+## Completed
 
-- [ ] 全量 SwiftFormat lint 的既有问题：`ImageFileWatcher.swift`、`ImageDocument.swift`、`Coordinator.swift` 和 `AdaptiveToolbar.swift` 共 4 个未在本轮修改的文件触发 repeatedGuard / wrap 规则；单独安排格式整理，本轮仅验证改动文件，不混入无关重排。
-
-- [ ] 跟踪 macOS 15 原生资源编译限制：旧 run `39416951796` 的 `CompileAssetCatalogVariant` 崩溃仍未从工具链层面修复。
-  已通过 macOS 26 构建、macOS 15 执行完成运行兼容性验证，现有 CI 路径不受此项阻塞。
-- Xcode 27 / macOS 27 曾出现测试宿主连接前超时；若再次发生，保留 xcresult 和完整诊断，未执行的测试不得记为通过。
-  本轮 `Imaxe-20261021-223044.xcresult` 的宿主在 dyld 文件打开阶段停住，未执行测试，已保存采样并停止该次运行；后续 Release Profiling 专项重跑通过，未将初次运行记为成功或归因为应用逻辑回归。
-
-### 发布例行复核
-
-自动更新开发已完成；以下检查随后续发布或恢复演练执行。
-
-- [ ] 下次真实发布时使用版本目录内的说明构建，检查产物不含 JSON manifest、Release 仅有 ZIP 与校验和，并核对来源提交和下载内容。
-  验证 `release.published` 自动触发、公开总 feed 收敛及最近 7 个有效稳定构建的保留规则；撤回发布时检查 feed 重算。
-  当前已经通过的线上自动链路是 main push 与 gh-pages push 分派，不将它们写成下一次新版本事件的执行证据。
-- [ ] 在隔离的草稿或测试仓库演练上传中断、缺少资产和一致产物重试，记录恢复结果。
-  现有脚本和回归覆盖不等同于真实故障恢复演练；不为本项修改当前正式版。
+Accepted work, scoped validation, historical CI results and superseded release records are in [progress-history.md](progress-history.md).
+Current CI failures and incomplete Release performance / device acceptance remain above.
 
 ## References
 
 - [CGImageSourceCreateThumbnailAtIndex](<https://developer.apple.com/documentation/imageio/cgimagesourcecreatethumbnailatindex(_:_:_:)>)
 - [kCGImageSourceShouldCacheImmediately](https://developer.apple.com/documentation/imageio/kcgimagesourceshouldcacheimmediately)
 - [CATiledLayer](https://developer.apple.com/documentation/quartzcore/catiledlayer)
-
-## Completed
-
-完成项按已验证的范围归档。
-具体测试数、系统版本和测量结论对应记录中的提交与环境；未覆盖的安装、性能或兼容性范围保留在上方活动清单。
-
-### Release 性能采集准备与预采样
-
-- [x] 2026-10-21：新增 `scripts/profile-release.sh` / `scripts/profile-release.swift`，支持产物准备、指定应用打开、内存采样、目标窗口录像、独立 trace 与按工具摘要汇总；输出均进入忽略的 `build/Performance/Release/`。
-  工具核对 ZIP 摘要与应用深层代码签名、记录精确可执行路径和 PID，已有输出不覆盖；旧 appcast 缺少来源字段时明确记录校验边界，新格式存在来源字段时检查匹配。
-- [x] 使用原始 `1.1.0 (13)`、来源 `2cdce9c05f36ea91e4d119cc4da35b15043c0440` 的 ZIP；采集后 SHA-256 仍为 `485cf0f098cc0d1343252424950eeb47a8054cec360b1acfed2b88f2ae3fa24e`。
-  当前账户、M2 Pro / 16 GiB、macOS 27.0.1、Xcode 27.1、内置 Retina 2×；14 个应用设置键采集前后均未变化，测试图片按用户授权进入近期记录。
-- [x] 七格式各完成 3 次无录像 / 无分析器的首次文件打开，共 21 次，均找到目标画布；按工具摘要 `5614ef59aad3…` 独立汇总，保留约 100 ms 周期的原始 RSS / physical footprint CSV 与采样峰值。
-  原始目录为 `build/Performance/Release/B13-2cdce9c05f36/20261021-baseline/`；结果只作预采样，首帧为 null，不代表完整保真、稳定内存或交互性能验收。
-- [x] JPEG 的目标窗口录像及结束截图已确认内容；授权后对未改签 B13 的 Time Profiler 附加、trace 保存与 421 条 CPU 样本导出成功。
-  录制和诊断不并入上述 21 次统计；授权前停在目录打开调用的运行单列排除，未把系统权限等待解释为解码瓶颈。
-- [x] 新增 4 项 Release Profiling 专项测试，覆盖真实进程内存采样 / 退出检测、SVG 与旧 / 新 appcast 输入校验、来源不匹配、输出目录保护及统计分组。
-  `rtk proxy just test --skip-ui --suite ReleaseProfilingTests --no-coverage` 的 `build/TestResults/Imaxe-20261021-230045.xcresult` 为 4 通过、0 失败；修改文件的 SwiftFormat、SwiftLint、ShellCheck、shfmt 与差异检查通过。
-  复跑命令及阶段报告保存在 `docs/agents/`；本轮未运行 UI 或云端 CI，没有提交、推送或改变发布流程。
-
-### P1-3 普通 Mac 安装与迁移
-
-- [x] 2026-10-21：用户确认 P1-3 完成，公开 ZIP 的下载、解压、首次安装与启动按用户验收归档。
-- [x] 2026-10-21：近期记录、收藏、设置、图片访问权限保留及旧版 `1.0 (4)` 手动迁移按用户对 P1-3 的确认归档；已完成的 A 12 → B 13 自动更新验收继续保留在自动更新记录中。
-  本轮未另行重跑安装或迁移，用户未补充设备与系统明细；本项不增加最低系统版本或其他硬件的独立实测结论。
-
-### 测试数据与设置隔离
-
-- [x] 2026-10-21：修复共享测试目录并发创建的竞争；创建返回“已存在”时继续检查目录类型和归属，其他创建错误仍抛出，符号链接拒绝逻辑保留。
-  新增 16 轮、每轮 30 个上下文的并发回归，共 480 次准备；原实现复现 27 次竞争失败，修复后全部通过。
-  宿主隔离测试改为检查实际目录的运行 / 用例 UUID，不再要求脚本专用的 `IMAXE_TEST_RUN_ID`；脚本环境检查保留在 runner 回归中，自动生成 UUID 的正常路径继续受支持。
-  `rtk proxy just test --skip-ui --suite TestStorageTests --suite ImageFidelityTests --suite RecentImagesTests --suite ImageViewTests --no-coverage` 的 `build/TestResults/Imaxe-20261021-220046.xcresult` 为 45 通过、0 失败；修改文件 SwiftFormat、SwiftLint 与差异检查通过，未运行 UI 或直接触发 Xcode Test action。
-- [x] 2026-10-21：新增仅供 Debug 测试使用的 `TestStorage`，数据库、缩略图缓存和 UserDefaults 按运行 / 用例 UUID 隔离；全部 AppStorage、AppKit 直接偏好读取和相关测试使用同一设置来源。
-  应用退出清理自身数据，`scripts/test.sh` 仅回收本次运行残留的目录和偏好，不再删除整个共享测试目录；标识校验及目录归属检查避免误用其他路径。
-- [x] 6 项专用测试验证宿主启动隔离、偏好互不影响、数据库 / 缓存清理、符号链接目的地保留、非法标识及异常退出回收；模拟失败仍返回原始退出码 23，另一运行的哨兵文件保留。
-  结果为 `build/TestResults/Imaxe-20261021-213013.xcresult`，6 通过、0 失败。
-- [x] 完整单元回归分两组执行：非窗口组 `Imaxe-20261021-213247.xcresult` 为 114 通过、0 失败、1 项真实慢卷跳过；窗口组 `Imaxe-20261021-213332.xcresult` 为 17 通过、0 失败。
-  两组运行前后，日常 Debug / Release 数据目录、缩略图缓存和应用偏好文件的文件数与 SHA-256 摘要均未变化。
-  Xcode MCP 构建、修改文件的 SwiftFormat、SwiftLint、ShellCheck、shfmt 及差异检查通过；全仓库 SwiftFormat 的 4 个既有问题单列 P2，未在本轮重排。
-  本轮未运行 UI 或云端 CI；UI 集成及启动窗口行为继续保留在 P1-1。
-
-### 工程目录与脚本
-
-- [x] 2026-10-21：同步 `build`、`docs`、`scripts`、`images` 的小写目录名；通过中间目录将大小写更名写入 Git 索引，更新 justfile、CI/Updates workflow、脚本、测试样本路径及文档。
-  120 个索引路径逐级检查精确大小写通过，旧目录引用仅保留 Xcode 生成的内部 `Build/Products`；用户对 `.gitignore` 的修改原样保留，构建输出与 agents 临时目录仍被忽略。
-  迁移后发现旧 DerivedData 含大写绝对路径，已清理 Tests/Release 的可重建 Build 子目录，保留归档、ZIP 和 SourcePackages；干净复验没有 stale-file / allowed-root 警告。
-  `rtk proxy just test --skip-ui --skip-suite ImageViewTests --no-coverage` 的 `build/TestResults/Imaxe-20261021-205529.xcresult` 为 108 通过、0 失败、1 项真实慢卷跳过；ShellCheck、shfmt、SwiftLint、SwiftFormat、差异检查及 actionlint（临时显式允许 xcode-27 标签）通过，未运行 UI 或云端 CI。
-
-### 检查更新与当前发布流程
-
-- [x] 2026-10-21 用户确认检查更新功能完成，本机 A `1.1.0 (12)` 能发现并安装 B `1.1.0 (13)`；相同营销版本下按递增构建号比较更新已验收。
-- [x] [PR #5](https://github.com/eureka-0/Imaxe/pull/5) 在 CI `39529968575` 全绿后合入 `4f880ac5`，完成 gh-pages 迁移：根目录总 feed 保留最近 7 个有效稳定构建，单版本 XML 位于 `history/<tag>/appcast.xml`，保留格式化 XML 与 CDATA，生产 URL 不变。
-  main push `39530719558` 与网站推送触发的 repository_dispatch `39530996067` 自动部署均通过；main 已删除 Distribution，当前 Release 仅保留 ZIP 与校验和，JSON 附件已删除。
-  本次复核公开 `v1.1.0` 非草稿、非预发布，生产 feed 为 1 条 `1.1.0 (13)` 更新；旧 feed 的服务端根因未确定，现有等待收敛与公开字节校验已部署。
-- [x] [PR #6](https://github.com/eureka-0/Imaxe/pull/6) 已合入 `afe498b5`，[CI 39534814911](https://github.com/eureka-0/Imaxe/actions/runs/39534814911) 的预构建、macOS 15/26/27 单元与 UI 测试及必需汇总检查共 5 个任务全部成功。
-  发布说明直接放在对应版本产物目录，构建不生成 `release.json`，本地旧 JSON、重复说明和过时日志已清理。
-- [x] 发布说明统一放在 `build/Releases/Imaxe-<version>-<build>-<commit>/Imaxe-<version>.md`，`just build` 不再接受独立说明路径；缺少说明时创建版本目录并提示完整路径，在联网和归档前停止。允许仅含说明的目录，保留已有产物、归档和同版本/构建号不同来源的防覆盖检查，构建期间说明变化也会拒绝输出。构建不生成 `release.json`，已删除本地旧 JSON、对应摘要行、根目录重复说明和 7 份过时日志，保留 A/B ZIP、原始版本说明与最近正式构建日志；文件摘要复核通过。本轮修正了 macOS Bash 3.2 空数组检查的兼容问题，`ReleaseLockTests` 6 项及 `ReleaseValidationTests` 3 项通过、0 失败，结果为 `build/TestResults/Imaxe-20261021-103747.xcresult` 和 `Imaxe-20261021-103925.xcresult`。
-- [x] P0 启动阻断已修复：原 A `1.1.0 (11)` 和原 B `1.1.0 (12)` 的主程序为 ad-hoc + Hardened Runtime，没有 Library Validation 例外，dyld 拒绝加载同样没有 Team ID 的 Sparkle。B 归档启动曾复现退出码 134；补充正式配置和回归后，新 A 的最终 ZIP 独立启动通过，用户已确认安装新的 `1.1.0 (12)` 后启动成功。修复后的 A 12 → B 13 已通过用户实测；普通 Mac 安装和正式包性能验收仍保留在活动清单。
-- [x] 正式签名修复：通过 Xcode 为应用 Debug/Release 配置 `Imaxe/Imaxe.entitlements`，只添加 Library Validation 例外，保留 Hardened Runtime；版本维持 `1.1.0 (12)`。发布校验使用 Security API 读取真实签名标志和 entitlements，拒绝缺少例外的 ad-hoc Hardened Runtime 包。`just test --skip-ui --suite ReleaseValidationTests --no-coverage` 最终 2 项通过、0 失败，包含真实签名 fixture 的缺失例外拒绝用例，结果为 `build/TestResults/Imaxe-20261020-230442.xcresult`；Swift 类型检查、Xcode 文件诊断、SwiftFormat 和 SwiftLint 均通过。
-- [x] 修复后的内部 A 已重建：从干净功能分支提交 `01f9730e396f8584f94d3d860e979f886051b13b` 构建 `1.1.0 (12)`，目录为 `build/Releases/Imaxe-1.1.0-12-01f9730e396f/`；ZIP SHA-256 为 `3a076f75a3cd41d8f763c9121822b61155ea3c99698f22c6f96db6b66a2a329c`。实际 ZIP 的 EdDSA、文件摘要、包内元数据、arm64、最低 macOS 15.6、深层签名和 Library Validation 策略均通过。最终 ZIP 解压后通过 LaunchServices 正常启动，启用正常 Sparkle 初始化，进程持续运行超过一分钟；采样确认加载 Sparkle 并进入 AppKit 主事件循环，证据为 `build/LaunchChecks/A-12/launch.sample.txt`。这不替代用户安装、图片交互或 A/B 升级验收。
-- [x] 发布标签环境许可：首次自动部署因只允许 main branch 而被拒绝；用户随后明确授权新增 `v*` tag 许可，github-pages 环境现保留 main branch 与 `v*` tag 两项规则，新增规则 ID 为 `63728054`。该许可只解决环境入口限制，不代表后续部署与公开 feed 校验必然成功。
-- [x] 迁移本机验证：`ReleaseValidationTests` 与 `UpdatesPipelineTests` 各 3 项通过、0 失败；分别为 `build/TestResults/Imaxe-20261021-094516.xcresult` 与 `Imaxe-20261021-094558.xcresult`。覆盖实际归档签名/来源/元数据、最新 7 项数值排序、过滤草稿/预发布/撤回、重复构建与历史缺失拒绝，以及旧 feed 随后收敛、持续旧内容和网络失败；正式 B13 的公开 ZIP 与新历史 appcast 再次通过完整验证。Swift 类型/格式、SwiftLint、ShellCheck、shfmt、actionlint 及 diff 检查通过。
-- [x] A 发现 B：生产 feed 恢复后，用户已于 2026-10-21 确认在本地 A `1.1.0 (12)` 内检查到 B 更新；相同显示版本 `1.1.0` 下，构建号 12 → 13 的更新发现通过。
-- [x] 本机 A → B 自动更新：用户于 2026-10-21 明确确认本地自动更新功能可用；这一结论为用户实测反馈，未扩展为第二台普通 Mac 的安装或所有用户数据类型均已逐项验证。
-- [x] 现有 Keychain 公钥匹配 SUPublicEDKey，实际签名通过，修改内容与错误公钥被拒绝；没有导出或更换私钥。
-- [x] 发布脚本在首次 Xcode 调用前取得构建/发布共用的原子目录锁；锁冲突不触发清理，构建/发布冲突、失败重试和终止释放回归通过。
-- [x] 更新设置持续观察 Sparkle 的检查、下载与 allowsAutomaticUpdates；默认与禁用下载配置的状态同步测试通过。
-- [x] 实际归档发现并修复通用二进制问题：发布显式使用 `ARCHS=arm64`，本地真实 ZIP 的架构、版本、feed、公钥、appcast 和深层代码签名均通过校验。
-- [x] 匿名检查实际 v1.0.0 ZIP：包内为 1.0 (4)、最低 macOS 14.0，无 Sparkle/feed/公钥，确认需要先手动迁移一次。
-- [x] 单元和 UI 测试增加仅测试启动参数，停用真实更新调度；设置单元测试仍使用独立的 Sparkle fixture 验证状态变化。
-
-### 图片加载与内存正确性
-
-- [x] 方向与透明边缘：加入 EXIF 1–8 的旋转、镜像角点渲染矩阵；验证 PNG 半透明颜色、透明区域和降采样边缘，SVG 验证透明区域。
-- [x] ICC 与色彩显示：对 sRGB、Display P3 样本比较代理 ICC 数据和 AppKit 实际渲染的 RGB 值；信息面板优先显示来源 profile 名称。
-- [x] DPI 与显示比例：保留来源 DPI，旋转 90° 后交换用于打印比例的 DPI 轴；验证 144×72 DPI 图片的物理尺寸，图片表示尺寸使用方向修正后的像素数。
-- [x] 16 位代理：PNG、TIFF 代理验证通道位深、alpha 和非端点采样值；16 位输入的代理回退只使用 TIFF/PNG，禁止 JPEG/HEIC 回退。
-- [x] 多页 TIFF：明确只显示第 0 页，保留容器总页数并在信息面板显示 `1 / N`；不同尺寸、不同内容的两页样本确认不会被 AppKit 选成替代表示。
-- [x] GIF、TIFF 首页、SVG、静态位图使用独立策略边界；64 MiB 保留像素预算按位深和 GIF 帧数计算，最长边仍受 16384 限制。该预算不代表进程 RSS 上限。
-- [x] GIF 代理保留帧数、帧时长和循环次数；有限循环停在末帧，无限循环继续播放，每窗口保留独立播放状态。
-- [x] 图片提交不再等待目录扫描；用显式 gate 验证慢扫描、取消扫描和旧代次结果，目录扫描完成后再更新导航。
-- [x] 发布候选兼容矩阵：灰度/CMYK JPEG 与 TIFF、自定义校准 ICC、PNG/TIFF 16 位渐变、32 位浮点 TIFF，以及手工编码的局部帧 GIF disposal 2/3；5 项测试覆盖 9 组输入，比较来源元数据、代理数据及实际 AppKit 渲染。测试位于 `ImaxeTests/ImageCompatibilityTests.swift`，不承诺未覆盖的 HDR 格式或屏幕输出。
-
-### 已有基础性能场景
-
-- [x] 建立独立性能套件：七种格式的冷加载器打开、100%/4× 离屏画布首绘、30 次 5000×4000 大图请求、被 gate 阻塞的目录扫描；分别记录正确性和耗时。
-- [x] 补充两个同时存在的 AppKit 窗口、40 帧 GIF、96 帧 GIF 代理预算和主动清空缓存后的等价重载。
-- [x] P1 本机基础场景：新增三轮独立进程重启、`app.launch()` 调用墙钟计时及启动后前台/菜单可访问性验证，以及文件选择器打开图片、可见画布 100%/连续放大、前台导航与窗口截图；UI 测试单独记录时间和 physical footprint，额外采集独立应用进程短段 RSS。启动墙钟时间包含 UI 自动化开销，退出等待与启动后的状态检查在计时区间之外，不能等同于系统精确首帧指标；Debug 基线不等同于正式 Release 包性能。
-
-### 分发说明
-
-- [x] Release 说明模板已包含实际最低系统版本、Apple Silicon / arm64、提交变更、安装和迁移说明；正式发布前继续审阅生成内容。
-- [x] README 与 Release 模板已说明 ad-hoc/Gatekeeper、Applications 安装步骤及 Apple 官方 Open Anyway 操作；未新增 Developer ID 或公证依赖。
-
-### 测试、CI 与工具链修复
-
-- [x] PR #1 云端 CI 验收完成：第五轮 run `39423318582`，来源提交 `2b9c43c3`，macOS 15 / Xcode 26.3、macOS 26 / Xcode 26.3、macOS 27 / Xcode 27.0 的单元、独立窗口与 UI 步骤全部成功，预构建与 `macOS compatibility (unit + UI)` 汇总检查通过。慢卷保持按配置跳过，云端测量不作为正式 Release 包性能结论。
-- [x] main required status check 已生效：ruleset `25415148` 为 active，分支有效规则要求 `macOS compatibility (unit + UI)`，来源限定为 GitHub Actions（integration ID `15368`），与第五轮真实检查匹配；管理员 `always` bypass 保留。当前未要求分支必须先更新至最新 main（strict 为 false），未改动用户设置。
-- [x] PR #1 第四轮启动测量故障已在第五轮验收：run `39420553605` 的 macOS 15 单元与窗口套件分别为 96 通过/1 慢卷跳过及 17 通过，3 项 UI 通过；唯一失败为 `XCTApplicationLaunchMetric` 第 0 次采集 1 个指标、第 1 次为 0 个。xcresult 确认各轮均重启进程，错误发生在 XCTest 指标汇总；调整为墙钟测量后，第五轮三个系统的完整 UI 均通过，第四轮仍保留为失败运行。
-- [x] 冷启动 UI 测量改用所有系统一致的 `XCTClockMetric`：保留三轮测量，每轮显式终止应用并等待 `.notRunning`，手动计时只覆盖 `app.launch()`，随后要求应用进入前台且菜单可访问；日志标记为 `app_launch_call_wall_time`。Apple 文档说明 `launch()` 本身会终止已有实例，因此不将本次故障归因为未重新启动；墙钟测量避免依赖本轮缺失的系统启动事件，但与旧的系统首帧/响应指标不可直接比较，精确首帧仍按 P1 正式包性能项补验。
-- [x] 冷启动测量修复本机验证：完整 `just test --ui-only --no-coverage` 与 CI 同路径的 `just test --test-without-building --ui-only --no-coverage` 均为 4 项 UI 通过、0 失败；结果为 `build/TestResults/Imaxe-20261020-202849.xcresult` 与 `Imaxe-20261020-203034.xcresult`，两份结果均记录 3 个单调时钟样本，只执行模式没有重新编译。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 和 diff 检查通过；本机为 macOS 27.0.1 / Xcode 27.1，随后第五轮云端 CI 的三个系统全部通过。
-- [x] macOS 15 CI 改为构建与执行分离：在 macOS 26 使用 Xcode 26.3 和 ad-hoc 签名构建完整应用、单元与 UI 测试产物，经 tar 保留权限、符号链接及签名后上传同一工作流；macOS 15 校验提交 SHA、源码路径和 Xcode 版本，再通过 `just test --test-without-building` 分别运行原有三个测试组。未删除 Icon Composer 图标、跳过失败用例或降低浮点样本断言；macOS 26、27 保留各自原生构建和测试。
-- [x] 测试脚本增加 `--build-only` 与 `--test-without-building`，保留既有测试过滤及覆盖率导出；两个模式互斥，构建模式拒绝测试过滤或覆盖率报告，只执行模式要求恰好一份 `.xctestrun`。汇总检查同时要求预构建 job 与全部系统测试成功，产物恢复失败时禁止回退到 macOS 15 原生构建；PR/手动触发与 `fail-fast: false` 保持不变。
-- [x] 构建与执行分离的本机验证：`just test --build-only` 成功；完整产物经 tar 打包、解包和两份应用 bundle 的深层签名校验后还原，分别通过 `--test-without-building` 执行其余单元、窗口和 UI 测试，结果为 96 通过/1 慢卷跳过、17 通过及 4 通过，合计 117 通过、0 失败、1 跳过。两组单元标识并集为原有 114 项且无交集，覆盖率正常导出，三个执行日志均无资源或 Swift 重新编译；结果为 `build/TestResults/Imaxe-20261020-200250.xcresult`、`Imaxe-20261020-200332.xcresult`、`Imaxe-20261020-200402.xcresult`。本机仍为 macOS 27.0.1 / Xcode 27.1；参数互斥检查、SwiftLint、ShellCheck、shfmt、YAML/步骤语法和 actionlint 通过。
-- [x] 构建与执行分离后的云端验收：第五轮 run `39423318582` 已确认 macOS 26 构建的完整产物在 macOS 15 通过单元、窗口和全部 UI 测试，包含浮点 TIFF 的来源/代理样本断言及三轮启动墙钟测量；macOS 26、27 的原生构建和测试均通过。macOS 15 原生资源编译稳定性继续单独跟踪。
-- [x] PR #1 第二轮浮点样本故障已在第四轮验收：run `39414212147` 的 macOS 15 浮点 TIFF `NSBitmapImageRep.colorAt` 蓝色分量为 1.0，未满足 1.5 的期望；改为分别检查来源与代理的底层浮点样本、保留 AppKit 渲染对照后，第四轮 run `39420553605` 的三个系统单元套件均通过，未降低超范围样本要求。
-- [x] 调整浮点 TIFF 验收取样：直接从 Core Graphics 解码图的 `dataProvider` 按行跨度、分量字节序和通道布局读取 Float32；来源 TIFF 与代理 TIFF 分别检查 `[0.25, 0.5, 1.5]`，容差仍为 0.001，保留 32 位/浮点标志、16 字节 RGBA 预算及 AppKit 实际渲染对照。不对 macOS 15 跳过或放宽断言；若底层样本确实被截断，仍会明确报告来源/代理及通道。
-- [x] 浮点取样修复本机验证：默认 `just test --skip-ui --suite ImageCompatibilityTests --no-coverage` 覆盖 5 项测试、9 组输入，全部通过，结果为 `build/TestResults/Imaxe-20261020-193734.xcresult`；Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat 与 diff 检查通过。临时 CI 签名配置下的两次宿主启动挂起均已终止，未计入通过；macOS 15 的新断言随后在第四轮云端 CI 中通过。
-- [x] PR #1 首轮云端故障阶段性复验：run `39393986174` 的 macOS 26 Xcode 工具链混用和 macOS 27 窗口同步测试超时，在第二、三轮均未再出现，26、27 整个任务通过。macOS 15 的资源编译及窗口/UI 测试曾在第二轮通过，但资源代理在第三轮再次崩溃；该问题继续单独跟踪，不将偶尔编译成功记为已根治。
-- [x] 修正 CI 工具链选择：除 `DEVELOPER_DIR` 外，同步设置 runner 的 `xcode-select`、清除 xcrun 查找缓存，并通过 `TEST_RUNNER_DEVELOPER_DIR` 显式传给测试宿主；记录实际全局选择，避免子进程回到镜像默认 Xcode。第二轮已确认 macOS 15 资源编译及 macOS 26 发布校验通过。
-- [x] 隔离窗口动画单元测试：`ImageViewTests` 使用 Swift Testing 的 `.serialized`，CI 通过 `--suite` / 新增 `--skip-suite` 分别启动窗口套件与其余单元测试；不再让图片解码、性能样本及发布 fixture 编译与窗口动画共用测试宿主，保留原有断言与超时阈值。零测试的编译失败也保留所有结果摘要和完整 build 日志，供资源代理问题复查。
-- [x] CI 修复本机复验：窗口套件 17 通过，其余单元测试 96 通过、1 项慢卷跳过，均无失败，覆盖率正常导出；对比原云端单元测试标识，两组并集完整覆盖原 114 项且无交集。结果为 `build/TestResults/Imaxe-20261020-190916.xcresult` 与 `build/TestResults/Imaxe-20261020-191152.xcresult`；编译失败产物回放确认保留两份摘要和 build 日志，退出状态仍为失败。Xcode 文件诊断、SwiftLint、ShellCheck、SwiftFormat、shfmt、工作流静态检查及 diff 检查通过。
-- [x] CI 修复后的本机 UI 复验：初次 `build/TestResults/Imaxe-20261020-191250.xcresult` 在启用自动化模式时超时，未执行测试；当时只读检查显示本机自动化模式关闭且需要用户认证，未修改系统安全设置。随后重试 4 通过、0 失败，结果为 `build/TestResults/Imaxe-20261020-191533.xcresult`；与两组单元测试合计 117 通过、0 失败、1 项慢卷跳过。此前本机两次宿主停在 dyld 文件打开阶段，均终止且未记为通过，保留旧派生目录后重建通过；第五轮云端 CI 的三个系统随后全部通过。
-- [x] 添加 GitHub Actions CI：仅对目标分支为 `main` 的 PR 及手动操作触发，不因 push 触发；ARM64 `macos-15` / `macos-26` 使用 Xcode 26.3，`xcode-27`（macOS 27）使用稳定版 Xcode 27.0，通过 `just test` 分别运行单元测试（含覆盖率）及完整 UI 测试。保持 `fail-fast: false`，收集三个系统的独立结果；临时配置所有测试目标的 ad-hoc 签名，不依赖开发证书，保存环境、日志、结果摘要和完整 xcresult 14 天。汇总 job 为 `macos_compatibility_gate`，检查名为 `macOS compatibility (unit + UI)`，矩阵全部成功后才通过。
-- [x] CI 测试入口本机验证：使用与 CI 相同的临时签名配置分别运行测试，单元测试 113 通过、0 失败、1 项慢卷跳过，UI 测试 4 通过、0 失败，覆盖率报告正常导出。结果为 `build/TestResults/Imaxe-20261020-155435.xcresult` 和 `build/TestResults/Imaxe-20261020-155514.xcresult`；运行环境为本机 macOS 27.0.1 / Xcode 27.1，不代表三个云端组合已通过。
-- [x] 三系统矩阵静态验证：YAML、触发事件、三个 runner / Xcode 配对、`fail-fast: false`、汇总依赖、全部 shell 步骤语法及 `git diff --check` 通过。actionlint 1.7.12 尚未内置官方 `xcode-27` 标签，使用仅允许此标签的临时配置后，CI 与既有 Updates 工作流均通过 actionlint；未关闭其他检查。
-- [x] CI 云端及合并条件验收：PR #1 第五轮完整矩阵通过，原生文件选择器、UI 自动化和测试宿主均实际执行；工作流现已在默认分支，手动触发入口可用。main ruleset 已要求 `macOS compatibility (unit + UI)` 成功后合并，管理员 bypass 保持现有约定；手动触发本身尚未另行执行。
-- [x] Replace timing-based metadata preload coverage with an explicit document-load gate so the session test remains deterministic under parallel test load.
-- [x] Verify equivalent results across repeated image loads without requiring `NSCache` to retain document identity under memory pressure.
-- [x] 保留原等价重载测试，并补充清空缓存后元数据、尺寸及实际渲染像素相等的测试；不依赖对象身份和自动淘汰时机。
-- [x] 发布校验测试的编译与子进程等待移到后台，避免阻塞主线程；保持既有窗口断言和超时阈值不变，最终完整回归 109 项通过。
-- [x] 2026-10-20 发布候选回归（路径输入修复后）：完整 `just test --no-coverage` 共 118 项，117 通过、0 失败、1 项真实慢卷因未配置样本而跳过；4 项 UI 全部通过。修改后的 UI 文件通过 SwiftFormat 与 SwiftLint 检查，`git diff --check` 通过。完整结果为 `build/TestResults/Imaxe-20261020-153504.xcresult`。
-- [x] UI 文件样本由测试入口复制到忽略的 Build 目录，使用原生文件选择器并等待对话框、路径输入框及打开按钮就绪；截图限定为应用窗口，避免高倍画布越界时捕获整个屏幕。原有窗口/动画断言及超时阈值未改动。
-
-### 其他已验证修复
-
-- [x] 修复 UI 文件选择器路径输入：完整回归与 UI 单独重跑均复现逐键输入丢失字符；改用保存/恢复剪贴板的整段粘贴，并等待字段值匹配。若期间其他程序改写剪贴板，则保留较新的内容。
-- [x] UI 路径确认补测：粘贴成功后曾观测到 Return 期间系统 `openAndSavePanelService` 在文本输入处理栈崩溃；改为等待并双击匹配完整路径的原生补全项。最终 UI 单独回归 4 项通过、0 失败，结果为 `build/TestResults/Imaxe-20261020-153322.xcresult`；路径、打开结果、缩放和切换断言均保留。
-- [x] 发布候选补测复现并修复 32 位浮点 TIFF 预算低估：代理尺寸与缓存估算共用按通道位深计算的 RGBA 成本，32 位每像素按 16 字节估算；浮点样本位深、超出 1.0 的通道值及 AppKit 参考渲染回归通过。
-- [x] 将 ImageCollectionView 的状态与默认配置构造移入初始化器，独立创建 ImageSession 元数据任务；七处泛型隔离警告及一处 weak capture 警告已清除，Xcode 构建和文件诊断均无警告。
-- [x] 合并 ImageCollectionView 中返回条件相同的连续 guard，保留原有短路判断顺序，SwiftFormat repeatedGuard 检查通过。
-
-### 旧发布流程与撤回构建的历史记录
-
-以下记录保留当时的来源、资产和验收结果。
-原 A 11 / B 12 因启动故障撤回，已被修复后的 A 12 / B 13 替代；旧 manifest、三附件或五附件方案已经由 PR #5、#6 的流程取代，旧路径不再作为当前操作指引。
-
-- [x] 精简正式附件：Release 只上传 ZIP、`release.json` 和 `SHA256SUMS.txt`；appcast 与 Markdown 仅作为本地构建产物，说明以内嵌 Markdown 写入 feed，完整 feed 数据保存在 manifest 中，经部署校验后发布到 Pages。Release 标题和说明只使用营销版本号，构建号留作更新比较与机器元数据。三个发布验证用例和发布锁用例通过，真实 A ZIP 的三附件副本也通过完整验证；结果为 `build/TestResults/Imaxe-20261020-232844.xcresult`，Swift/格式/shell/Updates workflow 静态检查通过。
-- [x] 故障发布已按用户授权撤回：`v1.1.0` 转回 draft，标签和五个资产保留；Updates run `39442929884` 成功恢复空 feed，匿名 HTTP 200、0 条更新且与源文件一致，故障 ZIP 的匿名 URL 返回 404。用户要求直接删除旧故障包及 Build 过时产物，已清理旧 Build（约 4.4 GiB），诊断结论保存在忽略目录 `docs/agents/SPARKLE_LAUNCH_FAILURE_2026-10-20.md`。
-- [x] 公开空 feed 验收：2026-10-20 匿名请求 `https://eureka-0.github.io/Imaxe/appcast.xml` 返回 HTTP 200，`application/xml`，XML 解析为 1 个 RSS channel、0 个更新条目，与 `Distribution/appcast.xml` 字节一致；SHA-256 为 `91ad5658dd8d8dfa61e843b3d2445fee3997346d5854d67114060ecf676bf1bb`。本项只确认 feed 部署与可访问性。
-- [x] 修复后的正式 B 已发布：PR #3 的 CI run `39449750682` 五个任务全部通过，按授权合并为 `2cdce9c05f36ea91e4d119cc4da35b15043c0440`；从干净且与远端一致的 main 构建 `1.1.0 (13)`，目录为 `build/Releases/Imaxe-1.1.0-13-2cdce9c05f36/`，ZIP SHA-256 为 `485cf0f098cc0d1343252424950eeb47a8054cec360b1acfed2b88f2ae3fa24e`。签名、EdDSA、元数据和来源校验通过；最终 ZIP 独立启动后加载 Sparkle 并进入 AppKit 主循环，采样为 `build/LaunchChecks/B-13/launch.sample.txt`。安全更新撤回版本的标签后，于北京时间 `2026-10-20 23:52:43` 重新公开 `v1.1.0`，仅保留 ZIP、manifest、校验和三个附件，公开下载均与本地字节一致并再次通过完整发布验证。
-- [x] B 13 的生产 feed 已验收：release 事件 run `39452440735` 上传的 appcast 与本地签名数据一致，但部署后公开地址持续返回旧空 feed，12 次字节校验失败；从 main 指定 `release_tag=v1.1.0` 手动运行 `39453494899` 后全部通过。北京时间 `2026-10-21 00:02` 再次匿名读取无查询参数和带部署参数的 URL，均为 HTTP 200、4330 字节、1 条更新，`sparkle:version=13`、`sparkle:shortVersionString=1.1.0`，与 manifest 内 appcast 逐字节一致；SHA-256 为 `541a9ffd7e1d31740321ac8459de451dfd0b1b206186c31482a31eb19b07590b`。用户在 feed 恢复前于 A 12 内检查更新显示最新，不能据此判定构建号比较失效。
-- [x] 2026-10-19：确认公开仓库、匿名下载历史 ZIP，并启用 Pages 的 Actions 发布来源；`SUFeedURL`、初始空 feed 和部署工作流已准备，次日完成首次线上部署。
-- [x] 发布流程已加入产物摘要/EdDSA/包内元数据校验、固定提交、线上 feed 与已发布 manifest 构建号比较、draft 资产回读及一致产物恢复逻辑；不再自动切分支或覆盖不匹配资产。
-- [x] PR #1 已于 2026-10-20 合并 main，合并提交为 `f66f4c3d`，远端 develop 已删除；Updates run `39427222348` 成功部署初始空 feed，匿名 HTTP 与 XML 验收通过。后续 main 的 `7459e278` 仅补充 README CI 徽标。
-- [x] 内部升级基线 A：从干净且与远端一致的 main `7459e278aff8afffd55b2d591a7e9439553aba56` 执行 `just build`，生成 `1.1.0 (11)`、arm64、最低 macOS 15.6 的完整签名更新包；feed、公钥、EdDSA、深层代码签名及全部文件摘要校验通过，未创建标签或 Release。产物位于 `build/Releases/Imaxe-1.1.0-11-7459e278aff8/`，ZIP SHA-256 为 `bbe211f94d84c6d565eb3e534ec4c660b1406368b891773c8513ff1a4763eaf4`；旧的 9/10/11 号历史 ZIP 均缺少 feed 与公钥，不用于 A/B 升级。
-- [x] 发布准备版本已确定为 `1.1.0 (12)`，应用 Debug 与 Release 的构建号同步从 11 增加到 12，测试目标版本保持不变；内部 A 保留 11，B 的应用身份、更新公钥、生产 feed 与签名方式保持一致。
-- [x] 发布准备 PR #2 的 CI run `39435527143` 全部通过后，按用户授权以 merge commit 合并，保留 `5a810229` 与 `a1e9f0c5` 两次独立提交。从干净且与远端一致的 main `5ff38f1126229db9d2045b81b5e7454aed295258` 构建 B `1.1.0 (12)`；目录为 `build/Releases/Imaxe-1.1.0-12-5ff38f112622/`，ZIP SHA-256 为 `8963918a411210c3ce8325728c7511c664911b19dbf0863a7314c868c0c4e41b`，摘要、EdDSA、包内元数据及深层代码签名校验通过。
-- [x] 用户随后明确授权正式发布 B；已整理英文 release notes、更新其摘要并保持 B ZIP 不变，执行 `just publish` 后于北京时间 2026-10-20 22:24:06 公开稳定版 `v1.1.0`。标签指向上述 B 来源提交，五个资产上传及回读校验通过；GitHub Release 正文与发布说明资产一致。发布不代表此前未执行的性能、普通 Mac 安装和真实升级验收已经完成。
-- [x] 正式发布资产匿名下载验收：ZIP、Markdown、appcast、manifest 和 SHA256SUMS 五个公开 URL 均下载成功，与本地发布资产逐字节一致；下载副本再次通过 `scripts/validate-release.swift` 的摘要、EdDSA、appcast、架构及包内签名校验，副本位于 `build/PublicVerification/v1.1.0/`。
-- [x] Pages 发布失败后的手动恢复验收：main 的 Updates run `39439124403` 成功完成稳定 feed 校验、部署和公开字节检查。再次匿名读取不带查询参数的生产 URL 为 HTTP 200、有效 XML、1 条 `1.1.0 (12)` 更新，最低 macOS 15.6、arm64，下载及 release notes 链接正确，与正式 Release 的 appcast 逐字节一致；SHA-256 为 `f92c5e556a3a2c9242358631a2817f745faa6f83c44b0f187aac7f7becc21855`。只证明本次环境规则拒绝后的手动恢复，不扩展为任意中断恢复或真实应用升级验收。
