@@ -95,8 +95,8 @@ final class ImageScrollViewCoordinator: NSObject {
 
     performPendingCommands(scrollView, shouldUpdateLayout: false)
 
-    guard alwaysFitToWindow, !commandState.hasPendingCommands else { return }
-    guard shouldApplyAlwaysFitToWindow(scrollView) else { return }
+    guard alwaysFitToWindow, !commandState.hasPendingCommands,
+          shouldApplyAlwaysFitToWindow(scrollView) else { return }
 
     fitToWindow(scrollView, animated: false)
   }
@@ -110,8 +110,7 @@ final class ImageScrollViewCoordinator: NSObject {
     magnificationObservation = scrollView
       .observe(\.magnification, options: [.new]) { [weak self] scrollView, _ in
         Task { @MainActor [weak self, weak scrollView] in
-          guard let self, let scrollView else { return }
-          guard !isProgrammaticZoomAnimating else { return }
+          guard let self, let scrollView, !isProgrammaticZoomAnimating else { return }
 
           onZoomScaleChange(scrollView.magnification)
         }

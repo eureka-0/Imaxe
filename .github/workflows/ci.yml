@@ -177,6 +177,13 @@ jobs:
       - name: Unit tests and coverage
         run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --skip-suite ImageViewTests --coverage-report 2>&1 | tee build/CI/unit-tests.log
 
+      - name: Release lock cooperative-pool regression
+        # A held subprocess must leave the cooperative executor free to release it.
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' && (matrix.runner != 'macos-15' || steps.restore_products.outcome == 'success') }}
+        env:
+          TEST_RUNNER_LIBDISPATCH_COOPERATIVE_POOL_STRICT: "1"
+        run: just test ${TEST_EXECUTION_ARGS:+"$TEST_EXECUTION_ARGS"} --skip-ui --suite ReleaseLockTests --no-coverage 2>&1 | tee build/CI/release-lock-tests.log
+
       - name: AppKit window tests and coverage
         # Window animations share the main run loop. Keep pixel decoding and
         # fixture compilation out of this test host so animation states are observable.

@@ -14,22 +14,20 @@ struct ReleaseLockTests {
   ) async throws {
     let fixture = try ReleaseLockFixture()
     defer { fixture.remove() }
-    let holder = Task.detached { try fixture.run(recordPID: true) }
-    try await TestSupport.waitUntil { fixture.isReady }
+    let holder = try fixture.start(recordPID: true)
+    try await fixture.waitUntilReady(holder)
 
-    let contender = try await Task.detached {
-      try fixture.run(arguments: publish ? ["--publish"] : [])
-    }.value
+    let contender = try await fixture.run(arguments: publish ? ["--publish"] : [])
     #expect(contender.status == 1)
     #expect(contender.output.contains("release build or publish already holds"))
     #expect(fixture.isLocked)
 
     try fixture.release()
-    let failure = try await holder.value
+    let failure = try await fixture.result(of: holder)
     #expect(failure.status == 23)
     #expect(!fixture.isLocked)
 
-    let retry = try await Task.detached { try fixture.run() }.value
+    let retry = try await fixture.run()
     #expect(retry.status == 23)
     #expect(!retry.output.contains("already holds"))
     #expect(!fixture.isLocked)
@@ -38,16 +36,64 @@ struct ReleaseLockTests {
   @Test func `terminated release frees its lock after the active tool exits`() async throws {
     let fixture = try ReleaseLockFixture()
     defer { fixture.remove() }
-    let holder = Task.detached { try fixture.run(recordPID: true) }
-    try await TestSupport.waitUntil { fixture.isReady }
+    let holder = try fixture.start(recordPID: true)
+    try await fixture.waitUntilReady(holder)
     let pidText = try String(contentsOf: fixture.pidFile, encoding: .utf8)
     let pid = try #require(Int32(pidText))
     #expect(kill(pid, SIGTERM) == 0)
     try fixture.release()
 
-    let result = try await holder.value
+    let result = try await fixture.result(of: holder)
     #expect(result.status == 143)
     #expect(!fixture.isLocked)
+  }
+
+  @Test func `readiness reports an early exit with status and output`() async throws {
+    let fixture = try ReleaseLockFixture()
+    defer { fixture.remove() }
+    try fixture.writeTool("xcodebuild", source: "echo 'exited before ready' >&2; exit 42")
+    let holder = try fixture.start(recordPID: true)
+
+    do {
+      try await fixture.waitUntilReady(holder)
+      Issue.record("An exited release must not report readiness")
+    } catch let error as ReleaseLockFailure {
+      #expect(error.description.contains("exited before readiness"))
+      #expect(error.description.contains("status=42"))
+      #expect(error.description.contains("exited before ready"))
+      #expect(error.description.contains("build-zip.sh:"))
+    }
+    #expect(!fixture.isLocked)
+  }
+
+  @Test func `readiness timeout keeps diagnostics and cleanup reaps the holder`() async throws {
+    let fixture = try ReleaseLockFixture()
+    defer { fixture.remove() }
+    try fixture.writeTool("xcodebuild", source: """
+    echo 'waiting before ready' >&2
+    touch waiting
+    while [[ ! -f release ]]; do sleep 0.01; done
+    exit 23
+    """)
+    let holder = try fixture.start(recordPID: true)
+    try await TestSupport.waitUntil {
+      FileManager.default.fileExists(atPath: fixture.root.appending(path: "waiting").path)
+    }
+
+    do {
+      try await fixture.waitUntilReady(holder, timeout: .milliseconds(100))
+      Issue.record("A release without a ready marker must time out")
+    } catch let error as ReleaseLockFailure {
+      #expect(error.description.contains("timed out waiting for readiness"))
+      #expect(error.description.contains("pid=\(holder.process.processIdentifier)"))
+      #expect(error.description.contains("running=true"))
+      #expect(error.description.contains("ready=false, locked=true"))
+      #expect(error.description.contains("waiting before ready"))
+    }
+
+    fixture.remove()
+    #expect(!holder.process.isRunning)
+    #expect(!FileManager.default.fileExists(atPath: fixture.root.path))
   }
 
   @Test(arguments: [false, true])
@@ -60,7 +106,7 @@ struct ReleaseLockTests {
       try fixture.writeNotes("# Imaxe 0.9.0\n\nChanges.\n")
     }
 
-    let result = try await Task.detached { try fixture.run() }.value
+    let result = try await fixture.run()
     #expect(result.status == 1)
     #expect(result.output
       .contains(invalidHeading ? "must start with # Imaxe 1.1.0" : fixture.notes.path))
@@ -76,7 +122,7 @@ struct ReleaseLockTests {
     let notes = "# Imaxe 1.1.0\n\nChanges.\n"
     try fixture.writeNotes(notes)
 
-    let result = try await Task.detached { try fixture.run() }.value
+    let result = try await fixture.run()
     #expect(result.status == 99) // Stop at the mocked network call, before a real archive.
     #expect(FileManager.default
       .fileExists(atPath: fixture.root.appending(path: "network-called").path))
@@ -96,7 +142,7 @@ struct ReleaseLockTests {
     let artifact = fixture.releaseDirectory.appending(path: name)
     try "existing artifact".write(to: artifact, atomically: true, encoding: .utf8)
 
-    let result = try await Task.detached { try fixture.run() }.value
+    let result = try await fixture.run()
     #expect(result.status == 1)
     #expect(result.output.contains("refusing to overwrite"))
     #expect(try String(contentsOf: artifact, encoding: .utf8) == "existing artifact")
@@ -115,7 +161,7 @@ struct ReleaseLockTests {
       : "build/Releases/Imaxe-1.1.0-42-bbbbbbbbbbbb")
     try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
 
-    let result = try await Task.detached { try fixture.run() }.value
+    let result = try await fixture.run()
     #expect(result.status == 1)
     #expect(result.output.contains(archive ? "refusing to overwrite" : "another artifact"))
     #expect(FileManager.default.fileExists(atPath: existing.path))
@@ -123,8 +169,15 @@ struct ReleaseLockTests {
   }
 }
 
-private nonisolated struct ReleaseLockFixture: Sendable {
+private final class ReleaseLockFixture {
   let root: URL
+  private var processes: [RunningRelease] = []
+
+  struct RunningRelease {
+    let process: Process
+    let outputFile: URL
+    let started: ContinuousClock.Instant
+  }
 
   var lock: URL {
     root.appending(path: "build/.release.lock")
@@ -201,7 +254,7 @@ private nonisolated struct ReleaseLockFixture: Sendable {
     try contents.write(to: notes, atomically: true, encoding: .utf8)
   }
 
-  private func writeTool(_ name: String, source: String) throws {
+  func writeTool(_ name: String, source: String) throws {
     let url = root.appending(path: "tools/\(name)")
     try "#!/bin/bash\nset -euo pipefail\n\(source)\n".write(
       to: url,
@@ -214,28 +267,81 @@ private nonisolated struct ReleaseLockFixture: Sendable {
     )
   }
 
-  func run(arguments: [String] = [], recordPID: Bool = false) throws
-    -> (status: Int32, output: String)
-  {
+  func start(arguments: [String] = [], recordPID: Bool = false) throws -> RunningRelease {
     let process = Process()
-    let pipe = Pipe()
+    let outputFile = root.appending(path: "process-\(processes.count).log")
+    try Data().write(to: outputFile)
+    let output = try FileHandle(forWritingTo: outputFile)
+    defer { try? output.close() }
     process.executableURL = URL(fileURLWithPath: "/bin/bash")
-    process.arguments = [root.appending(path: "scripts/build-zip.sh").path] + arguments
+    process.arguments = ["-x", root.appending(path: "scripts/build-zip.sh").path] + arguments
     process.currentDirectoryURL = root
     var environment = ProcessInfo.processInfo.environment
     environment["PATH"] = "\(root.appending(path: "tools").path):/usr/bin:/bin"
+    environment["PS4"] = "+ ${SECONDS}s ${BASH_SOURCE##*/}:${LINENO}: "
     process.environment = environment
-    process.standardOutput = pipe
-    process.standardError = pipe
+    // A held process must not block Swift's cooperative executor or fill a pipe.
+    process.standardOutput = output
+    process.standardError = output
+    let started = ContinuousClock.now
     try process.run()
+    let running = RunningRelease(process: process, outputFile: outputFile, started: started)
+    processes.append(running)
     if recordPID {
       try String(process.processIdentifier).write(to: pidFile, atomically: true, encoding: .utf8)
     }
-    let data = pipe.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    return (
-      process.terminationStatus,
-      String(data: data, encoding: .utf8) ?? "Non-UTF8 process output",
+    return running
+  }
+
+  func waitUntilReady(_ running: RunningRelease, timeout: Duration = .seconds(30)) async throws {
+    do {
+      try await TestSupport.waitUntil(timeout: timeout) {
+        self.isReady || !running.process.isRunning
+      }
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      throw failure("timed out waiting for readiness", running: running)
+    }
+    guard running.process.isRunning else {
+      throw failure("exited before readiness", running: running)
+    }
+  }
+
+  func run(arguments: [String] = []) async throws -> (status: Int32, output: String) {
+    try await result(of: start(arguments: arguments))
+  }
+
+  func result(of running: RunningRelease) async throws -> (status: Int32, output: String) {
+    do {
+      try await TestSupport.waitUntil { !running.process.isRunning }
+    } catch is CancellationError {
+      throw CancellationError()
+    } catch {
+      throw failure("timed out waiting for exit", running: running)
+    }
+    return try (
+      running.process.terminationStatus,
+      String(contentsOf: running.outputFile, encoding: .utf8),
+    )
+  }
+
+  private func failure(_ reason: String, running: RunningRelease) -> ReleaseLockFailure {
+    let process = running.process
+    let status = process.isRunning ? "pending" : String(process.terminationStatus)
+    let files = (try? FileManager.default.contentsOfDirectory(atPath: root.path)) ?? []
+    let output = (try? String(
+      contentsOf: running.outputFile,
+      encoding: .utf8,
+    )) ?? "No process output"
+    return ReleaseLockFailure(
+      description:
+      """
+      Release fixture \(reason) after \(running.started.duration(to: .now)).
+      pid=\(process.processIdentifier), running=\(process.isRunning), status=\(status)
+      root=\(root.path), ready=\(isReady), locked=\(isLocked), files=\(files.sorted())
+      \(output)
+      """,
     )
   }
 
@@ -245,6 +351,16 @@ private nonisolated struct ReleaseLockFixture: Sendable {
 
   func remove() {
     try? release()
+    for running in processes where running.process.isRunning {
+      running.process.terminate()
+    }
+    for running in processes {
+      running.process.waitUntilExit()
+    }
     try? FileManager.default.removeItem(at: root)
   }
+}
+
+private struct ReleaseLockFailure: Error, CustomStringConvertible {
+  let description: String
 }

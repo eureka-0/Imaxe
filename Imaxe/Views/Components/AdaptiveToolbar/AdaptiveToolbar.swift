@@ -486,8 +486,8 @@ struct AdaptiveToolbar<
     for metadata: [AdaptiveToolbarSubviewMetadata],
     structuralReset: Bool = false,
   ) {
-    guard let availableLength, let moreLength else { return }
-    guard metadata.allSatisfy({ itemLengths[$0.id] != nil }) else { return }
+    guard let availableLength, let moreLength,
+          metadata.allSatisfy({ itemLengths[$0.id] != nil }) else { return }
 
     let items = metadata.map { item in
       AdaptiveToolbarResolvedItem(
@@ -582,8 +582,7 @@ struct AdaptiveToolbar<
     for metadata: [AdaptiveToolbarSubviewMetadata],
     units: [AdaptiveToolbarResolvedUnit],
   ) -> CGFloat? {
-    guard let moreLength else { return nil }
-    guard metadata.allSatisfy({ itemLengths[$0.id] != nil }) else { return nil }
+    guard let moreLength, metadata.allSatisfy({ itemLengths[$0.id] != nil }) else { return nil }
 
     return AdaptiveToolbarLayout.requiredLength(
       units: units,

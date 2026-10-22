@@ -14,12 +14,10 @@ Completed work and its evidence are in [Progress history](progress-history.md).
 - Treat correctness and performance as separate acceptance tracks.
   Debug tests, AX visibility, launch-call wall time and offscreen drawing do not establish visible Release first frame, main-thread stalls or steady memory.
 - Runner labels describe the tested image, not an exact macOS 15.6 installation; Intel is outside the distribution scope.
-- Keep real slow-volume testing at low priority.
-  An unset `IMAXE_SLOW_VOLUME_IMAGE` is pending acceptance, and an image downloaded to the internal SSD is not a slow-volume substitute.
 - Write tracked documents in English and documents under `docs/agents/` in Chinese.
   Keep generated diagnostics and raw measurements in ignored directories.
 
-## Next session: restore CI first
+## CI repair: hosted verification pending
 
 [CI 39722137150](https://github.com/eureka-0/Imaxe/actions/runs/39722137150) failed on develop at `a362e5d92b6dfb7441bceb9299c04ac89e8f754c`.
 The macOS 26 prebuild passed, and AppKit window tests passed on all three systems.
@@ -30,20 +28,25 @@ The macOS 26 prebuild passed, and AppKit window tests passed on all three system
 | macOS 26 / 26.3 | Passed | Passed | Failed: the same lookup |
 | macOS 27 / 27.0 | Passed | Passed | Failed: the same lookup |
 
-- [ ] Diagnose and fix the Release Lock fixture readiness failure on macOS 15.
-  Both arguments of `build and publish cannot enter an active release or remove its lock` and `terminated release frees its lock after the active tool exits` exceeded the 30-second wait for readiness.
-  The lock behavior assertions had not been reached; retain child exit status and output on timeout, then determine whether the fixture exited early, stalled or was delayed by parallel tool startup.
-  Do not treat concurrent compiler load as a confirmed cause or solve this only by increasing the timeout.
-- [ ] Restrict `testFileMenuClearRequiresConfirmationInImageWindow` to the application's File → Open Recent submenu.
-  `app.menuItems["Clear Menu"]` also matches Apple → Recent Items → Clear Menu on all three runners.
-  Require a unique match within the intended submenu and preserve confirmation / cancellation checks.
-- [ ] Rerun the affected checks and the full hosted matrix after the fixes.
+- [x] Repair the Release Lock fixture's cooperative-executor dependency locally.
+  The original fixture stalled with `TEST_RUNNER_LIBDISPATCH_COOPERATIVE_POOL_STRICT=1`; a process sample showed its sole cooperative worker blocked in the holder's pipe read.
+  Start subprocesses directly, capture timestamped shell traces in separate files, and suspend while waiting for readiness or exit.
+  Early exit and timeout errors retain PID, status, elapsed time, directory state and output; cleanup releases, terminates and reaps owned processes before deleting their fixture.
+  Keep the original 30-second readiness deadline and all lock contention, retry, exit-code 23 / 143 and lock-removal assertions.
+  New regressions cover early-exit diagnostics and timeout cleanup.
+  The old macOS 15 run did not retain a child timeline, so its exact scheduling sequence remains unproven until hosted validation.
+- [x] Restrict `testFileMenuClearRequiresConfirmationInImageWindow` to File → Open Recent and require one Clear Menu match.
+  Locate File by its English label under the test's English launch configuration and preserve confirmation, cancellation and displayed-image checks.
+- [x] Add a strict cooperative-pool Release Lock regression to every CI matrix job.
+  Preserve each runner's existing execution mode, including verified prebuilt products on macOS 15, and retain a separate log / xcresult.
+- [ ] Rerun the full hosted matrix on the repaired source.
   macOS 15 must keep using the verified prebuilt test products; all unit, window, UI and required-gate jobs must pass on the new source.
-  The macOS 15 xcresult contains 117 passed test definitions, two failed definitions and one skipped slow-volume test; its device-level parameterized totals contain three failing runs.
-  The complete UI result is six passed and one failed; the final four-test restart summary does not override the earlier failure.
+  Local changes have not been committed or pushed, and no new hosted run has been dispatched.
 
-These CI failures are the first work for the next session, ahead of new isolation assertions and further performance collection.
-This analysis did not change application code, tests or workflows.
+Local validation on macOS 27.0.1 / Xcode 27.1 / arm64: the CI unit-test scope passed 121 test definitions with one skipped (189 passed parameterized runs); strict-pool Release Lock passed 8 definitions / 14 runs; the affected UI test passed 1/1.
+SwiftFormat, SwiftLint, Xcode file diagnostics and `git diff --check` passed; workflow YAML and its runner-mode selection were checked locally.
+Full hosted verification remains ahead of new isolation assertions and further performance collection.
+See [local repair evidence](agents/CI_FAILURE_FIX_2026-10-22.md) for commands, result bundles and the limits of the diagnosis.
 
 ## P0: critical issues
 
@@ -93,8 +96,6 @@ Keep different observer binaries, recordings and traces in separate statistical 
   Record correctness, memory trends and stalls, including ImageIO conversion and AppKit frame representations; retained-pixel budgets and explicit cache eviction do not bound process RSS.
 - [ ] Use high-zoom clarity and performance evidence to decide whether fixed proxies need higher-resolution recovery.
   If tiling is justified, verify bounded caching, stale-generation rejection and measured benefit; slicing an already decoded full image does not resolve its peak memory.
-- [ ] Validate reads, first display and disconnect / reconnect on a real external disk or NAS.
-  Keep this low priority; do not substitute internal-SSD fixtures or a scan gate for a slow mounted volume.
 - [ ] Defer broader HDR support until it has its own scope.
   HEIF gain maps, other floating-point containers and HDR display brightness are untested; current evidence covers the existing floating-point TIFF sample and SDR AppKit rendering.
 

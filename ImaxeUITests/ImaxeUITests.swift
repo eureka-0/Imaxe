@@ -120,11 +120,16 @@ final class ImaxeUITests: XCTestCase {
     XCTAssertTrue(image.waitForExistence(timeout: 5))
     image.click()
     XCTAssertTrue(app.images["sample_1280×853.png"].waitForExistence(timeout: 10))
-    let fileMenu = app.menuBars.menuBarItems.element(boundBy: 2)
+    let fileMenu = app.menuBars.menuBarItems["File"]
+    XCTAssertTrue(fileMenu.waitForExistence(timeout: 5))
     fileMenu.click()
-    fileMenu.menuItems["Open Recent"].hover()
-    let clearMenu = app.menuItems["Clear Menu"]
+    let openRecent = fileMenu.menuItems["Open Recent"]
+    XCTAssertTrue(openRecent.waitForExistence(timeout: 5))
+    openRecent.hover()
+    let clearItems = openRecent.menuItems.matching(identifier: "Clear Menu")
+    let clearMenu = clearItems.element
     XCTAssertTrue(clearMenu.waitForExistence(timeout: 5))
+    XCTAssertEqual(clearItems.count, 1)
     clearMenu.click()
     let cancel = app.windows.buttons["Cancel"].firstMatch
     XCTAssertTrue(cancel.waitForExistence(timeout: 5))

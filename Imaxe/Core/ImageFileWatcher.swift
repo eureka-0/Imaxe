@@ -145,8 +145,7 @@ final nonisolated class ImageFileWatcher: @unchecked Sendable {
     generation: Int,
   ) {
     queue.asyncAfter(deadline: .now() + pollingIntervalOnFileChange) { [weak self] in
-      guard let self else { return }
-      guard generation == settleGeneration else { return }
+      guard let self, generation == settleGeneration else { return }
 
       let currentSnapshot = observedSnapshot()
 

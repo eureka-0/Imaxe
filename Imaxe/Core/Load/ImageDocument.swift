@@ -491,8 +491,8 @@ nonisolated struct SVGDocumentSize {
     let unitSuffix = trimmedValue.dropFirst(numberPrefix.count)
       .trimmingCharacters(in: .whitespacesAndNewlines)
 
-    guard unitSuffix.isEmpty || unitSuffix == "px" else { return nil }
-    guard let number = Double(numberPrefix) else { return nil }
+    guard unitSuffix.isEmpty || unitSuffix == "px",
+          let number = Double(numberPrefix) else { return nil }
 
     return number > 0 ? CGFloat(number) : nil
   }
